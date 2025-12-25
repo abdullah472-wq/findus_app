@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "22176787238",
+    "project_id": "findus-prod",
+    "storage_bucket": "findus-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:22176787238:android:541f4a58f60695bddbefe7",
+        "android_client_info": {
+          "package_name": "com.example.findus_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqgYsosm4VkE026x0v_BhELoZVKR3U4oU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:22176787238:android:a1fee49f06a2e52fdbefe7",
+        "android_client_info": {
+          "package_name": "com.findus.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqgYsosm4VkE026x0v_BhELoZVKR3U4oU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
