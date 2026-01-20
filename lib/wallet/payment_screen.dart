@@ -23,17 +23,17 @@ class PaymentScreen extends StatefulWidget {
   final int duration;
   final PaymentPurpose purpose;
   final String? description;
-  final String? referenceId;
+  final VoidCallback? onPaymentSuccess; // এই line যোগ করুন
 
   const PaymentScreen({
-    Key? key,
+    super.key,
     required this.planId,
     required this.amount,
     required this.duration,
     required this.purpose,
     this.description,
-    this.referenceId,
-  }) : super(key: key);
+    this.onPaymentSuccess, // এই line যোগ করুন
+  });
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();

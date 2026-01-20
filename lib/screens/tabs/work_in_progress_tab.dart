@@ -1,84 +1,80 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:findus_app/models/worker_model.dart';
-import 'package:findus_app/models/badge_model.dart';
-import 'package:findus_app/screens/earner/worker_profile_screen.dart';
-import 'package:findus_app/widgets/universal_worker_card.dart';
+
+import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
+import 'package:findus_app/services/firestore_chat_service.dart';
+import 'package:findus_app/widgets/universal_worker_card.dart';
 
-/// Work-in-progress job model
-class WorkInProgressJob {
-  final String name;
-  final String role;
-  final String imageUrl;
-  final String address;
-  final String rating;
-  final String completed;
-  final String reviews;
-  final String price;
-  final String time;
-  final String phoneNumber;
-
-  const WorkInProgressJob({
-    required this.name,
-    required this.role,
-    required this.imageUrl,
-    required this.address,
-    required this.rating,
-    required this.completed,
-    required this.reviews,
-    required this.price,
-    required this.time,
-    required this.phoneNumber,
-  });
-}
-
-/// Global store: অন্য জায়গা থেকে APPROVE করলে এখানকার লিস্ট আপডেট হবে
-class WorkInProgressStore {
-  static final ValueNotifier<List<WorkInProgressJob>> jobsNotifier =
-  ValueNotifier<List<WorkInProgressJob>>([
-    // আগের demo গুলো initial হিসেবে
-    const WorkInProgressJob(
-      name: "Ashikur Rahman",
-      role: "COMPUTER OPERATOR",
-      imageUrl: "https://i.pravatar.cc/150?img=33",
-      address: "Bholagonj, Sylhet",
-      rating: "4.5",
-      completed: "120",
-      reviews: "45",
-      price: "130 ৳",
-      time: "RUNNING NOW",
-      phoneNumber: "01711111111",
-    ),
-    const WorkInProgressJob(
-      name: "Mijanur Rahman",
-      role: "FARMER",
-      imageUrl: "https://i.pravatar.cc/150?img=13",
-      address: "Bhakoadi, Gazipur",
-      rating: "4.8",
-      completed: "800+",
-      reviews: "150",
-      price: "800 ৳",
-      time: "STARTED 10 MIN AGO",
-      phoneNumber: "01811111111",
-    ),
-  ]);
-
-  static void addJob(WorkInProgressJob job) {
-    final list = List<WorkInProgressJob>.from(jobsNotifier.value);
-    list.insert(0, job); // new job top এ
-    jobsNotifier.value = list;
-  }
-}
-
-class WorkInProgressTab extends StatelessWidget {
+class WorkInProgressTab extends StatefulWidget {
   const WorkInProgressTab({super.key});
 
   @override
+  State<WorkInProgressTab> createState() => _WorkInProgressTabState();
+}
+
+class _WorkInProgressTabState extends State<WorkInProgressTab> {
+  final _firestore = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
+
+  double _asDouble(dynamic v, {double fallback = 0.0}) {
+    if (v is num) return v.toDouble();
+    return double.tryParse(v?.toString() ?? '') ?? fallback;
+  }
+
+  int _asInt(dynamic v, {int fallback = 0}) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? fallback;
+  }
+
+  String _s(dynamic v, [String fallback = '']) => (v ?? fallback).toString();
+
+  @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<WorkInProgressJob>>(
-      valueListenable: WorkInProgressStore.jobsNotifier,
-      builder: (context, jobs, _) {
-        if (jobs.isEmpty) {
+    final currentUser = _auth.currentUser;
+
+    if (currentUser == null) {
+      return const Center(child: Text("Please login to see ongoing jobs."));
+    }
+
+    final uid = currentUser.uid;
+
+    final stream = _firestore
+        .collection('ongoing_jobs')
+        .where('participants', arrayContains: uid)
+        .where('status', isEqualTo: 'ongoing')
+        .orderBy('startTime', descending: true)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final err = snapshot.error.toString();
+          final isIndex = err.contains('FAILED_PRECONDITION') || err.contains('index');
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                isIndex
+                    ? "Firestore index required for this query.\nFirestore Console → Indexes এ গিয়ে index create করুন.\n\n$err"
+                    : "Something went wrong\n\n$err",
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data!.docs;
+
+        if (docs.isEmpty) {
           return const Center(
             child: Text(
               "No jobs in progress.",
@@ -87,11 +83,14 @@ class WorkInProgressTab extends StatelessWidget {
           );
         }
 
-        return ListView(
+        return ListView.builder(
           padding: const EdgeInsets.all(10),
-          children: jobs
-              .map((job) => _buildWorkCard(context, job: job))
-              .toList(),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final doc = docs[index];
+            final data = doc.data();
+            return _buildWorkCard(context, data: data, docId: doc.id, currentUid: uid);
+          },
         );
       },
     );
@@ -99,82 +98,346 @@ class WorkInProgressTab extends StatelessWidget {
 
   Widget _buildWorkCard(
       BuildContext context, {
-        required WorkInProgressJob job,
+        required Map<String, dynamic> data,
+        required String docId,
+        required String currentUid,
       }) {
-    final double ratingValue = double.tryParse(job.rating) ?? 0.0;
+    final receiverId = _s(data['receiverId']).trim(); // finder
+    final workerId = _s(data['workerId']).trim();     // supporter
+    final participants = (data['participants'] is List) ? List.from(data['participants']) : <dynamic>[];
 
-    // "800+" এর মতো string থেকে 800 বের করা
-    final match = RegExp(r'\d+').firstMatch(job.completed);
-    final int completedJobs =
-        int.tryParse(match?.group(0) ?? '0') ?? 0;
+    // other participant for UI/chat/profile
+    final otherUserId = (currentUid == workerId) ? receiverId : workerId;
 
-    // badge logic
-    final bool isVerified = completedJobs >= 50;
-    final bool isTopRated = ratingValue >= 4.5;
-    final bool isTrusted =
-        completedJobs >= 200 && ratingValue >= 4.2;
+    final bool canComplete = currentUid == receiverId; // ✅ only finder completes
 
-    BadgeLevel? badgeLevel;
-    if (completedJobs > 0 && completedJobs < 100) {
-      badgeLevel = BadgeLevel.bronze;
-    } else if (completedJobs >= 100 && completedJobs < 500) {
-      badgeLevel = BadgeLevel.silver;
-    } else if (completedJobs >= 500) {
-      badgeLevel = BadgeLevel.gold;
-    }
+    // If you denormalize both sides in ongoing_jobs it's best.
+    // We'll try to show name/image from doc; if missing, fallback to user fetch.
+    final String otherNameFromDoc = (currentUid == workerId)
+        ? _s(data['receiverName'])
+        : _s(data['workerName']);
+    final String otherImageFromDoc = (currentUid == workerId)
+        ? _s(data['receiverImage'])
+        : _s(data['workerImage']);
+    final String otherRoleFromDoc = (currentUid == workerId)
+        ? _s(data['receiverRole'])
+        : _s(data['workerRole']); // if you store
 
-    return UniversalWorkerCard(
-      name: job.name,
-      role: job.role,
-      imageUrl: job.imageUrl,
-      address: job.address,
-      rating: job.rating,
-      completed: job.completed,
-      reviews: job.reviews,
-      price: job.price,
-      time: job.time,
-      phoneNumber: job.phoneNumber,
-      isVerifiedWorker: isVerified,
-      isTopRated: isTopRated,
-      isTrusted: isTrusted,
-      badgeLevel: badgeLevel,
+    final String location = _s(data['location'], 'Not provided');
+    final String price = _s(data['price'], _s(data['offerPrice'], 'Negotiable'));
 
-      // প্রোফাইল বাটন ক্লিক
-      onTap: () {
-        final workerObj = Worker(
-          name: job.name,
-          role: job.role,
-          image: job.imageUrl,
-          location: job.address,
-          rating: ratingValue,
-          price: job.price,
-          isVerified: isVerified,
-        );
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => WorkerProfileScreen(worker: workerObj),
+    final double ratingVal = _asDouble(data['rating']);
+    final String ratingStr = ratingVal == 0 ? '0.0' : ratingVal.toStringAsFixed(1);
+
+    final int completedCount = _asInt(data['completedCount']);
+    final bool isVerified = (data['isVerified'] == true) || (completedCount >= 50);
+    final bool isTopRated = ratingVal >= 4.7;
+
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: _needFetchOther(otherNameFromDoc, otherRoleFromDoc, otherImageFromDoc, otherUserId)
+          ? _firestore.collection('users').doc(otherUserId).get()
+          : Future.value(null),
+      builder: (context, snap) {
+        String name = otherNameFromDoc.isNotEmpty ? otherNameFromDoc : 'Unknown';
+        String role = otherRoleFromDoc.isNotEmpty ? otherRoleFromDoc : 'User';
+        String imageUrl = otherImageFromDoc;
+
+        if (snap.data != null && snap.data!.exists) {
+          final u = snap.data!.data() ?? {};
+          name = name == 'Unknown' ? _s(u['name'], _s(u['fullName'], 'Unknown')) : name;
+          role = role == 'User' ? _s(u['userRole'], _s(u['role'], 'User')) : role;
+          imageUrl = imageUrl.isEmpty ? _s(u['imageUrl'], _s(u['photoUrl'], '')) : imageUrl;
+        }
+
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(context).cardColor,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        );
-      },
+          child: Column(
+            children: [
+              UniversalWorkerCard(
+                id: otherUserId,
+                name: name,
+                role: role,
+                imageUrl: imageUrl,
+                address: location,
+                rating: ratingStr,
+                completed: completedCount.toString(),
+                reviews: _asInt(data['reviewsCount']).toString(),
+                price: price,
+                time: "ONGOING",
+                isVerifiedWorker: isVerified,
+                isTopRated: isTopRated,
+                followersCount: _asInt(data['followersCount']),
+                margin: EdgeInsets.zero,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
 
-      // চ্যাট বাটন ক্লিক
-      onChatTap: () {
-        // প্রতিটি ongoing job এর জন্য ইউনিক convId – এখানে phone ব্যবহার করছি
-        final convId = job.phoneNumber; // চাইলে name+role মিলিয়েও বানাতে পারো
+                onTap: () {
+                  if (otherUserId.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("User id missing")),
+                    );
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UnifiedProfileScreen(
+                        uid: otherUserId,
+                        isOwner: false,
+                      ),
+                    ),
+                  );
+                },
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              conversationId: convId,   // 🔹 এখন phone কে conversationId ধরলাম
-              userName: job.name,
-              userRole: job.role,
-              userImage: job.imageUrl,
-            ),
+                onChatTap: () async {
+                  if (otherUserId.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("User id missing")),
+                    );
+                    return;
+                  }
+
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  try {
+                    final convId = await FirestoreChatService.getOrCreateConversation(
+                      otherUserId: otherUserId,
+                    );
+
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChatScreen(
+                          conversationId: convId,
+                          userName: name,
+                          userRole: role,
+                          userImage: imageUrl,
+                        ),
+                      ),
+                    );
+                  } catch (e) {
+                    if (context.mounted) Navigator.pop(context);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Could not open chat: $e")),
+                      );
+                    }
+                  }
+                },
+              ),
+
+              // ✅ Complete button (only finder)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: ElevatedButton(
+                  onPressed: canComplete
+                      ? () => _markJobAsCompleted(
+                    context,
+                    jobId: docId,
+                    receiverId: receiverId,
+                    workerId: workerId,
+                    participants: participants,
+                    jobData: data,
+                  )
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: canComplete ? AppColors.brandMain : Colors.grey.shade400,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.check_circle_outline, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        canComplete ? "Mark as Completed" : "Waiting for Finder to Complete",
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },
     );
+  }
+
+  bool _needFetchOther(String name, String role, String image, String otherId) {
+    if (otherId.isEmpty) return false;
+    // If any info missing, fetch user doc
+    return name.isEmpty || role.isEmpty || image.isEmpty;
+  }
+
+  Future<void> _markJobAsCompleted(
+      BuildContext context, {
+        required String jobId,
+        required String receiverId,
+        required String workerId,
+        required List participants,
+        required Map<String, dynamic> jobData,
+      }) async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    // only receiver can complete
+    if (currentUser.uid != receiverId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Only Finder can complete this job.")),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Complete Job"),
+        content: const Text(
+          "Are you sure you want to mark this job as completed?\n\nThis action cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              "Complete",
+              style: TextStyle(color: AppColors.brandMain),
+            ),
+          ),
+        ],
+      ),
+    ) ??
+        false;
+
+    if (!confirm) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final ongoingRef = _firestore.collection('ongoing_jobs').doc(jobId);
+      final completedRef = _firestore.collection('completed_jobs').doc(jobId);
+      final requestRef = _firestore.collection('hire_requests').doc(jobId); // if you used same id
+
+      await _firestore.runTransaction((tx) async {
+        final snap = await tx.get(ongoingRef);
+        if (!snap.exists) throw Exception('Ongoing job not found');
+
+        final data = snap.data() as Map<String, dynamic>;
+        final status = _s(data['status']);
+
+        if (_s(data['receiverId']) != currentUser.uid) {
+          throw Exception('Not allowed');
+        }
+        if (status != 'ongoing') {
+          throw Exception('Job is not ongoing');
+        }
+
+        final List parts = (data['participants'] is List) ? List.from(data['participants']) : participants;
+        if (parts.isEmpty) {
+          // fallback
+          parts.addAll([receiverId, workerId]);
+        }
+
+        // 1) update ongoing job -> completed (so it disappears from this tab)
+        tx.update(ongoingRef, {
+          'status': 'completed',
+          'endTime': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        // 2) create completed history for BOTH participants
+        tx.set(completedRef, {
+          'participants': parts,
+          'receiverId': receiverId,
+          'workerId': workerId,
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'completedBy': currentUser.uid,
+          'originalRequestId': _s(data['originalRequestId'], jobId),
+
+          // optional fields for UI
+          'price': data['price'] ?? data['offerPrice'],
+          'location': data['location'],
+          'workerName': data['workerName'],
+          'workerImage': data['workerImage'],
+          'receiverName': data['receiverName'],
+          'receiverImage': data['receiverImage'],
+        }, SetOptions(merge: true));
+
+        // 3) optional: hire_requests status completed (if you keep same id)
+        tx.update(requestRef, {
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      // 4) notify supporter
+      if (workerId.isNotEmpty) {
+        await _firestore.collection('notifications').add({
+          'toUserId': workerId,
+          'fromUserId': receiverId,
+          'type': 'job_completed',
+          'title': 'Job completed',
+          'body': 'Finder marked the job as completed.',
+          'jobId': jobId,
+          'isRead': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // close loading
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Job marked as completed!"),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // close loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

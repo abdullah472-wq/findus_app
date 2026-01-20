@@ -204,119 +204,184 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          "KYC Verification",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
-      body: Column(
+      body: Stack(
         children: [
-          // উপরের অংশ: ফর্ম
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Upload your NID and a selfie",
-                    style: TextStyle(
-                      color: AppColors.brandDark,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+          // Main Content
+          Column(
+            children: [
+              // উপরের অংশ: ফর্ম (with adjusted padding for floating AppBar)
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Upload your NID and a selfie",
+                        style: TextStyle(
+                          color: AppColors.brandDark,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "We will verify your identity to give you a verified badge. "
+                            "Make sure the photos are clear and readable.",
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildPhotoBox(
+                        label: "NID Front Side",
+                        file: _nidFront,
+                        onCameraTap: () =>
+                            _pickImage('nidFront', ImageSource.camera),
+                        onGalleryTap: () =>
+                            _pickImage('nidFront', ImageSource.gallery),
+                      ),
+
+                      _buildPhotoBox(
+                        label: "NID Back Side",
+                        file: _nidBack,
+                        onCameraTap: () =>
+                            _pickImage('nidBack', ImageSource.camera),
+                        onGalleryTap: () =>
+                            _pickImage('nidBack', ImageSource.gallery),
+                      ),
+
+                      _buildPhotoBox(
+                        label: "Selfie with NID",
+                        file: _selfie,
+                        onCameraTap: () =>
+                            _pickImage('selfie', ImageSource.camera),
+                        onGalleryTap: () =>
+                            _pickImage('selfie', ImageSource.gallery),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // নিচের অংশ: Submit বাটন
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitKyc,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandMain,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                        : const Text(
+                      "SUBMIT FOR REVIEW",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    "We will verify your identity to give you a verified badge. "
-                        "Make sure the photos are clear and readable.",
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                ),
+              ),
+            ],
+          ),
 
-                  _buildPhotoBox(
-                    label: "NID Front Side",
-                    file: _nidFront,
-                    onCameraTap: () =>
-                        _pickImage('nidFront', ImageSource.camera),
-                    onGalleryTap: () =>
-                        _pickImage('nidFront', ImageSource.gallery),
-                  ),
-
-                  _buildPhotoBox(
-                    label: "NID Back Side",
-                    file: _nidBack,
-                    onCameraTap: () =>
-                        _pickImage('nidBack', ImageSource.camera),
-                    onGalleryTap: () =>
-                        _pickImage('nidBack', ImageSource.gallery),
-                  ),
-
-                  _buildPhotoBox(
-                    label: "Selfie with NID",
-                    file: _selfie,
-                    onCameraTap: () =>
-                        _pickImage('selfie', ImageSource.camera),
-                    onGalleryTap: () =>
-                        _pickImage('selfie', ImageSource.gallery),
+          // Floating AppBar (KYC-style)
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              decoration: BoxDecoration(
+                color: AppColors.brandLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
                 ],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
               ),
-            ),
-          ),
+              child: Column(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          // Back Button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.brandDark,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
 
-          // নিচের অংশ: Submit বাটন
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 8,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitKyc,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandMain,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                          // Title
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: const Text(
+                                  "KYC Verification",
+                                  style: TextStyle(
+                                    color: AppColors.brandDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-                    : const Text(
-                  "SUBMIT FOR REVIEW",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
+                ],
               ),
             ),
           ),

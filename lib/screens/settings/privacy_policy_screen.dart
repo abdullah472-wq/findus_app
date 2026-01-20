@@ -9,15 +9,87 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Privacy Policy"),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-      ),
       backgroundColor: AppColors.bgBlue,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: const _PrivacyContent(),
+      body: Stack(
+        children: [
+          // Main Content
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+              left: 20,
+              right: 20,
+              bottom: 20,
+            ),
+            child: const _PrivacyContent(),
+          ),
+
+          // Floating AppBar (KYC-style)
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              decoration: BoxDecoration(
+                color: AppColors.brandLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          // Back Button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.brandDark,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+
+                          // Title
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: const Text(
+                                  "Privacy Policy",
+                                  style: TextStyle(
+                                    color: AppColors.brandDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -155,7 +227,7 @@ class _PrivacyContent extends StatelessWidget {
         ),
 
         const SizedBox(height: 16),
-        const Text("8. Children’s Privacy", style: headingStyle),
+        const Text("8. Children's Privacy", style: headingStyle),
         Text(
           "FINDUS is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. "
               "If you believe a child has provided us data, please contact us so we can remove it.",
@@ -188,7 +260,7 @@ class _PrivacyContent extends StatelessWidget {
         const SizedBox(height: 16),
         const Text("11. Changes to This Policy", style: headingStyle),
         Text(
-          "We may update this Privacy Policy from time to time. We will update the “Last updated” date at the top and may notify you inside the app for major changes. "
+          "We may update this Privacy Policy from time to time. We will update the 'Last updated' date at the top and may notify you inside the app for major changes. "
               "By continuing to use FINDUS after changes, you agree to the updated Policy.",
           style: textStyle,
         ),

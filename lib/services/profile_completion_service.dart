@@ -1,3 +1,5 @@
+// lib/services/profile_completion_service.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
@@ -5,155 +7,243 @@ import 'auth_service.dart';
 class ProfileCompletionService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // কমন কি-সমূহ যা সবার জন্য প্রয়োজন
-  static const List<String> _commonKeys = [
-    'user_name',
-    'user_phone',
-    'user_location',
-    'user_gender',
-    'user_age',
-  ];
+  // ✅ Prefs keys (match your UnifiedProfileEditScreen)
+  static const String _kName = 'user_name';
+  static const String _kPhone = 'user_phone';
+  static const String _kLocation = 'user_location';
+  static const String _kRole = 'user_role'; // 'finder' or 'maker'
+  static const String _kImage = 'user_image';
 
-  // সাপোর্টারদের জন্য অতিরিক্ত কি-সমূহ
-  static const List<String> _supporterExtraKeys = [
-    'company_name',
-    'company_contact',
-    'company_address',
-  ];
+  // Optional prefs (you may or may not store them)
+  static const String _kEmail = 'user_email';
+  static const String _kFacebook = 'user_facebook';
+  static const String _kInstagram = 'user_instagram';
+  static const String _kLinkedin = 'user_linkedin';
+  static const String _kKyc = 'kyc_completed';
 
-  // ওয়ার্কারদের জন্য অতিরিক্ত কি-সমূহ
-  static const List<String> _workerExtraKeys = [
-    'worker_price',
-    'worker_experience',
-    'worker_languages',
-  ];
+  // If you ever store these in prefs later, we will use them too:
+  static const String _kGender = 'user_gender';
+  static const String _kAge = 'user_age';
 
-  /// প্রোফাইল কমপ্লিট কি না চেক করা (এখন এটি রোল অনুযায়ী কাজ করবে)
+  static bool _notEmpty(String? v) => (v ?? '').trim().isNotEmpty;
+
+  static Future<DocumentSnapshot<Map<String, dynamic>>?> _getUserDoc() async {
+    final uid = AuthService.currentUserId;
+    if (uid == null) return null;
+    return _db.collection('users').doc(uid).get();
+  }
+
+  static String _roleFromPrefs(SharedPreferences prefs) {
+    final r = (prefs.getString(_kRole) ?? '').toLowerCase().trim();
+    // ✅ standardize
+    if (r == 'finder' || r == 'maker') return r;
+    // fallback default
+    return 'finder';
+  }
+
+  static String _safeString(dynamic v) => v == null ? '' : v.toString().trim();
+
+  static bool _isFilledStringField(dynamic v) => _safeString(v).isNotEmpty;
+
+  static bool _isFilledNumField(dynamic v) {
+    if (v == null) return false;
+    if (v is num) return true;
+    return num.tryParse(v.toString()) != null;
+  }
+
+  // -----------------------------
+  // ✅ REQUIRED CHECK (role aware)
+  // -----------------------------
   static Future<bool> isCompleted() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('user_role') ?? '').toLowerCase();
+    final role = _roleFromPrefs(prefs);
 
-    bool allFilled = true;
+    // Common from prefs (these are the ones you actually save today)
+    final hasName = _notEmpty(prefs.getString(_kName));
+    final hasPhone = _notEmpty(prefs.getString(_kPhone));
+    final hasLocation = _notEmpty(prefs.getString(_kLocation));
 
-    // ১. কমন ফিল্ড চেক
-    for (final key in _commonKeys) {
-      if ((prefs.getString(key) ?? '').trim().isEmpty && prefs.getInt(key) == null) {
-        allFilled = false;
-        break;
-      }
-    }
+    // Gender/Age: in your edit screen you store in Firestore,
+    // prefs may not have them. So we will treat them as required
+    // but read from Firestore (fallback to prefs if present).
+    final userDoc = await _getUserDoc();
+    final data = userDoc?.data() ?? <String, dynamic>{};
 
-    // ২. রোল অনুযায়ী অতিরিক্ত ফিল্ড চেক
+    final gender = _notEmpty(prefs.getString(_kGender))
+        ? prefs.getString(_kGender)
+        : _safeString(data['gender']);
+    final ageVal = prefs.getInt(_kAge) ?? (data['age'] is int ? data['age'] as int : int.tryParse(_safeString(data['age'])));
+
+    final hasGender = _notEmpty(gender);
+    final hasAge = ageVal != null && ageVal > 0;
+
+    bool allFilled = hasName && hasPhone && hasLocation && hasGender && hasAge;
+
+    // Role-specific required from Firestore (since you don't store them in prefs)
     if (allFilled) {
-      final extraKeys = (role == 'finder') ? _workerExtraKeys : _supporterExtraKeys;
-      for (final key in extraKeys) {
-        if ((prefs.getString(key) ?? '').trim().isEmpty) {
-          allFilled = false;
-          break;
-        }
+      if (role == 'finder') {
+        // Worker required fields (align with UnifiedProfileEditScreen save fields)
+        final hasServiceType = _isFilledStringField(data['roleKey']) || _isFilledStringField(data['role']);
+        final hasPrice = _isFilledStringField(data['priceText']) || _isFilledNumField(data['price']);
+        final hasExperience = _isFilledNumField(data['experienceYears']) || _isFilledStringField(data['experienceYears']);
+        final hasLanguages = _isFilledStringField(data['languages']);
+        final hasWorkStart = _isFilledStringField(data['workStart']);
+        final hasWorkEnd = _isFilledStringField(data['workEnd']);
+
+        allFilled = hasServiceType && hasPrice && hasExperience && hasLanguages && hasWorkStart && hasWorkEnd;
+      } else {
+        // Supporter required fields
+        final hasCompanyName = _isFilledStringField(data['companyName']);
+        final hasCompanyContact = _isFilledStringField(data['companyContact']);
+        final hasCompanyAddress = _isFilledStringField(data['companyAddress']);
+
+        allFilled = hasCompanyName && hasCompanyContact && hasCompanyAddress;
       }
     }
 
-    await _syncLocalToFirestore(prefs: prefs, isCompletedFlag: allFilled);
+    await _syncCompletionToFirestore(
+      prefs: prefs,
+      userData: data,
+      isCompletedFlag: allFilled,
+    );
+
     return allFilled;
   }
 
-  /// কমপ্লিশন পারসেন্টেজ ক্যালকুলেশন (0.0 to 1.0)
+  // -----------------------------------
+  // ✅ COMPLETION PERCENT (role aware)
+  // -----------------------------------
   static Future<double> completionPercent() async {
     final prefs = await SharedPreferences.getInstance();
-    final role = (prefs.getString('user_role') ?? '').toLowerCase();
+    final role = _roleFromPrefs(prefs);
+
+    final userDoc = await _getUserDoc();
+    final data = userDoc?.data() ?? <String, dynamic>{};
+
+    // We count a realistic total based on what you actually collect.
+    // Common 5 + role-specific 6(worker) or 3(supporter) + social 4 + kyc 1 + image 1
+    // Worker total = 5 + 6 + 4 + 1 + 1 = 17
+    // Supporter total = 5 + 3 + 4 + 1 + 1 = 14
+    final int total = (role == 'finder') ? 17 : 14;
 
     int filled = 0;
 
-    // টোটাল ফিল্ড হিসাব: কমন (৫) + রোল স্পেসিফিক (৩) + সোশ্যাল (৪) + KYC (১) = ১৩টি
-    const int total = 13;
+    // Common (5): name, phone, location, gender, age
+    if (_notEmpty(prefs.getString(_kName)) || _isFilledStringField(data['name'])) filled++;
+    if (_notEmpty(prefs.getString(_kPhone)) || _isFilledStringField(data['phone'])) filled++;
+    if (_notEmpty(prefs.getString(_kLocation)) || _isFilledStringField(data['location'])) filled++;
 
-    bool notEmpty(String? v) => (v ?? '').trim().isNotEmpty;
+    final gender = _notEmpty(prefs.getString(_kGender))
+        ? prefs.getString(_kGender)
+        : _safeString(data['gender']);
+    if (_notEmpty(gender)) filled++;
 
-    // কমন ৫টি
-    if (notEmpty(prefs.getString('user_name'))) filled++;
-    if (notEmpty(prefs.getString('user_phone'))) filled++;
-    if (notEmpty(prefs.getString('user_location'))) filled++;
-    if (notEmpty(prefs.getString('user_gender'))) filled++;
-    if (prefs.getInt('user_age') != null) filled++;
+    final ageVal = prefs.getInt(_kAge) ??
+        (data['age'] is int ? data['age'] as int : int.tryParse(_safeString(data['age'])));
+    if (ageVal != null && ageVal > 0) filled++;
 
-    // রোল অনুযায়ী ৩টি
+    // Profile image (1)
+    final img = _notEmpty(prefs.getString(_kImage)) ? prefs.getString(_kImage) : _safeString(data['image']);
+    if (_notEmpty(img)) filled++;
+
+    // Role-specific
     if (role == 'finder') {
-      if (notEmpty(prefs.getString('worker_price'))) filled++;
-      if (notEmpty(prefs.getString('worker_experience'))) filled++;
-      if (notEmpty(prefs.getString('worker_languages'))) filled++;
+      // Worker (6): service type, price, expYears, languages, workStart, workEnd
+      if (_isFilledStringField(data['roleKey']) || _isFilledStringField(data['role'])) filled++;
+      if (_isFilledStringField(data['priceText']) || _isFilledNumField(data['price'])) filled++;
+      if (_isFilledNumField(data['experienceYears']) || _isFilledStringField(data['experienceYears'])) filled++;
+      if (_isFilledStringField(data['languages'])) filled++;
+      if (_isFilledStringField(data['workStart'])) filled++;
+      if (_isFilledStringField(data['workEnd'])) filled++;
     } else {
-      if (notEmpty(prefs.getString('company_name'))) filled++;
-      if (notEmpty(prefs.getString('company_contact'))) filled++;
-      if (notEmpty(prefs.getString('company_address'))) filled++;
+      // Supporter (3)
+      if (_isFilledStringField(data['companyName'])) filled++;
+      if (_isFilledStringField(data['companyContact'])) filled++;
+      if (_isFilledStringField(data['companyAddress'])) filled++;
     }
 
-    // সোশ্যাল ৪টি
-    if (notEmpty(prefs.getString('user_email'))) filled++;
-    if (notEmpty(prefs.getString('user_facebook'))) filled++;
-    if (notEmpty(prefs.getString('user_instagram'))) filled++;
-    if (notEmpty(prefs.getString('user_linkedin'))) filled++;
+    // Social (4) - prefer Firestore fields used in your app: email/facebookUrl/instagramUrl/linkedInUrl
+    final email = _notEmpty(prefs.getString(_kEmail)) ? prefs.getString(_kEmail) : _safeString(data['email']);
+    final fb = _notEmpty(prefs.getString(_kFacebook)) ? prefs.getString(_kFacebook) : _safeString(data['facebookUrl']);
+    final ig = _notEmpty(prefs.getString(_kInstagram)) ? prefs.getString(_kInstagram) : _safeString(data['instagramUrl']);
+    final li = _notEmpty(prefs.getString(_kLinkedin)) ? prefs.getString(_kLinkedin) : _safeString(data['linkedInUrl']);
 
-    // KYC ১টি
-    if (prefs.getBool('kyc_completed') ?? false) filled++;
+    if (_notEmpty(email)) filled++;
+    if (_notEmpty(fb)) filled++;
+    if (_notEmpty(ig)) filled++;
+    if (_notEmpty(li)) filled++;
 
-    final percent = filled / total;
+    // KYC (1)
+    final kyc = (prefs.getBool(_kKyc) ?? false) || (data['kyc_completed'] == true);
+    if (kyc) filled++;
 
-    await _syncLocalToFirestore(prefs: prefs, completionPercent: percent);
+    final percent = (total == 0) ? 0.0 : (filled / total);
+
+    await _syncCompletionToFirestore(
+      prefs: prefs,
+      userData: data,
+      completionPercent: percent,
+    );
+
     return percent;
   }
 
-  /// প্রোফাইল এডিট স্ক্রিন থেকে ফোর্স সিঙ্ক
+  // -----------------------------
+  // ✅ FORCE SYNC (optional use)
+  // -----------------------------
   static Future<void> forceSyncFromLocal() async {
     final completed = await isCompleted();
     final percent = await completionPercent();
     final prefs = await SharedPreferences.getInstance();
 
-    await _syncLocalToFirestore(
+    final userDoc = await _getUserDoc();
+    final data = userDoc?.data() ?? <String, dynamic>{};
+
+    await _syncCompletionToFirestore(
       prefs: prefs,
+      userData: data,
       isCompletedFlag: completed,
       completionPercent: percent,
     );
   }
 
-  /// ফায়ারবেস সিঙ্ক লজিক (সব নতুন ফিল্ডসহ)
-  static Future<void> _syncLocalToFirestore({
+  // ------------------------------------
+  // ✅ Firestore sync (aligned fields)
+  // ------------------------------------
+  static Future<void> _syncCompletionToFirestore({
     required SharedPreferences prefs,
+    required Map<String, dynamic> userData,
     bool? isCompletedFlag,
     double? completionPercent,
   }) async {
     final uid = AuthService.currentUserId;
     if (uid == null) return;
 
+    final role = _roleFromPrefs(prefs);
+
     final data = <String, dynamic>{
-      'name': prefs.getString('user_name'),
-      'phone': prefs.getString('user_phone'),
-      'location': prefs.getString('user_location'),
-      'gender': prefs.getString('user_gender'),
-      'age': prefs.getInt('user_age'),
-      'email': prefs.getString('user_email'),
-      'facebook': prefs.getString('user_facebook'),
-      'instagram': prefs.getString('user_instagram'),
-      'linkedin': prefs.getString('user_linkedin'),
-      'kyc_completed': prefs.getBool('kyc_completed') ?? false,
-      'image': prefs.getString('user_profile_image'), // আপনার আপলোড করা ইমেজ লিঙ্ক
+      // common identity (prefer existing firestore if prefs empty)
+      'name': _notEmpty(prefs.getString(_kName)) ? prefs.getString(_kName) : userData['name'],
+      'phone': _notEmpty(prefs.getString(_kPhone)) ? prefs.getString(_kPhone) : userData['phone'],
+      'location': _notEmpty(prefs.getString(_kLocation)) ? prefs.getString(_kLocation) : userData['location'],
+      'image': _notEmpty(prefs.getString(_kImage)) ? prefs.getString(_kImage) : userData['image'],
 
-      // রোল অনুযায়ী ডাটা
-      'companyName': prefs.getString('company_name'),
-      'companyContact': prefs.getString('company_contact'),
-      'companyAddress': prefs.getString('company_address'),
+      // role
+      'userRole': role, // keep consistent: finder/maker
 
-      'workerPrice': prefs.getString('worker_price'),
-      'experience': prefs.getString('worker_experience'),
-
+      // completion flags
       'lastUpdated': FieldValue.serverTimestamp(),
     };
+
+    // gender/age (prefer prefs if you store later, else keep firestore)
+    if (_notEmpty(prefs.getString(_kGender))) data['gender'] = prefs.getString(_kGender);
+    if (prefs.getInt(_kAge) != null) data['age'] = prefs.getInt(_kAge);
 
     if (isCompletedFlag != null) data['isProfileCompleted'] = isCompletedFlag;
     if (completionPercent != null) data['completionPercent'] = completionPercent;
 
-    // ক্লিনআপ: নাল ভ্যালু রিমুভ করা যাতে ফায়ারবেস ক্লিন থাকে
-    data.removeWhere((key, value) => value == null);
+    // Keep existing fields as-is; don't overwrite with null
+    data.removeWhere((_, v) => v == null);
 
     await _db.collection('users').doc(uid).set(data, SetOptions(merge: true));
   }

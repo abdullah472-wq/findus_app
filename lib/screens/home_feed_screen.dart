@@ -6,10 +6,14 @@ import 'package:findus_app/screens/tabs/conversation_tab.dart';
 import 'package:findus_app/screens/tabs/work_in_progress_tab.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
-import 'package:findus_app/screens/tabs/save_screen.dart';
+import 'package:findus_app/screens/tabs/leaderboard_screen.dart'; // ✅ নতুন ইম্পোর্ট
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
+
+  static final GlobalKey<_HomeFeedScreenState> feedKey = GlobalKey<_HomeFeedScreenState>();
+
+  static void goToTab(int index) => feedKey.currentState?._onTabTapped(index);
 
   @override
   State<HomeFeedScreen> createState() => _HomeFeedScreenState();
@@ -19,48 +23,37 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     with TickerProviderStateMixin {
   int _selectedTopIndex = 0;
 
-  // নিচের PageView এর জন্য controller – swipe এ tab change হবে
   late PageController _pageController;
-
-  // স্পিনিং কন্ট্রোলার (Working আইকনের জন্য)
   late AnimationController _spinController;
-
-  // বাউন্স কন্ট্রোলার (অন্যান্য আইকনের জন্য)
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
 
-  // ৫টি ট্যাবের লিস্ট
+  // ✅ ৫টি ট্যাবের লিস্ট (Save সরিয়ে Leaderboard যুক্ত করা হয়েছে)
   final List<Widget> _tabViews = const [
     ConversationTab(),
     WorkInProgressTab(),
     CompletedWorkTab(),
     AchievementsTab(),
-    SaveScreen(),
+    LeaderboardScreen(), // ✅ নতুন ট্যাব
   ];
 
   @override
   void initState() {
     super.initState();
-
     _pageController = PageController(initialPage: _selectedTopIndex);
 
-    // ১. স্পিনিং অ্যানিমেশন (Working আইকনের জন্য)
     _spinController = AnimationController(
       duration: const Duration(seconds: 4),
       vsync: this,
     )..repeat();
 
-    // ২. বাউন্স অ্যানিমেশন (ক্লিক ইফেক্টের জন্য)
     _bounceController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
 
     _bounceAnimation = Tween<double>(begin: 1.0, end: 0.8).animate(
-      CurvedAnimation(
-        parent: _bounceController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _bounceController, curve: Curves.easeInOut),
     );
 
     _bounceController.addStatusListener((status) {
@@ -78,15 +71,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     super.dispose();
   }
 
-  // ট্যাব চেঞ্জ হ্যান্ডলার (উপরের আইকনে tap করলে)
   void _onTabTapped(int index) {
     if (_selectedTopIndex != index) {
       setState(() {
         _selectedTopIndex = index;
       });
       _bounceController.forward();
-
-      // নিচের PageView কে animate করে ওই পেজে নিয়ে যাবে
       _pageController.animateToPage(
         index,
         duration: const Duration(milliseconds: 300),
@@ -107,10 +97,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: const BoxDecoration(
                 color: AppColors.bgBlue,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(0),
-                  bottomRight: Radius.circular(0),
-                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black12,
@@ -123,9 +109,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTopIcon(Icons.chat_bubble_outline, "Massage", 0),
+                  _buildTopIcon(Icons.chat_bubble_outline, "Messages", 0), // ✅ Typo fixed
 
-                  // Working আইকন (Spinning)
                   _buildTopIcon(
                     Icons.settings_outlined,
                     "Working",
@@ -138,18 +123,20 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     "Completed",
                     2,
                   ),
-                  _buildTopIcon(Icons.bar_chart, "Progress", 3),
-                  _buildTopIcon(Icons.bookmark_border, "Saved", 4),
+
+                  _buildTopIcon(Icons.bar_chart_rounded, "Progress", 3),
+
+                  // ✅ Leaderboard বাটন যুক্ত করা হলো
+                  _buildTopIcon(Icons.emoji_events_outlined, "Rank", 4),
                 ],
               ),
             ),
 
-            // --- বডি পার্ট (PageView দিয়ে swipeable tabs) ---
+            // --- বডি পার্ট (PageView) ---
             Expanded(
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (index) {
-                  // swipe করলে index change হবে
                   setState(() {
                     _selectedTopIndex = index;
                   });
@@ -164,7 +151,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     );
   }
 
-  // আইকন বিল্ডার
   Widget _buildTopIcon(
       IconData icon,
       String label,
@@ -173,22 +159,18 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       }) {
     final bool isActive = _selectedTopIndex == index;
 
-    // বেস আইকন উইজেট
     Widget iconWidget = Icon(
       icon,
-      size: 26,
+      size: 24, // ✅ আইকন সাইজ একটু ছোট করা হয়েছে যাতে ৫টি ঠিকমতো ধরে
       color: isActive ? Colors.cyan[800] : Colors.grey[600],
     );
 
-    // স্পিনিং লজিক (Working Tab)
     if (isSpinning) {
       iconWidget = RotationTransition(
         turns: _spinController,
         child: iconWidget,
       );
-    }
-    // বাউন্স লজিক (অন্যান্য Tab - যদি সিলেক্টেড হয়)
-    else if (isActive) {
+    } else if (isActive) {
       iconWidget = ScaleTransition(
         scale: _bounceAnimation,
         child: iconWidget,
@@ -202,10 +184,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8), // ✅ প্যাডিং ১০ থেকে ৮ করা হয়েছে
             decoration: BoxDecoration(
               color: isActive ? Colors.cyan.shade50 : Colors.transparent,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isActive ? Colors.cyan : Colors.transparent,
                 width: 1.5,
@@ -213,18 +195,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             ),
             child: iconWidget,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           SizedBox(
             width: 65,
             child: Text(
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 10,
-                color:
-                isActive ? Colors.cyan[900] : Colors.grey[600],
-                fontWeight:
-                isActive ? FontWeight.bold : FontWeight.normal,
+                fontSize: 9, // ✅ ফন্ট সাইজ ১০ থেকে ৯ করা হয়েছে
+                color: isActive ? Colors.cyan[900] : Colors.grey[600],
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),

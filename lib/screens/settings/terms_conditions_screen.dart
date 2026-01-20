@@ -7,36 +7,87 @@ class TermsAndConditionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Terms & Conditions",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
       backgroundColor: AppColors.bgBlue,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
+      body: Stack(
+        children: [
+          // Main Content (সাদা কার্ড ছাড়া)
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+              left: 20,
+              right: 20,
+              bottom: 20,
+            ),
+            child: const _TermsContent(), // সরাসরি _TermsContent ব্যবহার
           ),
-          child: const _TermsContent(),
-        ),
+
+          // Floating AppBar (KYC-style)
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              decoration: BoxDecoration(
+                color: AppColors.brandLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          // Back Button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.brandDark,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+
+                          // Title
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: const Text(
+                                  "Terms & Conditions",
+                                  style: TextStyle(
+                                    color: AppColors.brandDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -79,7 +130,7 @@ class _TermsContent extends StatelessWidget {
 
         // Intro
         Text(
-          "These Terms & Conditions (“Terms”) govern your use of the FINDUS mobile application and related services. "
+          "These Terms & Conditions ('Terms') govern your use of the FINDUS mobile application and related services. "
               "By creating an account or using FINDUS, you agree to these Terms, our Privacy Policy and all applicable laws of Bangladesh.",
           style: textStyle,
         ),
@@ -139,7 +190,7 @@ class _TermsContent extends StatelessWidget {
           "• Ratings and reviews should be honest and based on actual experience.\n"
               "• You agree not to post fake, defamatory or abusive reviews.\n"
               "• FINDUS may remove ratings or reviews that violate our community standards.\n"
-              "• Badges (Bronze/Silver/Gold/Platinum/Diamond) and “Verified” or “Trusted” labels are based on internal criteria (e.g. completed jobs, KYC, ratings) and may change over time.",
+              "• Badges (Bronze/Silver/Gold/Platinum/Diamond) and 'Verified' or 'Trusted' labels are based on internal criteria (e.g. completed jobs, KYC, ratings) and may change over time.",
           style: textStyle,
         ),
 
@@ -202,7 +253,7 @@ class _TermsContent extends StatelessWidget {
         const SizedBox(height: 16),
         const Text("11. Changes to These Terms", style: headingStyle),
         Text(
-          "We may update these Terms from time to time to reflect changes in law, features or policies. We will update the “Last updated” date at the top and may notify you inside the app. "
+          "We may update these Terms from time to time to reflect changes in law, features or policies. We will update the 'Last updated' date at the top and may notify you inside the app. "
               "By continuing to use FINDUS after changes, you agree to the updated Terms.",
           style: textStyle,
         ),

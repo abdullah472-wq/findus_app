@@ -165,112 +165,177 @@ class _DrivingLicenseUploadScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Driving License Upload",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
       backgroundColor: AppColors.bgBlue,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Add your driving license",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
-              ),
+      body: Stack(
+        children: [
+          // Main Content
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+              left: 20,
+              right: 20,
+              bottom: 20,
             ),
-            const SizedBox(height: 6),
-            const Text(
-              "Uploading your driving license helps build extra trust and may be required for some categories (e.g. driver, rider). "
-                  "We will securely store this document and will not show it publicly.",
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.black87,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            _buildImageCard(
-              title: "Upload front side of license",
-              imageFile: _frontImage,
-              onTap: _pickFrontImage,
-            ),
-            const SizedBox(height: 12),
-
-            _buildImageCard(
-              title: "Upload back side of license (optional)",
-              imageFile: _backImage,
-              onTap: _pickBackImage,
-            ),
-
-            const SizedBox(height: 20),
-
-            const Text(
-              "Tips:",
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              "• Make sure the photo is clear and all text is readable.\n"
-                  "• Avoid glare or reflections.\n"
-                  "• Your document will be used only for verification purposes.",
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.black87,
-                height: 1.4,
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitLicense,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandMain,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: _isSubmitting
-                    ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-                    : const Text(
-                  "SUBMIT LICENSE",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Add your driving license",
                   style: TextStyle(
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.brandDark,
                   ),
                 ),
+                const SizedBox(height: 6),
+                const Text(
+                  "Uploading your driving license helps build extra trust and may be required for some categories (e.g. driver, rider). "
+                      "We will securely store this document and will not show it publicly.",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                _buildImageCard(
+                  title: "Upload front side of license",
+                  imageFile: _frontImage,
+                  onTap: _pickFrontImage,
+                ),
+                const SizedBox(height: 12),
+
+                _buildImageCard(
+                  title: "Upload back side of license (optional)",
+                  imageFile: _backImage,
+                  onTap: _pickBackImage,
+                ),
+
+                const SizedBox(height: 20),
+
+                const Text(
+                  "Tips:",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandDark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "• Make sure the photo is clear and all text is readable.\n"
+                      "• Avoid glare or reflections.\n"
+                      "• Your document will be used only for verification purposes.",
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitLicense,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandMain,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                        : const Text(
+                      "SUBMIT LICENSE",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Floating AppBar (KYC-style)
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              decoration: BoxDecoration(
+                color: AppColors.brandLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          // Back Button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.brandDark,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+
+                          // Title
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: const Text(
+                                  "Driving License Upload",
+                                  style: TextStyle(
+                                    color: AppColors.brandDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

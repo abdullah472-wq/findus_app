@@ -6,8 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
-import 'package:findus_app/screens/earner/worker_profile_screen.dart';
-import 'package:findus_app/screens/supporter/supporter_profile_screen.dart';
+import 'package:findus_app/screens/earner/worker_profile_screen.txt';
+import 'package:findus_app/screens/supporter/supporter_profile_screen.txt';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/services/conversation_storage.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';

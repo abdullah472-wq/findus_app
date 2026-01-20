@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:findus_app/constants/app_colors.dart';
 
 class NotificationControlPage extends StatefulWidget {
@@ -97,134 +96,189 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgBlue,
-      appBar: AppBar(
-        title: const Text(
-          "Notifications",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
-      body: _loading
-          ? const Center(
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: AppColors.brandMain,
-        ),
-      )
-          : ListView(
-        padding:
-        const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      body: Stack(
         children: [
-          // master switch
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius:
-              BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black
-                      .withOpacity(0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+          // Main Content
+          _loading
+              ? const Center(
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandMain,
             ),
-            child: SwitchListTile(
-              title: const Text(
-                "All notifications",
+          )
+              : ListView(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+              left: 16,
+              right: 16,
+              bottom: 24,
+            ),
+            children: [
+              // master switch
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: SwitchListTile(
+                  title: const Text(
+                    "All notifications",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    "Turn all FINDUS notifications on or off.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  value: _allEnabled,
+                  onChanged: _updateAll,
+                  activeColor: AppColors.brandMain,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                "Notification types",
                 style: TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: AppColors.brandDark,
                 ),
               ),
-              subtitle: const Text(
-                "Turn all FINDUS notifications on or off.",
+              const SizedBox(height: 8),
+
+              _buildSwitchCard(
+                icon: Icons.work_outline,
+                title: "Jobs & Support posts",
+                subtitle: "Alerts when new jobs or relevant posts appear near you.",
+                value: _jobsEnabled && _allEnabled,
+                // master off হলে child switch visually off ও disabled
+                onChanged: _allEnabled
+                    ? (v) => _updateCategory(jobs: v)
+                    : null,
+              ),
+
+              _buildSwitchCard(
+                icon: Icons.chat_bubble_outline,
+                title: "Chat messages",
+                subtitle: "New messages, replies and important chat updates.",
+                value: _chatEnabled && _allEnabled,
+                onChanged: _allEnabled
+                    ? (v) => _updateCategory(chat: v)
+                    : null,
+              ),
+
+              _buildSwitchCard(
+                icon: Icons.campaign_outlined,
+                title: "Updates & promotions",
+                subtitle: "News, offers, feature updates and tips.",
+                value: _promoEnabled && _allEnabled,
+                onChanged: _allEnabled
+                    ? (v) => _updateCategory(promo: v)
+                    : null,
+              ),
+
+              _buildSwitchCard(
+                icon: Icons.warning_amber_rounded,
+                title: "Emergency alerts",
+                subtitle: "Important safety or emergency notifications.",
+                value: _emergencyEnabled && _allEnabled,
+                onChanged: _allEnabled
+                    ? (v) => _updateCategory(emergency: v)
+                    : null,
+              ),
+
+              const SizedBox(height: 12),
+              const Text(
+                "You can also control app‑level notification permissions "
+                    "from your device settings.",
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: Colors.black54,
                 ),
               ),
-              value: _allEnabled,
-              onChanged: _updateAll,
-              activeColor: AppColors.brandMain,
-              contentPadding:
-              const EdgeInsets.symmetric(
-                  horizontal: 0),
-            ),
+            ],
           ),
 
-          const SizedBox(height: 20),
+          // Floating AppBar (KYC-style)
+          Positioned(
+            top: 10,
+            left: 10,
+            right: 10,
+            child: Container(
+              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              decoration: BoxDecoration(
+                color: AppColors.brandLight,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  topLeft: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          // Back Button
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new,
+                              color: AppColors.brandDark,
+                              size: 20,
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                          ),
 
-          const Text(
-            "Notification types",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          _buildSwitchCard(
-            icon: Icons.work_outline,
-            title: "Jobs & Support posts",
-            subtitle:
-            "Alerts when new jobs or relevant posts appear near you.",
-            value: _jobsEnabled && _allEnabled,
-            // master off হলে child switch visually off ও disabled
-            onChanged: _allEnabled
-                ? (v) => _updateCategory(jobs: v)
-                : null,
-          ),
-
-          _buildSwitchCard(
-            icon: Icons.chat_bubble_outline,
-            title: "Chat messages",
-            subtitle:
-            "New messages, replies and important chat updates.",
-            value: _chatEnabled && _allEnabled,
-            onChanged: _allEnabled
-                ? (v) => _updateCategory(chat: v)
-                : null,
-          ),
-
-          _buildSwitchCard(
-            icon: Icons.campaign_outlined,
-            title: "Updates & promotions",
-            subtitle:
-            "News, offers, feature updates and tips.",
-            value: _promoEnabled && _allEnabled,
-            onChanged: _allEnabled
-                ? (v) => _updateCategory(promo: v)
-                : null,
-          ),
-
-          _buildSwitchCard(
-            icon: Icons.warning_amber_rounded,
-            title: "Emergency alerts",
-            subtitle:
-            "Important safety or emergency notifications.",
-            value: _emergencyEnabled && _allEnabled,
-            onChanged: _allEnabled
-                ? (v) =>
-                _updateCategory(emergency: v)
-                : null,
-          ),
-
-          const SizedBox(height: 12),
-          const Text(
-            "You can also control app‑level notification permissions "
-                "from your device settings.",
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.black54,
+                          // Title
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: const Text(
+                                  "Notifications",
+                                  style: TextStyle(
+                                    color: AppColors.brandDark,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -243,8 +297,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-        BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: SwitchListTile(
@@ -266,8 +319,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
         value: value,
         onChanged: onChanged,
         activeColor: AppColors.brandMain,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       ),
     );
   }

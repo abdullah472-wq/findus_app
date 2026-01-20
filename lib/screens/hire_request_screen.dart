@@ -1,11 +1,17 @@
+// lib/screens/hire_request_screen.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
-import 'package:findus_app/screens/tabs/chat_screen.dart'; // সফল হলে চ্যাটে নিয়ে যাব
-import 'package:findus_app/services/notification_service.dart'; // 🔹 NEW: notification service import
+import 'package:findus_app/screens/tabs/chat_screen.dart';
+import 'package:findus_app/services/firestore_chat_service.dart';
+import 'package:findus_app/services/notification_service.dart'; // optional push
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class HireRequestScreen extends StatefulWidget {
-  final Worker worker; // যাকে হায়ার করা হচ্ছে তার ডাটা
+  final Worker worker; // finder (receiver)
 
   const HireRequestScreen({super.key, required this.worker});
 
@@ -14,16 +20,45 @@ class HireRequestScreen extends StatefulWidget {
 }
 
 class _HireRequestScreenState extends State<HireRequestScreen> {
-  String _selectedWorkType = 'Urgent'; // Urgent or Scheduled
-  double _offerPrice = 100.0; // ডিফল্ট অফার প্রাইস
+  String _selectedWorkType = 'Urgent';
+  double _offerPrice = 100.0;
   final TextEditingController _detailsController = TextEditingController();
   bool _isLoading = false;
 
-  // --- রিকোয়েস্ট পাঠানোর লজিক + Firebase notification ---
+  @override
+  void dispose() {
+    _detailsController.dispose();
+    super.dispose();
+  }
+
   Future<void> _sendRequest() async {
-    if (_detailsController.text.isEmpty) {
+    final details = _detailsController.text.trim();
+    if (details.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please describe your problem briefly")),
+      );
+      return;
+    }
+
+    final finderId = widget.worker.uid.trim(); // receiver
+    if (finderId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Worker user ID missing")),
+      );
+      return;
+    }
+
+    final supporter = FirebaseAuth.instance.currentUser;
+    if (supporter == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please login again")),
+      );
+      return;
+    }
+
+    if (supporter.uid == finderId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You cannot send request to yourself")),
       );
       return;
     }
@@ -31,94 +66,178 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 🔹 hire_request notification পাঠানো হবে worker এর কাছে
-      await NotificationService.sendNotificationToUser(
-        toUserId: widget.worker.id, // worker-এর uid / id
-        title: "New hire request",
-        body:
-        "You have a new ${_selectedWorkType.toLowerCase()} hire request.",
-        type: "hire_request",
-        status: "pending", // শুরুতে pending
-        data: {
-          'workType': _selectedWorkType,          // Urgent / Scheduled
-          'offerPrice': _offerPrice,              // অফার প্রাইস
-          'details': _detailsController.text,     // সমস্যা/কাজের বর্ণনা
-        },
-        // fromUserId ফাঁকা রেখে দিলে NotificationService নিজে currentUser.uid বসাবে
+      final requestId = await _createHireRequestAndNotification(
+        supporterId: supporter.uid,
+        finderId: finderId,
+        workType: _selectedWorkType,
+        offerPrice: _offerPrice,
+        details: details,
       );
 
-      // সফল হলে সাকসেস ডায়ালগ
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _showSuccessDialog();
-      }
+      // Optional: Push/FCM (যদি আপনার NotificationService push পাঠায়)
+      // Firestore notification already created above, তাই এটা fail হলেও request success থাকবে।
+      try {
+        await NotificationService.sendNotificationToUser(
+          toUserId: finderId,
+          title: "New hire request",
+          body: "You have a new ${_selectedWorkType.toLowerCase()} hire request.",
+          type: "hire_request",
+          status: "pending",
+          data: {
+            'requestId': requestId,
+            'workType': _selectedWorkType,
+            'offerPrice': _offerPrice.toInt(),
+          },
+        );
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showSuccessBottomSheet(requestId: requestId);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send request. Please try again.\n$e")),
+        SnackBar(content: Text("Failed to send request.\n$e")),
       );
     }
   }
 
-  // --- সাকসেস ডায়ালগ (অ্যানিমেশন সহ) ---
-  void _showSuccessDialog() {
+  Future<String> _createHireRequestAndNotification({
+    required String supporterId,
+    required String finderId,
+    required String workType,
+    required double offerPrice,
+    required String details,
+  }) async {
+    final db = FirebaseFirestore.instance;
+
+    // ✅ supporter profile data (denormalize)
+    final userSnap = await db.collection('users').doc(supporterId).get();
+    final u = userSnap.data() ?? <String, dynamic>{};
+
+    final supporterName =
+    (u['name'] ?? u['fullName'] ?? u['displayName'] ?? 'User').toString();
+    final supporterImage =
+    (u['imageUrl'] ?? u['photoUrl'] ?? u['image'] ?? '').toString();
+    final supporterRole =
+    (u['userRole'] ?? u['role'] ?? 'supporter').toString();
+    final supporterRating = (u['rating'] is num) ? (u['rating'] as num).toDouble() : 0.0;
+
+    // ✅ 1) hire_requests create
+    final reqRef = db.collection('hire_requests').doc(); // auto id
+    await reqRef.set({
+      'senderId': supporterId,
+      'senderName': supporterName,
+      'senderRole': supporterRole,
+      'senderImage': supporterImage,
+      'rating': supporterRating,
+
+      'receiverId': finderId,
+      'status': 'pending',
+
+      'workType': workType,
+      'offerPrice': offerPrice.toInt(),
+      'details': details,
+
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // ✅ 2) notifications create (rules অনুযায়ী fromUserId must be auth.uid)
+    await db.collection('notifications').add({
+      'toUserId': finderId,
+      'fromUserId': supporterId,
+      'type': 'hire_request',
+      'title': 'New hire request',
+      'body': 'WorkType: $workType, Offer: ৳${offerPrice.toInt()}',
+      'requestId': reqRef.id,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    return reqRef.id;
+  }
+
+  void _showSuccessBottomSheet({required String requestId}) {
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    final worker = widget.worker; // capture before pops
+    final otherUid = worker.uid.trim();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
+      builder: (sheetCtx) => Container(
         height: 400,
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius:
-          BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(30),
+            topRight: Radius.circular(30),
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // সাকসেস আইকন (অ্যানিমেটেড এফেক্ট)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                  color: Colors.green.shade50, shape: BoxShape.circle),
-              child: const Icon(Icons.check_circle,
-                  color: Colors.green, size: 80),
+                color: Colors.green.shade50,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle, color: Colors.green, size: 80),
             ),
             const SizedBox(height: 20),
-            const Text("Request Sent!",
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark)),
+            const Text(
+              "Request Sent!",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandDark,
+              ),
+            ),
             const SizedBox(height: 10),
             Text(
-              "Your request has been sent to ${widget.worker.name}.\nPlease wait for approval.",
+              "Your request has been sent to ${worker.name}.\nPlease wait for approval.",
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 10),
+            Text(
+              "Request ID: $requestId",
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 24),
 
-            // চ্যাটে যাওয়ার বাটন
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30),
               child: SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context); // ডায়ালগ বন্ধ
-                    Navigator.pop(context); // রিকোয়েস্ট পেজ বন্ধ
+                  onPressed: () async {
+                    // close sheet first
+                    Navigator.pop(sheetCtx);
 
-                    // চ্যাট স্ক্রিনে নিয়ে যাওয়া হচ্ছে
-                    Navigator.push(
-                      context,
+                    if (otherUid.isEmpty) return;
+
+                    final cid = await FirestoreChatService.getOrCreateConversation(
+                      otherUserId: otherUid,
+                    );
+
+                    // close HireRequestScreen (optional)
+                    if (rootNav.canPop()) rootNav.pop();
+
+                    // push chat from root navigator
+                    if (!rootNav.context.mounted) return;
+                    rootNav.push(
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
-                          conversationId: widget.worker.id, // 🔹 এখানে widget.worker
-                          userName: widget.worker.name,
-                          userRole: widget.worker.role,
-                          userImage: widget.worker.image,
+                          conversationId: cid,
+                          userName: worker.name,
+                          userRole: worker.userRole,
+                          userImage: worker.image,
                         ),
                       ),
                     );
@@ -126,18 +245,15 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brandMain,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                   ),
                   child: const Text(
                     "Go to Chat",
-                    style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -146,214 +262,184 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-      AppColors.bgBlue, // একদম হালকা গ্রে ব্যাকগ্রাউন্ড
-      appBar: AppBar(
-        title: const Text("Hire Details",
-            style: TextStyle(
-                color: AppColors.brandDark, fontWeight: FontWeight.bold)),
-        backgroundColor: AppColors.brandLight,
-        elevation: 0.5,
-        leading: IconButton(
-          icon:
-          const Icon(Icons.arrow_back_ios_new, color: AppColors.brandDark),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ১. ওয়ার্কার ইনফো কার্ড
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
+    final hasImg = widget.worker.image.trim().isNotEmpty;
+
+    return FloatingScaffold(
+      title: "Hire Details",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      scrollable: false, // ✅ avoid double scroll
+      bodyPadding: EdgeInsets.zero,
+      body: Container(
+        color: AppColors.brandLight,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Worker info card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                ),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: hasImg
+                        ? Image.network(
+                      widget.worker.image,
+                      height: 60,
+                      width: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _fallbackAvatar(),
+                    )
+                        : _fallbackAvatar(),
+                  ),
+                  title: Text(
+                    "Hiring ${widget.worker.name}",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark,
+                    ),
+                  ),
+                  subtitle: Text(
+                    widget.worker.userRole,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 25),
+
+              const Text(
+                "Describe the issue",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _detailsController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: "Ex: My kitchen tap is leaking, need urgent fix...",
+                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 25),
+
+              const Text(
+                "When do you need it?",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _buildChip("Urgent (Now)", "Urgent"),
+                  const SizedBox(width: 15),
+                  _buildChip("Schedule Later", "Scheduled"),
+                ],
+              ),
+
+              const SizedBox(height: 25),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Your Offer Price",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                  ),
+                  Text(
+                    "৳ ${_offerPrice.toInt()}",
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.brandMain),
                   ),
                 ],
               ),
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    widget.worker.image,
-                    height: 60,
-                    width: 60,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        height: 60,
-                        width: 60,
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.person,
-                          color: Colors.grey,
-                          size: 32,
-                        ),
-                      );
-                    },
+              const SizedBox(height: 5),
+
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: AppColors.brandMain,
+                  inactiveTrackColor: AppColors.brandLight,
+                  thumbColor: AppColors.brandDark,
+                  overlayColor: AppColors.brandMain.withOpacity(0.2),
+                ),
+                child: Slider(
+                  value: _offerPrice,
+                  min: 50,
+                  max: 2000,
+                  divisions: 39, // step ~50
+                  label: _offerPrice.round().toString(),
+                  onChanged: (v) => setState(() => _offerPrice = v),
+                ),
+              ),
+
+              Center(
+                child: Text(
+                  "Base Charge starts from ${widget.worker.priceText}",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _sendRequest,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandDark,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    elevation: 5,
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("Send Request", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      SizedBox(width: 10),
+                      Icon(Icons.send_rounded, size: 20),
+                    ],
                   ),
                 ),
-                title: Text(
-                  "Hiring ${widget.worker.name}",
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
-                  ),
-                ),
-                subtitle: Text(
-                  widget.worker.role,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey,
-                  ),
-                ),
               ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // ২. কাজের বিবরণ (Text Field)
-            const Text("Describe the issue",
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark)),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _detailsController,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText:
-                "Ex: My kitchen tap is leaking, need urgent fix...",
-                hintStyle: TextStyle(color: Colors.grey.shade400),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide.none),
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            // ৩. সময় নির্বাচন (Chips)
-            const Text("When do you need it?",
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _buildChip("Urgent (Now)", "Urgent"),
-                const SizedBox(width: 15),
-                _buildChip("Schedule Later", "Scheduled"),
-              ],
-            ),
-
-            const SizedBox(height: 25),
-
-            // ৪. প্রাইস অফার (Slider)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text("Your Offer Price",
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.brandDark)),
-                Text(
-                  "৳ ${_offerPrice.toInt()}",
-                  style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.brandMain),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: AppColors.brandMain,
-                inactiveTrackColor: AppColors.brandLight,
-                thumbColor: AppColors.brandDark,
-                overlayColor: AppColors.brandMain.withOpacity(0.2),
-              ),
-              child: Slider(
-                value: _offerPrice,
-                min: 50,
-                max: 2000,
-                divisions: 39, // 50 করে করে বাড়বে
-                label: _offerPrice.round().toString(),
-                onChanged: (double value) {
-                  setState(() {
-                    _offerPrice = value;
-                  });
-                },
-              ),
-            ),
-            Center(
-              child: Text(
-                "Base Charge starts from ${widget.worker.price}",
-                style:
-                const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            // ৫. সেন্ড বাটন
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : () => _sendRequest(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandDark,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
-                  elevation: 5,
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(
-                    color: Colors.white)
-                    : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text("Send Request",
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold)),
-                    SizedBox(width: 10),
-                    Icon(Icons.send_rounded, size: 20),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // চিপ বাটন ডিজাইন (Urgent/Schedule)
+  Widget _fallbackAvatar() {
+    return Container(
+      height: 60,
+      width: 60,
+      color: Colors.grey.shade200,
+      child: const Icon(Icons.person, color: Colors.grey, size: 32),
+    );
+  }
+
   Widget _buildChip(String label, String value) {
-    bool isSelected = _selectedWorkType == value;
+    final isSelected = _selectedWorkType == value;
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedWorkType = value),
@@ -363,9 +449,8 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
             color: isSelected ? AppColors.brandMain : Colors.white,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-                color: isSelected
-                    ? AppColors.brandMain
-                    : Colors.grey.shade300),
+              color: isSelected ? AppColors.brandMain : Colors.grey.shade300,
+            ),
           ),
           child: Center(
             child: Text(

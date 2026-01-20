@@ -16,9 +16,13 @@ import 'package:findus_app/screens/explore/refer_earn_screen.dart';
 import 'package:findus_app/screens/settings/subscription_screen.dart';
 import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/screens/settings/language_settings_screen.dart';
-import 'package:findus_app/screens/supporter/supporter_profile_screen.dart';
-import 'package:findus_app/screens/earner/worker_profile_screen.dart';
+import 'package:findus_app/screens/supporter/supporter_profile_screen.txt';
+import 'package:findus_app/screens/earner/worker_profile_screen.txt';
 import 'package:findus_app/models/worker_model.dart';
+
+import '../../badge/badge_model.dart';
+import '../../badge/badge_service.dart' hide BadgeProgress;
+import '../../badge/badge_theme.dart';
 
 class ProfileSideBar extends StatefulWidget {
   const ProfileSideBar({super.key});

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:findus_app/screens/supporter/supporter_profile_edit_screen.dart';
+import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -15,21 +15,24 @@ import 'package:http/http.dart' as http;
 
 import '../../../constants/app_colors.dart';
 import '../../../constants/dummy_data.dart';
-import 'package:findus_app/deb/demo_post_seed.dart';
+import 'package:findus_app/services/user_role_service.dart';
 
+import '../profile/earn_post_screen.dart';
+import '../profile/support_post_screen.dart';
 import 'profile_sidebar_menu.dart';
-import '../supporter/support_post_screen.dart';
-import 'package:findus_app/screens/earner/earn_post_screen.dart';
+import '../profile/support_post_screen.dart';
+import 'package:findus_app/screens/profile/earn_post_screen.dart';
 import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
 
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/services/profile_completion_service.dart';
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/explore/models/worker_profile_bottom_sheet.dart';
 import 'package:findus_app/screens/explore/models/filter_bottom_sheet.dart';
 import 'package:findus_app/services/blocked_user_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import '../emergency_screen.dart';
-import 'package:findus_app/screens/tabs/notifications_page.dart';
+import 'package:findus_app/screens/explore/notifications_page.dart';
 import 'package:findus_app/services/notification_service.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -50,6 +53,8 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   final LatLng _dhakaLocation = const LatLng(23.8103, 90.4125);
   final Distance _distance = const Distance();
+
+  List<Map<String, dynamic>> _searchSuggestions = [];
 
   late AnimationController _shakeController;
   bool _hasUnreadNotifs = false;
@@ -88,6 +93,14 @@ class _ExploreScreenState extends State<ExploreScreen>
     super.initState();
     _mapController = MapController();
 
+    _searchFocusNode.addListener(() {
+      if (!_searchFocusNode.hasFocus) {
+        setState(() {
+          _showSuggestions = false;
+        });
+      }
+    });
+
     _loadUserRole();
     _loadBlockedUsers();
     _checkNotifications();
@@ -100,16 +113,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     _isSearchingLocation = true;
 
-    // Debounce for main search typing
-    _mainSearchController.addListener(() {
-      final text = _mainSearchController.text;
-      _searchDebounce?.cancel();
-      _searchDebounce = Timer(const Duration(milliseconds: 600), () {
-        // টেক্সট বদলালে ফিল্টার + লোকেশন ক্যামেরা মুভ
-        _performSearch(text);
-        _maybeMoveCameraToSearchLocation(mainQuery: text);
-      });
-    });
 
     if (!_hasInitialZoomHappened) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -142,24 +145,27 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _loadUserRole() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final role = prefs.getString('user_role'); // 'maker' / 'finder'
+      final role = await UserRoleService.getCurrentUserRole();
+      final isFinder = UserRoleService.isFinder(role);
 
       if (!mounted) return;
 
-      setState(() {
-        _isWorker = role == 'finder';
-      });
+      setState(() => _isWorker = isFinder);
 
-      await DemoPostSeed.seedOncePerSession(); // optional demo seed
+      // ✅ always start posts stream after role resolved
       _listenToPosts();
     } catch (_) {
+      // fallback: still listen to posts with default assumption
+      if (!mounted) return;
+
+      setState(() => _isWorker = true); // default = finder/worker
       _listenToPosts();
     }
   }
 
   /// Local demo pins to always show
   List<Map<String, dynamic>> _buildDemoPins() {
+    final List<Map<String, dynamic>> demo = [];
     final rnd = Random();
 
     final regions = [
@@ -171,17 +177,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     ];
 
     final workerRoles = [
-      'DRIVER',
-      'CLEANER',
-      'ELECTRICIAN',
-      'PLUMBER',
-      'GARDENER',
-      'COOK',
-      'DELIVERY',
-      'PAINTER',
+      'DRIVER', 'CLEANER', 'ELECTRICIAN', 'PLUMBER', 'GARDENER',
+      'COOK', 'DELIVERY', 'PAINTER',
     ];
-
-    final List<Map<String, dynamic>> demo = [];
 
     for (int i = 0; i < 25; i++) {
       final reg = regions[i % regions.length];
@@ -210,6 +208,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         "rating": 3.5 + rnd.nextDouble() * 1.5,
         "language": "Bangla",
         "trusted": rnd.nextBool(),
+        "type": "finder",
       });
     }
 
@@ -240,6 +239,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         "rating": 4.0 + rnd.nextDouble(),
         "language": "Bangla",
         "trusted": rnd.nextBool(),
+        "type": "maker",
       });
     }
 
@@ -250,11 +250,12 @@ class _ExploreScreenState extends State<ExploreScreen>
     _postsSub?.cancel();
 
     final viewerRole = _isWorker ? 'finder' : 'maker';
-    final demoPins = _buildDemoPins();
 
     _postsSub = PostService.streamPinsForViewerRole(viewerRole).listen((posts) {
       if (!mounted) return;
 
+      // ডেমো পিন এবং ফায়ারবেস পিন একত্রিত করুন
+      final demoPins = _buildDemoPins(); // এখানে কল করুন
       final all = <Map<String, dynamic>>[];
       all.addAll(demoPins);
       all.addAll(posts);
@@ -433,16 +434,123 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
+  void _updateSearchSuggestions(String query) {
+    if (_suggestDebounce?.isActive ?? false) {
+      _suggestDebounce!.cancel();
+    }
+
+    _suggestDebounce = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+
+      final q = query.toLowerCase().trim();
+      if (q.isEmpty) {
+        setState(() {
+          _showSuggestions = false;
+          _searchSuggestions = [];
+        });
+        return;
+      }
+
+      // সাম্প্রতিক searches থেকে suggestion (এখন dummy data ব্যবহার করছি)
+      final allItems = [..._allWorkers, ..._buildDemoPins()];
+
+      final suggestions = allItems
+          .where((item) {
+        final name = (item['name'] ?? '').toString().toLowerCase();
+        final role = (item['role'] ?? '').toString().toLowerCase();
+        final address = (item['address'] ?? '').toString().toLowerCase();
+        return name.contains(q) || role.contains(q) || address.contains(q);
+      })
+          .take(6) // শুধু ৫-৬টা suggestion
+          .toList();
+
+      setState(() {
+        _searchSuggestions = suggestions;
+        _showSuggestions = suggestions.isNotEmpty;
+      });
+    });
+  }
+
+  // ✅ ExploreScreen এর _mapDataToWorker() ঠিক করে দাও
+// কারণ নতুন Worker মডেলে fields বদলেছে:
+// - uid required
+// - userRole required
+// - id/role/isVerified/price (String) আর নেই
+// - priceText (String) আছে, price (num?) optional
+
   Worker _mapDataToWorker(Map<String, dynamic> data) {
+    final String uid = (data['ownerId'] ?? data['uid'] ?? data['userId'] ?? data['id'] ?? '').toString().trim();
+
+    // userRole নির্ধারণ - demo পিনের জন্য type চেক করুন
+    String userRole = 'finder'; // default
+    if (data['userRole'] != null) {
+      userRole = data['userRole'].toString();
+    } else if (data['type'] != null) {
+      userRole = data['type'].toString();
+    } else {
+      final id = (data['id'] ?? '').toString();
+      // demo পিনের জন্য চেক
+      if (id.contains('supporter')) {
+        userRole = 'maker';
+      } else if (id.contains('worker')) {
+        userRole = 'finder';
+      }
+    }
+
+    // priceText এবং price আলাদাভাবে হ্যান্ডেল করুন
+    String priceText = 'Negotiable';
+    num? price;
+
+    final priceData = data['price'];
+    if (priceData is String) {
+      priceText = priceData;
+      // স্ট্রিং থেকে সংখ্যা পার্স করার চেষ্টা করুন
+      final match = RegExp(r'\d+(\.\d+)?').firstMatch(priceData);
+      if (match != null) {
+        price = num.tryParse(match.group(0)!);
+      }
+    } else if (priceData is num) {
+      price = priceData;
+      priceText = '৳$priceData';
+    }
+
     return Worker(
-      id: data['id'],
-      name: data['name'] ?? '',
-      role: data['role'] ?? '',
-      image: data['image'] ?? '',
-      location: data['address'] ?? 'Bangladesh',
-      price: data['price']?.toString() ?? 'Negotiable',
-      isVerified: data['verified'] ?? false,
-      rating: (data['rating'] ?? 0.0).toDouble(),
+      uid: uid,
+      postId: data['id']?.toString(),
+      name: (data['name'] ?? '').toString(),
+      userRole: userRole,
+      image: (data['image'] ?? '').toString(),
+      location: (data['address'] ?? 'Bangladesh').toString(),
+      priceText: priceText,
+      price: price,
+      rating: () {
+        final r = data['rating'];
+        if (r is num) return r.toDouble();
+        return double.tryParse(r?.toString() ?? '') ?? 0.0;
+      }(),
+      kycCompleted: data['verified'] == true,
+      isVerified: data['verified'] == true, // isVerified ফিল্ডও সেট করুন
+      // অন্যান্য optional ফিল্ড
+      age: null,
+      experience: data['experience']?.toDouble(),
+      gender: data['gender']?.toString(),
+      languages: data['language']?.toString() != null
+          ? [data['language']!.toString()]
+          : null,
+      skills: null,
+      about: null,
+      isLive: data['isLive'] ?? false,
+      isTrusted: data['trusted'] ?? false,
+      isPromoted: data['isPromoted'] ?? false,
+      phone: data['phone']?.toString(),
+      email: null,
+      joinedDate: null,
+      lastActive: null,
+      totalJobs: null,
+      completedJobs: null,
+      cancellationRate: null,
+      responseRate: null,
+      responseTime: null,
     );
   }
 
@@ -619,6 +727,18 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   void _performSearch(String query) {
     FocusScope.of(context).unfocus();
+
+    final searchText = query.trim();
+    if (searchText.isEmpty) {
+      // Search text খালি হলে সব workers দেখাবে
+      setState(() {
+        _filteredWorkers = List.from(_allWorkers);
+        _isSearchingWorker = false;
+        _showSuggestions = false;
+      });
+      return;
+    }
+
     setState(() => _isSearchingWorker = true);
 
     Future.delayed(const Duration(milliseconds: 400), () {
@@ -690,6 +810,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       setState(() {
         _isSearchingWorker = false;
         _filteredWorkers = results;
+        _showSuggestions = false;
       });
 
       // ফলাফলের দিকে স্মুথ জুম
@@ -788,6 +909,21 @@ class _ExploreScreenState extends State<ExploreScreen>
                 ),
             ],
           ),
+
+          // Suggestion backdrop (tap to hide)
+          if (_showSuggestions)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _showSuggestions = false;
+                  });
+                  _searchFocusNode.unfocus();
+                },
+                behavior: HitTestBehavior.translucent,
+              ),
+            ),
+
           if (_isSearchingLocation || _isSearchingWorker)
             Positioned.fill(
               child: Container(
@@ -807,70 +943,174 @@ class _ExploreScreenState extends State<ExploreScreen>
                 ),
               ),
             ),
+
           if (!_isSearchingLocation)
             Positioned(
               top: 50,
               left: 15,
               right: 15,
-              child: Container(
-                height: 55,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 10),
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: AppColors.brandDark,
-                      child: Padding(
-                        padding: const EdgeInsets.all(2),
-                        child: Image.asset("assets/images/app_icon.png", fit: BoxFit.scaleDown),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Main Search Bar
+                  Container(
+                    height: 55,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 5)],
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 10),
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: AppColors.brandDark,
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: Image.asset("assets/images/app_icon.png", fit: BoxFit.scaleDown),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _mainSearchController,
+                            focusNode: _searchFocusNode,
+                            onTap: () {
+                              if (_mainSearchController.text.isNotEmpty) {
+                                _updateSearchSuggestions(_mainSearchController.text);
+                                setState(() => _showSuggestions = true);
+                              }
+                            },
+                            onChanged: (value) {
+                              // শুধু suggestion দেখাবে, actual search হবে না
+                              _updateSearchSuggestions(value);
+                              setState(() => _isSearchingWorker = false);
+                            },
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (txt) {
+                              // Enter চাপলেই actual search হবে
+                              _performSearch(txt);
+                              _maybeMoveCameraToSearchLocation(mainQuery: txt);
+                              setState(() => _showSuggestions = false);
+                              _searchFocusNode.unfocus();
+                            },
+                            decoration: InputDecoration(
+                              hintText: "Search name/role or type a location...",
+                              hintStyle: TextStyle(color: Colors.grey.shade500),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () {
+                            _scaffoldKey.currentState?.openEndDrawer();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF003F67), width: 2),
+                            ),
+                            child: const CircleAvatar(
+                              backgroundColor: Color(0xFFD6F9FF),
+                              radius: 18,
+                              child: Icon(Icons.person, color: Color(0xFF003F67), size: 22),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                    ),
+                  ),
+
+                  // Suggestion ড্রপডাউন
+                  if (_showSuggestions && _searchSuggestions.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.search, color: Colors.grey.shade600, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Suggestions',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          ..._searchSuggestions.map((item) {
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              leading: CircleAvatar(
+                                radius: 20,
+                                backgroundImage: NetworkImage(item['image'] ?? ''),
+                                backgroundColor: Colors.grey.shade200,
+                                child: item['image'] == null
+                                    ? Icon(Icons.person, color: Colors.grey.shade400)
+                                    : null,
+                              ),
+                              title: Text(
+                                item['name']?.toString() ?? '',
+                                style: const TextStyle(fontSize: 14),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                item['role']?.toString() ?? '',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              ),
+                              trailing: Text(
+                                item['price']?.toString() ?? '',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.brandMain,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onTap: () {
+                                // Suggestion ট্যাপ করলে actual search হবে
+                                setState(() {
+                                  _mainSearchController.text = item['name']?.toString() ?? '';
+                                  _showSuggestions = false;
+                                });
+                                _performSearch(item['name']?.toString() ?? '');
+                                _maybeMoveCameraToSearchLocation(mainQuery: item['name']?.toString() ?? '');
+                                _searchFocusNode.unfocus();
+                              },
+                            );
+                          }).toList(),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _mainSearchController,
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (txt) {
-                          _performSearch(txt);
-                          _maybeMoveCameraToSearchLocation(mainQuery: txt);
-                        },
-                        decoration: InputDecoration(
-                          hintText: "Search name/role or type a location...",
-                          hintStyle: TextStyle(color: Colors.grey.shade500),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                          isDense: true,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: () {
-                        _scaffoldKey.currentState?.openEndDrawer();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF003F67), width: 2),
-                        ),
-                        child: const CircleAvatar(
-                          backgroundColor: Color(0xFFD6F9FF),
-                          radius: 18,
-                          child: Icon(Icons.person, color: Color(0xFF003F67), size: 22),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                  ],
-                ),
+                ],
               ),
             ),
+
           if (!_isSearchingLocation)
             Positioned(
               top: 120,
@@ -921,12 +1161,14 @@ class _ExploreScreenState extends State<ExploreScreen>
                 ],
               ),
             ),
+
           if (!_isSearchingLocation)
             Positioned(
               bottom: 110,
               right: 20,
               child: _mapBtn(Icons.medical_services_outlined, Colors.redAccent, _openEmergency),
             ),
+
           if (!_isSearchingLocation)
             Positioned(
               bottom: 30,
@@ -955,6 +1197,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                 ],
               ),
             ),
+
           if (!_isSearchingLocation)
             Positioned(
               bottom: 30,
@@ -981,7 +1224,15 @@ class _ExploreScreenState extends State<ExploreScreen>
                     );
 
                     if (go == true) {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SupporterProfileEditScreen()));
+                      final uid = FirebaseAuth.instance.currentUser?.uid;
+                      if (uid == null || uid.isEmpty) return;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UnifiedProfileEditScreen(uid: uid),
+                        ),
+                      );
                     }
                     return;
                   }

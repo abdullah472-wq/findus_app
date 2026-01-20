@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/models/badge_model.dart';
-import 'package:findus_app/services/badge_service.dart';
+import 'package:findus_app/badge/badge_model.dart';
+import 'package:findus_app/badge/badge_service.dart';
+
+import '../badge/badge_model.dart';
 
 class BadgeIcon extends StatelessWidget {
   final double size;

@@ -1,219 +1,220 @@
-import 'package:findus_app/constants/app_colors.dart';
+// lib/screens/tabs/main_nav_screen.dart
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:findus_app/constants/app_colors.dart';
 import 'home_feed_screen.dart';
 import 'explore/explore_screen.dart';
-import 'emergency_screen.dart';
-import 'dashboard_screen.dart';
-
-// Profile screens + model
-import 'package:findus_app/screens/supporter/supporter_profile_screen.dart';
-import 'package:findus_app/screens/earner/worker_profile_screen.dart';
-import 'package:findus_app/models/worker_model.dart';
+import 'dashboard/dashboard_screen.dart';
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
+// আপনার লগইন স্ক্রিনটি এখানে ইম্পোর্ট করুন (উদাহরণস্বরূপ):
+// import 'package:findus_app/screens/auth/login_screen.dart';
 
 class MainNavScreen extends StatefulWidget {
   const MainNavScreen({super.key});
+
+  static final GlobalKey<_MainNavScreenState> navKey = GlobalKey<_MainNavScreenState>();
+
+  static void goToHomeTab() => navKey.currentState?._goToTab(0);
+  static void goToExploreTab() => navKey.currentState?._goToTab(1);
+  static void goToDashboardTab() => navKey.currentState?._goToTab(2);
+  static void goToProfileTab() => navKey.currentState?._goToTab(3);
 
   @override
   State<MainNavScreen> createState() => _MainNavScreenState();
 }
 
 class _MainNavScreenState extends State<MainNavScreen> {
-  int _currentIndex = 1; // ডিফল্ট Explore Screen
-
-  // পেজ কন্ট্রোলার (এটি পেজ মেমোরিতে ধরে রাখবে)
+  int _currentIndex = 1;
   final PageController _pageController = PageController(initialPage: 1);
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  // ট্যাব চেঞ্জ হলে পেজ জাম্প করবে
-  void _onTabTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-    _pageController.jumpToPage(index);
-  }
-
-  // Emergency এখন শুধু ExploreScreen থেকে ব্যবহার হবে (map এ আলাদা বাটন আছে)
-  void _openEmergencyFromAnywhere(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const EmergencyScreen(),
-      ),
+  void _goToTab(int index) {
+    if (_currentIndex == index) return;
+    setState(() => _currentIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOutQuart,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // আগের মতই PageView, শুধু EmergencyScreen বের করে আনা হয়েছে
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(), // সোয়াইপ বন্ধ (শুধু ট্যাবে কাজ করবে)
-        children: const [
-          HomeFeedScreen(),
-          ExploreScreen(),      // map screen – এখানেই emergency গোল বাটন থাকবে
-          DashboardScreen(),
-          ProfileNavScreen(),   // নিচে owner profile loader
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onTabTapped,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.brandLight,
-        selectedItemColor: const Color(0xFF004D40),
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_filled),
-            label: 'HOME',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.travel_explore),
-            label: 'EXPLORE',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_customize),
-            label: 'DASHBOARD',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'PROFILE',
-          ),
-        ],
-      ),
-    );
-  }
-}
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
 
-/// Profile tab এর পেজ
-/// এখানে SharedPreferences থেকে role+info নিয়ে
-/// SupporterProfileScreen বা WorkerProfileScreen দেখানো হবে
-class ProfileNavScreen extends StatefulWidget {
-  const ProfileNavScreen({super.key});
+    return PopScope(
+      canPop: _currentIndex == 1,
+      onPopInvoked: (didPop) {
+        if (!didPop && _currentIndex != 1) {
+          _goToTab(1);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            // ✅ Home Tab Login Check
+            uid != null
+                ? HomeFeedScreen(key: HomeFeedScreen.feedKey)
+                : const _ProfileNotLoggedIn(title: "Home Feed"),
 
-  @override
-  State<ProfileNavScreen> createState() => _ProfileNavScreenState();
-}
+            // Explore Tab (Public - No Login Needed)
+            const ExploreScreen(),
 
-class _ProfileNavScreenState extends State<ProfileNavScreen> {
-  bool _loading = true;
-  Widget? _child;
+            // ✅ Dashboard Tab Login Check
+            uid != null
+                ? const DashboardScreen()
+                : const _ProfileNotLoggedIn(title: "Dashboard"),
 
-  @override
-  void initState() {
-    super.initState();
-    _loadOwnerProfile();
-  }
-
-  Future<void> _loadOwnerProfile() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-
-      final role = (prefs.getString('user_role') ?? '').toLowerCase().trim();
-      final name = (prefs.getString('user_name') ?? 'FINDUS User').trim();
-      final location =
-      (prefs.getString('user_location') ?? 'Add your address').trim();
-      final phone = (prefs.getString('user_phone') ?? '').trim();
-      final image =
-          prefs.getString('user_image') ?? 'https://i.pravatar.cc/150?img=3';
-      final rating = (prefs.getDouble('user_rating') ?? 4.8);
-      final jobsCompleted = prefs.getInt('user_jobs_completed') ?? 0;
-
-      if (!mounted) return;
-
-      Widget child;
-
-      if (role == 'maker' || role == 'supporter') {
-        final plan =
-        (prefs.getString('subscription_plan') ?? 'free').toLowerCase();
-
-        child = SupporterProfileScreen(
-          isOwner: true,
-          name: name,
-          role: role,
-          location: location,
-          phone: phone,
-          email: prefs.getString('user_email'),
-          facebookUrl: prefs.getString('user_facebook'),
-          instagramUrl: prefs.getString('user_instagram'),
-          linkedInUrl: prefs.getString('user_linkedin'),
-          completedText: jobsCompleted.toString(),
-          ratingText: rating.toStringAsFixed(1),
-          reviewsText: (prefs.getInt('user_reviews') ?? 0).toString(),
-          subscriptionPlan: plan,
-        );
-      } else {
-        // Worker / finder / earner → WorkerProfileScreen (owner view)
-        final worker = Worker(
-          name: name,
-          role: role.isEmpty ? 'earner' : role,
-          image: image,
-          location: location,
-          price: prefs.getString('worker_price') ?? '৳ 0 / day',
-          rating: rating,
-          isVerified: prefs.getBool('user_verified') ?? false,
-        );
-
-        child = WorkerProfileScreen(
-          worker: worker,
-          phoneNumber: phone,
-          facebookUrl: prefs.getString('user_facebook'),
-          emailAddress: prefs.getString('user_email'),
-          instagramUrl: prefs.getString('user_instagram'),
-          linkedInUrl: prefs.getString('user_linkedin'),
-          isOwner: true,
-        );
-      }
-
-      setState(() {
-        _child = child;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _child = const Scaffold(
-          backgroundColor: Color(0xFFF5F7FA),
-          body: Center(
-            child: Text(
-              "Could not load profile.\nPlease check your connection.",
-              textAlign: TextAlign.center,
-            ),
-          ),
-        );
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF5F7FA),
-        body: Center(
-          child: CircularProgressIndicator(),
+            // ✅ Profile Tab Login Check
+            uid != null
+                ? UnifiedProfileScreen(uid: uid, isOwner: true, showBack: false)
+                : const _ProfileNotLoggedIn(title: "Your Profile"),
+          ],
         ),
-      );
-    }
-    return _child ??
-        const Scaffold(
-          backgroundColor: Color(0xFFF5F7FA),
-          body: Center(
-            child: Text(
-              "No profile data found.",
-              style: TextStyle(fontSize: 14),
+        bottomNavigationBar: Container(
+          color: bgColor,
+          child: _buildModernNavBar(isDark),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernNavBar(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      height: 90,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
+          ],
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'HOME'),
+            _buildNavItem(1, Icons.explore_rounded, Icons.explore_outlined, 'EXPLORE'),
+            _buildNavItem(2, Icons.dashboard_rounded, Icons.dashboard_outlined, 'DASHBOARD'),
+            _buildNavItem(3, Icons.person_rounded, Icons.person_outline, 'PROFILE'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon, String label) {
+    final isSelected = _currentIndex == index;
+    final activeColor = const Color(0xFF00695C);
+
+    return Expanded(
+      child: InkWell(
+        onTap: () => _goToTab(index),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
+              color: isSelected ? activeColor : Colors.grey.shade400,
+              size: isSelected ? 26 : 22,
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.only(top: 4),
+              height: 4,
+              width: isSelected ? 4 : 0,
+              decoration: BoxDecoration(color: activeColor, shape: BoxShape.circle),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? activeColor : Colors.grey.shade400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ✅ ক্লাসটি এখানে যোগ করা হলো
+class _ProfileNotLoggedIn extends StatelessWidget {
+  final String title;
+  const _ProfileNotLoggedIn({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                    Icons.lock_outline_rounded,
+                    size: 80,
+                    color: isDark ? Colors.white54 : AppColors.brandDark.withOpacity(0.3)
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                "Login Required",
+                style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : AppColors.brandDark
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Please login to access $title features and your personalized feed.",
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: () {
+                  // আপনার লগইন স্ক্রিনে নেভিগেট করুন
+                  // Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00695C),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                ),
+                child: const Text("LOGIN NOW", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 }

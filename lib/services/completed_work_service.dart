@@ -1,51 +1,67 @@
+// lib/services/completed_work_service.dart
+//
+// ✅ Fixed for new Worker model (no worker.role)
+// - worker.id -> still works if you kept getter id => uid, but better to use worker.uid
+// - role now should be a display label (service type) OR derive from userRole
+//   Since Worker model no longer stores service type, we store a safe label here.
+
 import 'package:findus_app/models/worker_model.dart';
 
 class CompletedWorkJob {
-  final String workerKey;   // worker.id বা phone বা name যেটা দিয়ে মেলাবে
+  final String workerKey; // worker.uid (recommended) or fallback
   final String name;
-  final String role;
-  // চাইলে address/price ইত্যাদি রাখো
+
+  /// Display label (e.g. ELECTRICIAN / DRIVER). This is NOT userRole (finder/maker).
+  final String roleLabel;
 
   CompletedWorkJob({
     required this.workerKey,
     required this.name,
-    required this.role,
+    required this.roleLabel,
   });
 }
 
 class CompletedWorkService {
-  // ডেমো ডাটা – আস্তে আস্তে এখানে সত্যিকারের completed jobs রাখবে
   static final List<CompletedWorkJob> _completedJobs = [
     CompletedWorkJob(
-      workerKey: 'borhan_driver_id', // এখানে আসলে worker.id/phone ব্যবহার করবে
+      workerKey: 'borhan_driver_id',
       name: 'Borhan Uddin',
-      role: 'FARMER',
+      roleLabel: 'FARMER',
     ),
     CompletedWorkJob(
       workerKey: 'joynal_rickshaw_id',
       name: 'Joynal',
-      role: 'RICKSHAW',
+      roleLabel: 'RICKSHAW',
     ),
   ];
 
-  /// কারো completed job সংখ্যা (profile এ দেখানোর জন্য)
   static Future<int> getCompletedCountForWorker(String workerKey) async {
-    if (workerKey.isEmpty) return 0;
+    if (workerKey.trim().isEmpty) return 0;
     return _completedJobs.where((j) => j.workerKey == workerKey).length;
   }
 
-  /// CompletedWorkTab এই job list থেকেই UI বানাবে
   static List<CompletedWorkJob> getAllCompletedJobs() {
     return List.unmodifiable(_completedJobs);
   }
 
-  /// ভবিষ্যতে কোনো job complete হলে এখানে add করবে
-  static void addCompletedJobForWorker(Worker worker) {
+  /// ✅ Add completed job for a worker
+  /// Since Worker model doesn't have serviceType/role label anymore,
+  /// we accept an optional roleLabel. If not provided, we derive from userRole.
+  static void addCompletedJobForWorker(
+      Worker worker, {
+        String? roleLabel,
+      }) {
+    final key = worker.uid.trim().isNotEmpty ? worker.uid.trim() : worker.name.trim();
+
+    final derivedLabel = (worker.userRole.toLowerCase().trim() == 'finder')
+        ? 'WORKER'
+        : 'SUPPORTER';
+
     _completedJobs.add(
       CompletedWorkJob(
-        workerKey: worker.id.isNotEmpty ? worker.id : worker.name,
+        workerKey: key,
         name: worker.name,
-        role: worker.role,
+        roleLabel: (roleLabel ?? derivedLabel).toUpperCase(),
       ),
     );
   }

@@ -1,109 +1,97 @@
 // lib/services/saved_service.dart
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class SavedService {
-  static const _prefsKey = 'saved_workers';
+  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// সব saved worker এখানে মেমরিতে থাকবে
+  /// মেমরিতে সেভ করা লিস্ট (UI তে দ্রুত দেখানোর জন্য)
   static List<Map<String, dynamic>> savedWorkers = [];
 
-  /// অ্যাপ স্টার্টে একবার কল করবে (main.dart এ)
+  /// অ্যাপ স্টার্টে Firestore থেকে ডাটা লোড করবে
   static Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_prefsKey) ?? [];
-    savedWorkers =
-        list.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot = await _db
+          .collection('users')
+          .doc(uid)
+          .collection('saved_profiles')
+          .get();
+
+      savedWorkers = snapshot.docs.map((doc) => doc.data()).toList();
+      debugPrint("Loaded ${savedWorkers.length} saved profiles from Firestore");
+    } catch (e) {
+      debugPrint("Error loading saved profiles: $e");
+    }
   }
 
-  /// ভিতরে কমন key (id/phone/name) বের করার helper
-  static String? _extractKey(dynamic source) {
+  /// আইডি বের করার হেল্পার
+  static String? _extractId(dynamic source) {
     if (source is String) return source;
-
     if (source is Map) {
-      final m = source as Map;
-      if (m['id'] != null && m['id'].toString().isNotEmpty) {
-        return m['id'].toString();
-      }
-      if (m['phone'] != null && m['phone'].toString().isNotEmpty) {
-        return m['phone'].toString();
-      }
-      if (m['name'] != null && m['name'].toString().isNotEmpty) {
-        return m['name'].toString();
-      }
+      return (source['userId'] ?? source['id'] ?? source['uid'])?.toString();
     }
-
     return null;
   }
 
-  /// আগেই saved আছে কি না (id/name/phone দিয়ে চেক)
-  ///
-  /// সাধারণত worker_profile_bottom_sheet থেকে Map পাঠানো থাকবে:
-  /// SavedService.isSaved(data)
+  /// সেভ করা আছে কি না চেক করা
   static bool isSaved(dynamic workerOrId) {
-    final key = _extractKey(workerOrId);
-    if (key == null) return false;
-
-    return savedWorkers.any((w) => _extractKey(w) == key);
+    final id = _extractId(workerOrId);
+    if (id == null) return false;
+    return savedWorkers.any((w) => _extractId(w) == id);
   }
 
-  /// toggle save / unsave
-  ///
-  /// সাধারণ pattern:
-  ///   await SavedService.toggleSave(data);
-  ///   setState(() {});
-  static Future<void> toggleSave(dynamic workerOrId) async {
-    final key = _extractKey(workerOrId);
-    if (key == null) return;
+  /// Toggle Save/Unsave (Firestore + Local Memory)
+  static Future<void> toggleSave(Map<String, dynamic> workerData) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
 
-    final idx = savedWorkers.indexWhere((w) => _extractKey(w) == key);
+    final workerId = _extractId(workerData);
+    if (workerId == null) return;
 
-    if (idx >= 0) {
-      // আগেই আছে → unsave/remove
-      savedWorkers.removeAt(idx);
+    final docRef = _db
+        .collection('users')
+        .doc(uid)
+        .collection('saved_profiles')
+        .doc(workerId);
+
+    if (isSaved(workerId)) {
+      // ১. আগে থেকেই থাকলে রিমুভ করো (Unsave)
+      savedWorkers.removeWhere((w) => _extractId(w) == workerId);
+      await docRef.delete();
     } else {
-      // নেই → save করি
-      if (workerOrId is Map<String, dynamic>) {
-        // ডিপ কপি করে রাখি, যাতে বাইরে পরিবর্তন করলে এতে প্রভাব না পড়ে
-        final mapCopy = Map<String, dynamic>.from(workerOrId);
-        savedWorkers.add(mapCopy);
-      } else {
-        // Map ছাড়া কিছু পাঠালে আমরা জানি না কীভাবে সেভ করব; skip করে দিচ্ছি
-        return;
-      }
+      // ২. না থাকলে অ্যাড করো (Save)
+      final dataToSave = Map<String, dynamic>.from(workerData);
+
+      // নিশ্চিত করি ডাটাতে আইডিটা আছে
+      dataToSave['id'] = workerId;
+      dataToSave['savedAt'] = FieldValue.serverTimestamp();
+
+      savedWorkers.add(dataToSave);
+      await docRef.set(dataToSave, SetOptions(merge: true));
     }
-
-    await _saveToPrefs();
   }
 
-  /// সরাসরি add করতে চাইলে (toggle ছাড়া)
-  static Future<void> addWorker(Map<String, dynamic> worker) async {
-    final key = _extractKey(worker);
-    if (key != null) {
-      savedWorkers.removeWhere((w) => _extractKey(w) == key);
-    }
-
-    savedWorkers.add(Map<String, dynamic>.from(worker));
-    await _saveToPrefs();
-  }
-
-  /// id দিয়ে remove
-  static Future<void> removeWorkerById(String id) async {
-    savedWorkers.removeWhere((w) => _extractKey(w) == id);
-    await _saveToPrefs();
-  }
-
-  /// সব clear
-  static Future<void> clear() async {
+  /// ইউজারের সব ডাটা ক্লিয়ার করা (Logout এর সময় কল করবেন)
+  static void clear() {
     savedWorkers.clear();
-    await _saveToPrefs();
   }
 
-  /// prefs এ সেভ
-  static Future<void> _saveToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = savedWorkers.map((w) => jsonEncode(w)).toList();
-    await prefs.setStringList(_prefsKey, list);
+  /// শুধু নির্দিষ্ট আইডি দিয়ে রিমুভ করা
+  static Future<void> removeWorkerById(String workerId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    savedWorkers.removeWhere((w) => _extractId(w) == workerId);
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('saved_profiles')
+        .doc(workerId)
+        .delete();
   }
 }
