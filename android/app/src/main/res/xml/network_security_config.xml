@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- For development -->
+    <!--
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain> <!-- Emulator -->
+    <domain includeSubdomains="true">localhost</domain>
+</domain-config>
+    -->
+
+    <!-- Production config -->
+<base-config cleartextTrafficPermitted="false">
+<trust-anchors>
+    <certificates src="system" />
+    <certificates src="user" />
+</trust-anchors>
+</base-config>
+
+    <!-- Allow cleartext for specific domains if needed -->
+<domain-config cleartextTrafficPermitted="false">
+<domain includeSubdomains="true">api.findus.com</domain>
+<domain includeSubdomains="true">storage.googleapis.com</domain>
+<domain includeSubdomains="true">firebasestorage.googleapis.com</domain>
+</domain-config>
+    </network-security-config>

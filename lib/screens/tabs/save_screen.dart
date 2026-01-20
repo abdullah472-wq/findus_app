@@ -6,7 +6,7 @@ import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/saved_service.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
-import 'package:findus_app/widgets/floating_scaffold.dart'; // ✅ ইম্পোর্ট করা হয়েছে
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class SaveScreen extends StatefulWidget {
   const SaveScreen({super.key});
@@ -24,6 +24,7 @@ class _SaveScreenState extends State<SaveScreen> {
   }
 
   String _getUserId(Map<String, dynamic> data) {
+    // Robust ID extraction
     return (data['userId'] ?? data['id'] ?? '').toString().trim();
   }
 
@@ -42,7 +43,7 @@ class _SaveScreenState extends State<SaveScreen> {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return FloatingScaffold( // ✅ Scaffold এর বদলে FloatingScaffold
+    return FloatingScaffold(
       title: 'SAVED PROFILES',
       backgroundColor: AppColors.brandLight,
       titleColor: AppColors.brandDark,
@@ -91,7 +92,7 @@ class _SaveScreenState extends State<SaveScreen> {
             isOther: true,
             isDark: isDark,
           ),
-          const SizedBox(height: 100), // নিচের স্পেসের জন্য
+          const SizedBox(height: 100), // Bottom padding for FAB
         ],
       ),
     );
@@ -133,37 +134,40 @@ class _SaveScreenState extends State<SaveScreen> {
           ),
         ],
       ),
-      child: ExpansionTile(
-        shape: const RoundedRectangleBorder(side: BorderSide.none), // লাইন সরানোর জন্য
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.brandMain.withOpacity(0.1),
-            shape: BoxShape.circle,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          shape: const RoundedRectangleBorder(side: BorderSide.none),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.brandMain.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: AppColors.brandMain, size: 20),
           ),
-          child: Icon(icon, color: AppColors.brandMain, size: 20),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: isDark ? Colors.white : AppColors.brandDark,
+              letterSpacing: 0.5,
+            ),
+          ),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.brandMain,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              workers.length.toString(),
+              style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+          children: workers.map((data) => _buildWorkerCard(data)).toList(),
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: isDark ? Colors.white : AppColors.brandDark,
-            letterSpacing: 0.5,
-          ),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.brandMain,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            workers.length.toString(),
-            style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-        ),
-        children: workers.map((data) => _buildWorkerCard(data)).toList(),
       ),
     );
   }
@@ -187,6 +191,8 @@ class _SaveScreenState extends State<SaveScreen> {
       isVerifiedWorker: data['isVerified'] == true,
       followersCount: _asInt(data['followersCount']),
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+
+      // ✅ Card Tap -> Open Profile
       onTap: () {
         if (workerId.isEmpty) return;
         Navigator.push(
@@ -194,13 +200,24 @@ class _SaveScreenState extends State<SaveScreen> {
           MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: workerId, isOwner: false)),
         );
       },
+
+      // ✅ View Profile Button -> Open Profile
+      onViewProfileTap: () {
+        if (workerId.isEmpty) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: workerId, isOwner: false)),
+        );
+      },
+
+      // ✅ Chat Button -> Open Chat
       onChatTap: () async {
         if (workerId.isEmpty) return;
         _showLoading();
         try {
           final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: workerId);
           if (!mounted) return;
-          Navigator.pop(context);
+          Navigator.pop(context); // Close loading
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -213,13 +230,15 @@ class _SaveScreenState extends State<SaveScreen> {
             ),
           );
         } catch (_) {
-          if (mounted) Navigator.pop(context);
+          if (mounted) Navigator.pop(context); // Close loading on error
         }
       },
+
+      // ✅ Save Button -> Remove from Save
       isSaved: true,
       onSaveTap: () async {
         await SavedService.toggleSave(data);
-        setState(() {});
+        setState(() {}); // Refresh UI
       },
     );
   }

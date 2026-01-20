@@ -29,6 +29,7 @@ class ReviewService {
     final reviewRef = _firestore.collection('reviews').doc();
     final userRef = _firestore.collection('users').doc(targetUserId);
 
+    // ট্রানজ্যাকশন রান করা হচ্ছে শুধুমাত্র ডাটাবেজ আপডেটের জন্য
     await _firestore.runTransaction((txn) async {
       // ১) reviews ডক সেট আপ করি
       txn.set(reviewRef, {
@@ -38,44 +39,73 @@ class ReviewService {
         'rating': rating,
         'comment': comment.trim(),
         'createdAt': FieldValue.serverTimestamp(),
-
         'targetRole': targetRole,
         'fromRole': fromRole,
         'isAnonymous': isAnonymous,
       });
-      // transaction শেষে, successful হলে:
+
+      // ২) শুধুমাত্র worker হলে workerRating আপডেট করবো
+      // (Supporter এর জন্যও লজিক চাইলে এখানে যোগ করা যাবে)
+      final userSnap = await txn.get(userRef);
+      if (userSnap.exists) {
+        final data = userSnap.data() as Map<String, dynamic>? ?? {};
+
+        // মেইন রেটিং (সবার জন্য)
+        final oldRating = (data['rating'] ?? 0.0) is int
+            ? (data['rating'] as int).toDouble()
+            : (data['rating'] ?? 0.0) as double;
+
+        final oldCount = (data['reviewsCount'] ?? 0) as int;
+
+        final newCount = oldCount + 1;
+        final newAvg = ((oldRating * oldCount) + rating) / newCount;
+
+        // আপডেট ম্যাপ তৈরি
+        final updateData = <String, dynamic>{
+          'rating': double.parse(newAvg.toStringAsFixed(2)),
+          'reviewsCount': newCount,
+        };
+
+        // যদি স্পেসিফিক রোল-বেসড রেটিং ফিল্ড থাকে
+        if (targetRole == 'worker') {
+          final oldWorkerRating = (data['workerRating'] ?? 0.0) is int
+              ? (data['workerRating'] as int).toDouble()
+              : (data['workerRating'] ?? 0.0) as double;
+
+          final oldWorkerCount = (data['workerReviewCount'] ?? 0) as int;
+
+          final newWorkerCount = oldWorkerCount + 1;
+          final newWorkerAvg = ((oldWorkerRating * oldWorkerCount) + rating) / newWorkerCount;
+
+          updateData['workerRating'] = double.parse(newWorkerAvg.toStringAsFixed(2));
+          updateData['workerReviewCount'] = newWorkerCount;
+        }
+
+        txn.update(userRef, updateData);
+      }
+    });
+
+    // ৩) ট্রানজ্যাকশন সফল হলে নোটিফিকেশন পাঠানো (Transaction এর বাইরে)
+    try {
       await NotificationService.sendNotificationToUser(
-        toUserId: targetUserId,            // worker uid
+        toUserId: targetUserId,
         title: "You received a new review",
-        body: "${rating.toStringAsFixed(1)} ★ - ${comment.isEmpty ? "" : "\"$comment\""}",
+        body: "${rating.toStringAsFixed(1)} ★ - ${comment.isEmpty ? "New rating received" : "\"$comment\""}",
         type: "review",
         relatedUserId: fromUserId,
         relatedPostId: postId,
+        data: {
+          'rating': rating,
+          'targetRole': targetRole,
+        },
       );
-
-      // ২) শুধুমাত্র worker হলে workerRating আপডেট করবো
-      if (targetRole == 'worker') {
-        final userSnap = await txn.get(userRef);
-        final data = userSnap.data() as Map<String, dynamic>? ?? {};
-
-        final oldRating = (data['workerRating'] ?? 0.0) * 1.0;
-        final oldCount = (data['workerReviewCount'] ?? 0) as int;
-
-        final newCount = oldCount + 1;
-        final newAvg =
-            ((oldRating * oldCount) + rating) / (newCount == 0 ? 1 : newCount);
-
-        txn.update(userRef, {
-          'workerRating': double.parse(newAvg.toStringAsFixed(2)),
-          'workerReviewCount': newCount,
-        });
-      }
-
-      // ভবিষ্যতে চাইলে supporter rating এর জন্য আলাদা aggregate এখানে করতে পারো:
-      // if (targetRole == 'supporter') { ... }
-    });
+    } catch (e) {
+      // নোটিফিকেশন ফেইল করলেও রিভিউ সেভ থাকবে, তাই এখানে ক্রাশ করানো হবে না
+      print("Failed to send review notification: $e");
+    }
   }
 
+  /// নির্দিষ্ট ইউজারের সব রিভিউ স্ট্রিম করার জন্য
   static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   streamReviewsForUser(String userId) {
     final q = _firestore

@@ -1,201 +1,187 @@
 import 'package:flutter/material.dart';
-import 'package:findus_app/constants/app_colors.dart';
 
-class DashboardFloatingAppBar extends StatefulWidget {
-  final double scrollOffset;
-  final VoidCallback onMenuPressed;
-  final VoidCallback onAnalyticsPressed; // ✅ analytics callback
-  final VoidCallback onSearchPressed;
+class FloatingScaffold extends StatelessWidget {
+  final String title;
+  final Widget body;
+  final List<Widget> actions;
 
-  const DashboardFloatingAppBar({
+  final bool showBack;
+  final VoidCallback? onBack;
+
+  final bool scrollable;
+  final EdgeInsetsGeometry bodyPadding;
+
+  final double top;
+  final double radius;
+  final double horizontalMargin;
+  final double barHeight;
+
+  final Gradient? gradient;
+  final Color? backgroundColor;
+  final List<BoxShadow>? boxShadow;
+
+  final Color? titleColor;
+  final Color? iconColor;
+
+  const FloatingScaffold({
     super.key,
-    this.scrollOffset = 0.0,
-    required this.onMenuPressed,
-    required this.onAnalyticsPressed,
-    required this.onSearchPressed,
+    required this.title,
+    required this.body,
+    this.actions = const [],
+    this.showBack = true,
+    this.onBack,
+    this.scrollable = true,
+    this.bodyPadding = const EdgeInsets.symmetric(horizontal: 16),
+    this.top = 10,
+    this.radius = 20,
+    this.horizontalMargin = 10,
+    this.barHeight = kToolbarHeight,
+    this.gradient,
+    this.backgroundColor,
+    this.boxShadow,
+    this.titleColor,
+    this.iconColor,
   });
 
   @override
-  State<DashboardFloatingAppBar> createState() => _DashboardFloatingAppBarState();
-}
-
-class _DashboardFloatingAppBarState extends State<DashboardFloatingAppBar> {
-  @override
   Widget build(BuildContext context) {
-    final double opacity = (widget.scrollOffset / 100).clamp(0.0, 1.0);
-    final bool isScrolled = widget.scrollOffset > 20;
+    final paddingTop = MediaQuery.of(context).padding.top;
+    final topSpace = paddingTop + barHeight + top + 10;
 
-    return Positioned(
-      top: 10,
-      left: 10,
-      right: 10,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        height: kToolbarHeight + MediaQuery.of(context).padding.top,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.brandLight.withOpacity(isScrolled ? 0.95 : 0.8),
-              AppColors.brandLight.withOpacity(isScrolled ? 0.9 : 0.7),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            if (isScrolled)
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15 * opacity),
-                blurRadius: 15,
-                offset: const Offset(0, 4),
-              )
-            else
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
+    final defaultShadow = [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.2),
+        blurRadius: 10,
+        offset: const Offset(0, 2),
+      )
+    ];
+
+    final content = Padding(
+      padding: bodyPadding,
+      child: body,
+    );
+
+    final resolvedTitleColor =
+        titleColor ?? Theme.of(context).textTheme.titleMedium?.color;
+    final resolvedIconColor = iconColor ?? Theme.of(context).iconTheme.color;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          if (scrollable)
+            SingleChildScrollView(
+              padding: EdgeInsets.only(top: topSpace, bottom: 24),
+              child: content,
+            )
+          else
+            Padding(
+              padding: EdgeInsets.only(top: topSpace, bottom: 24),
+              child: content,
+            ),
+          Positioned(
+            top: top,
+            left: horizontalMargin,
+            right: horizontalMargin,
+            child: Container(
+              height: barHeight + paddingTop,
+              decoration: BoxDecoration(
+                gradient: gradient,
+                color: gradient == null
+                    ? (backgroundColor ?? Theme.of(context).cardColor)
+                    : null,
+                borderRadius: BorderRadius.circular(radius),
+                boxShadow: boxShadow ?? defaultShadow,
               ),
-          ],
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.3),
-            width: 0.5,
-          ),
-        ),
-        child: Column(
-          children: [
-            SizedBox(height: MediaQuery.of(context).padding.top),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Row(
-                  children: [
-                    // Menu Button
-                    _buildActionButton(
-                      icon: Icons.menu_rounded,
-                      tooltip: 'Menu',
-                      onPressed: widget.onMenuPressed,
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // Title
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: 1.0,
-                          child: Text(
-                            'DASHBOARD',
-                            style: TextStyle(
-                              color: AppColors.brandDark,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              letterSpacing: 1.2,
-                              shadows: isScrolled
-                                  ? [
-                                Shadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 2,
-                                  offset: const Offset(0, 1),
-                                ),
-                              ]
-                                  : null,
+              child: Column(
+                children: [
+                  SizedBox(height: paddingTop),
+                  SizedBox(
+                    height: barHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          if (showBack)
+                            _HoverIconButton(
+                              icon: Icons.arrow_back,
+                              color: resolvedIconColor ?? Colors.black,
+                              onPressed:
+                              onBack ?? () => Navigator.of(context).pop(),
+                            )
+                          else
+                            const SizedBox(width: 48),
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: resolvedTitleColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ),
+                          IconTheme(
+                            data: IconThemeData(color: resolvedIconColor),
+                            child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: actions),
+                          ),
+                        ],
                       ),
                     ),
-
-                    // Search Button
-                    _buildActionButton(
-                      icon: Icons.search_rounded,
-                      tooltip: 'Search',
-                      onPressed: widget.onSearchPressed,
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    // ✅ Analytics Button (instead of notification)
-                    _buildActionButton(
-                      icon: Icons.analytics_outlined,
-                      tooltip: 'Analytics',
-                      onPressed: widget.onAnalyticsPressed,
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onPressed,
-  }) {
-    return _HoverActionButton(
-      icon: icon,
-      tooltip: tooltip,
-      onPressed: onPressed,
-    );
-  }
 }
 
-// ✅ Hover effect সহ action button (FloatingScaffold style)
-class _HoverActionButton extends StatefulWidget {
+// ✅ Hover effect সহ icon button (internal helper)
+class _HoverIconButton extends StatefulWidget {
   final IconData icon;
-  final String tooltip;
+  final Color color;
   final VoidCallback onPressed;
 
-  const _HoverActionButton({
+  const _HoverIconButton({
     required this.icon,
-    required this.tooltip,
+    required this.color,
     required this.onPressed,
   });
 
   @override
-  State<_HoverActionButton> createState() => _HoverActionButtonState();
+  State<_HoverIconButton> createState() => _HoverIconButtonState();
 }
 
-class _HoverActionButtonState extends State<_HoverActionButton> {
+class _HoverIconButtonState extends State<_HoverIconButton> {
   bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: widget.tooltip,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: _isHovered
-                ? Colors.white
-                : Colors.white.withOpacity(0.7),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(_isHovered ? 0.15 : 0.1),
-                blurRadius: _isHovered ? 8 : 5,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: IconButton(
-            icon: Icon(widget.icon, size: 20, color: Colors.black),
-            onPressed: widget.onPressed,
-            splashRadius: 20,
-          ),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: _isHovered
+              ? Colors.white.withOpacity(0.3)
+              : Colors.transparent,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          icon: Icon(widget.icon, color: widget.color, size: 20),
+          onPressed: widget.onPressed,
+          splashRadius: 20,
         ),
       ),
     );
   }
-}// TODO Implement this library.
+}

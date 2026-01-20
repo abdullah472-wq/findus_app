@@ -32,23 +32,11 @@ class _AchievementsTabState extends State<AchievementsTab> {
 
   bool _isLoading = true;
 
-  // role flags from Firestore
-  bool _isWorker = true; // finder => true, maker => false
+  // role flags
+  bool _isWorker = true;
   bool _isVerified = false;
   bool _isTrusted = false;
   bool _isTopRated = false;
-
-  // এটি আপনার AchievementService-এর লোড লজিকের আইডিয়া
-  bool isClaimedToday(Timestamp? lastClaimed) {
-    if (lastClaimed == null) return false;
-
-    DateTime lastDate = lastClaimed.toDate();
-    DateTime now = DateTime.now();
-
-    return lastDate.year == now.year &&
-        lastDate.month == now.month &&
-        lastDate.day == now.day;
-  }
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
 
@@ -88,22 +76,18 @@ class _AchievementsTabState extends State<AchievementsTab> {
         .listen((snap) {
       final data = snap.data() ?? <String, dynamic>{};
 
-      // ✅ XP points from server -> BadgeService sync
+      // ✅ ১. সার্ভার থেকে আসা XP সরাসরি ব্যাজ সার্ভিসে আপডেট (Supporter/Finder উভয়ের জন্য)
       final rawXp = data['xpPoints'] ?? 0;
       final int xp = rawXp is num ? rawXp.toInt() : int.tryParse(rawXp.toString()) ?? 0;
-      // fire-and-forget (no await)
       BadgeService.setPointsFromServer(xp);
 
-      // ✅ canonical role
       final userRole = (data['userRole'] ?? 'finder').toString().toLowerCase();
       final isWorker = userRole == 'finder';
-
       final kyc = (data['kyc_completed'] ?? false) == true;
 
       final rating = AchievementService.getRating(data);
       final completed = AchievementService.getCompletedCount(data);
 
-      // Trusted logic (UnifiedProfileScreen logic-style)
       final isTopRated = rating >= 4.8;
       final isTrusted = completed >= 50 && rating >= 4.5;
 
@@ -121,7 +105,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   String _formatPoints(int points) {
-    if (points >= 1000000) return "${(points / 1000000).toStringAsFixed(1)}M";
     if (points >= 1000) return "${(points / 1000).toStringAsFixed(1)}K";
     return points.toString();
   }
@@ -139,114 +122,73 @@ class _AchievementsTabState extends State<AchievementsTab> {
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                ValueListenableBuilder<BadgeProgress>(
-                  valueListenable: BadgeService.badgeNotifier,
-                  builder: (context, progress, _) {
-                    return Column(
-                      children: [
-                        _buildTopDashboardCard(progress, isDark), // ✅ updated
-                        const SizedBox(height: 20),
-                        _buildNextBadgeSection(progress, isDark),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 25),
-                _buildToggleButtons(isDark),
-                const SizedBox(height: 15),
+            physics: const BouncingScrollPhysics(),
+            children: [
+              ValueListenableBuilder<BadgeProgress>(
+                valueListenable: BadgeService.badgeNotifier,
+                builder: (context, progress, _) {
+                  return Column(
+                    children: [
+                      // ১. মেইন প্রগ্রেসিভ কার্ড (বড় ও সুন্দর করা হয়েছে)
+                      _buildTopDashboardCard(progress, isDark),
+                      const SizedBox(height: 20),
+                      // ২. নেক্সট ব্যাজ জার্নি কার্ড
+                      _buildNextBadgeSection(progress, isDark),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 25),
+              _buildToggleButtons(isDark),
+              const SizedBox(height: 15),
 
-                // achievements list
-                ValueListenableBuilder<List<AchievementState>>(
-                  valueListenable: AchievementService.achievementsNotifier,
-                  builder: (context, _, __) {
-                    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
+              // ৩. কোয়েস্ট লিস্ট
+              ValueListenableBuilder<List<AchievementState>>(
+                valueListenable: AchievementService.achievementsNotifier,
+                builder: (context, _, __) {
+                  final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
+                  final achievements = AchievementService.getAllForUser(
+                    isWorker: _isWorker,
+                    currentPoints: currentPoints,
+                  );
 
-                    final achievements = AchievementService.getAllForUser(
-                      isWorker: _isWorker,
-                      currentPoints: currentPoints,
-                    );
+                  final visible = _isCollectPoint
+                      ? achievements.where((st) => !st.claimed).toList()
+                      : achievements.where((st) => st.claimed).toList();
 
-                    final visible = _isCollectPoint
-                        ? achievements.where((st) => !st.claimed).toList()
-                        : achievements.where((st) => st.claimed).toList();
+                  if (visible.isEmpty) return _buildEmptyState(_isCollectPoint);
 
-                    if (visible.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 40),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.emoji_events_outlined,
-                              size: 60,
-                              color: Colors.grey.withOpacity(0.3),
-                            ),
-                            const SizedBox(height: 15),
-                            Text(
-                              _isCollectPoint
-                                  ? "No active quests available"
-                                  : "No completed achievements yet",
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              "Complete tasks to earn XP and badges!",
-                              style: TextStyle(
-                                color: Colors.grey.withOpacity(0.7),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: visible
-                          .map((st) => _buildAchievementItem(st, isDark))
-                          .toList(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 80),
-              ],
-            ),
+                  return Column(
+                    children: visible.map((st) => _buildAchievementItem(st, isDark)).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 100),
+            ],
           ),
 
-          // Confetti
           ConfettiWidget(
             confettiController: _confettiController,
             blastDirectionality: BlastDirectionality.explosive,
             shouldLoop: false,
-            colors: const [
-              Colors.green,
-              Colors.blue,
-              Colors.pink,
-              Colors.orange,
-              Colors.purple,
-            ],
+            colors: const [Colors.green, Colors.blue, Colors.pink, Colors.orange, Colors.purple],
           ),
         ],
       ),
     );
   }
 
-  // ✅ Bigger card + 5 badge icons (Newbie removed) + nicer layout
+  // --- প্রিমিয়াম কার্ড ডিজাইন (Badge Milestones ও Status টেক্সট সরানো হয়েছে) ---
   Widget _buildTopDashboardCard(BadgeProgress progress, bool isDark) {
     final totalPercent = progress.progressPercentage.clamp(0.0, 1.0);
     final points = progress.totalPoints;
 
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(24), // কার্ড বড় করা হয়েছে
       decoration: BoxDecoration(
-        // ✅ Gradient for a modern look
         gradient: LinearGradient(
           colors: isDark
-              ? [const Color(0xFF333333), const Color(0xFF222222)]
+              ? [const Color(0xFF2C2C2C), const Color(0xFF1A1A1A)]
               : [const Color(0xFFF8F0FF), const Color(0xFFEFE4FF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -259,43 +201,25 @@ class _AchievementsTabState extends State<AchievementsTab> {
             offset: const Offset(0, 10),
           ),
         ],
-        border: Border.all(
-          color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
-          width: 2,
-        ),
+        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : Colors.white, width: 2),
       ),
-      child: IntrinsicHeight( // ✅ Matches height of left and right sides
+      child: IntrinsicHeight(
         child: Row(
           children: [
-            // --- Left: XP Progress Circle ---
+            // বাম পাশ: XP সার্কেল
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircularPercentIndicator(
-                  radius: 54.0,
-                  lineWidth: 9.0,
+                  radius: 56.0,
+                  lineWidth: 10.0,
                   percent: totalPercent,
                   animation: true,
-                  animationDuration: 1000,
                   center: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        _formatPoints(points),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: isDark ? Colors.white : AppColors.brandDark,
-                        ),
-                      ),
-                      Text(
-                        "XP",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white54 : Colors.grey,
-                        ),
-                      ),
+                      Text(_formatPoints(points), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : AppColors.brandDark)),
+                      Text("XP", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white54 : Colors.grey)),
                     ],
                   ),
                   backgroundColor: isDark ? Colors.white10 : Colors.white,
@@ -305,21 +229,18 @@ class _AchievementsTabState extends State<AchievementsTab> {
               ],
             ),
 
-            // --- Middle: Elegant Divider ---
+            // মাঝখানে ডিভাইডার
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: VerticalDivider(
-                color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.2),
-                thickness: 1,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: VerticalDivider(color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.2), thickness: 1.5),
             ),
 
-            // --- Right: Badge & Status Rows ---
+            // ডান পাশ: আইকন সারি
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 🏆 Badge Icons Row
+                  // ৫টি ব্যাজ আইকন (Newbie বাদে)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -330,34 +251,14 @@ class _AchievementsTabState extends State<AchievementsTab> {
                       _badgeMilestone(BadgeLevel.diamond, points),
                     ],
                   ),
-
-                  const SizedBox(height: 18),
-
-                  // ✨ Status Icons Row
+                  const SizedBox(height: 20),
+                  // ৩টি স্ট্যাটাস আইকন
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _statusBadge(
-                        icon: StatusTheme.topRatedIcon,
-                        label: "Top Rated",
-                        active: _isTopRated,
-                        color: StatusTheme.topRatedColor,
-                        isDark: isDark,
-                      ),
-                      _statusBadge(
-                        icon: StatusTheme.trustedIcon,
-                        label: "Trusted",
-                        active: _isTrusted,
-                        color: StatusTheme.trustedColor,
-                        isDark: isDark,
-                      ),
-                      _statusBadge(
-                        icon: StatusTheme.verifiedIcon,
-                        label: "Verified",
-                        active: _isVerified,
-                        color: StatusTheme.verifiedColor,
-                        isDark: isDark,
-                      ),
+                      _statusBadge(icon: StatusTheme.topRatedIcon, label: "Top Rated", active: _isTopRated, color: StatusTheme.topRatedColor, isDark: isDark),
+                      _statusBadge(icon: StatusTheme.trustedIcon, label: "Trusted", active: _isTrusted, color: StatusTheme.trustedColor, isDark: isDark),
+                      _statusBadge(icon: StatusTheme.verifiedIcon, label: "Verified", active: _isVerified, color: StatusTheme.verifiedColor, isDark: isDark),
                     ],
                   ),
                 ],
@@ -370,53 +271,29 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   Widget _buildNextBadgeSection(BadgeProgress progress, bool isDark) {
-    final nextTarget = progress.nextLevelPoints;
     final nextLevel = BadgeService.getLevelByPoints(progress.totalPoints + 1);
     final nextLabel = BadgeService.getFormattedLevelName(nextLevel);
     final targetColor = AppBadgeTheme.colorForLevel(nextLevel);
     final barPercent = progress.progressPercentage.clamp(0.0, 1.0);
-
-    final needed = (nextTarget - progress.totalPoints);
-    final neededSafe = needed < 0 ? 0 : needed;
+    final needed = (progress.nextLevelPoints - progress.totalPoints).clamp(0, 999999);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        // ✅ Soft glass-style background
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: targetColor.withOpacity(0.2),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: targetColor.withOpacity(0.2), width: 1.5),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
-          // ✅ Left Side: Target Badge Preview Icon
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: targetColor.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              AppBadgeTheme.baseIcon,
-              color: targetColor,
-              size: 30,
-            ),
+            decoration: BoxDecoration(color: targetColor.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(AppBadgeTheme.baseIcon, color: targetColor, size: 30),
           ),
-
           const SizedBox(width: 16),
-
-          // ✅ Right Side: Progress Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -424,89 +301,23 @@ class _AchievementsTabState extends State<AchievementsTab> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "JOURNEY TO $nextLabel",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.0,
-                        fontSize: 12,
-                        color: isDark ? Colors.white70 : AppColors.brandDark,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: targetColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        "$neededSafe XP TO GO",
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: targetColor,
-                        ),
-                      ),
-                    ),
+                    Text("JOURNEY TO $nextLabel", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.0, fontSize: 11, color: isDark ? Colors.white70 : AppColors.brandDark)),
+                    Text("$needed XP LEFT", style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: targetColor)),
                   ],
                 ),
-
-                const SizedBox(height: 12),
-
-                // ✅ Modern Thick Progress Bar
+                const SizedBox(height: 10),
                 Stack(
                   children: [
-                    Container(
-                      height: 14,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white10 : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    // Glowing Active Bar
+                    Container(height: 12, width: double.infinity, decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey[200], borderRadius: BorderRadius.circular(10))),
                     FractionallySizedBox(
                       widthFactor: barPercent,
                       child: Container(
-                        height: 14,
+                        height: 12,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [targetColor.withOpacity(0.7), targetColor],
-                          ),
+                          gradient: LinearGradient(colors: [targetColor.withOpacity(0.7), targetColor]),
                           borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: targetColor.withOpacity(0.3),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          boxShadow: [BoxShadow(color: targetColor.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))],
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-
-                // ✅ XP Stats
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "${progress.totalPoints} XP",
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: progress.levelColor,
-                      ),
-                    ),
-                    Text(
-                      "$nextTarget XP",
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.grey,
                       ),
                     ),
                   ],
@@ -519,57 +330,50 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  Widget _buildToggleButtons(bool isDark) {
-    return Container(
-      height: 45,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white10 : Colors.grey[200],
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          _toggleItem(
-            "ACTIVE QUESTS",
-            _isCollectPoint,
-                () => setState(() => _isCollectPoint = true),
-          ),
-          _toggleItem(
-            "COMPLETED",
-            !_isCollectPoint,
-                () => setState(() => _isCollectPoint = false),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _badgeMilestone(BadgeLevel level, int currentPoints) {
+    final threshold = _getThreshold(level);
+    final unlocked = currentPoints >= threshold;
+    final color = AppBadgeTheme.colorForLevel(level);
 
-  Widget _toggleItem(String label, bool isActive, VoidCallback onTap) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: Container(
-          alignment: Alignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.brandMain : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            shape: BoxShape.circle,
+            color: unlocked ? color.withOpacity(0.12) : Colors.transparent,
+            border: Border.all(color: unlocked ? color : Colors.grey.withOpacity(0.2), width: unlocked ? 2 : 1),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              color: isActive ? Colors.white : Colors.grey,
-            ),
-          ),
+          child: Icon(AppBadgeTheme.baseIcon, color: unlocked ? color : Colors.grey.withOpacity(0.4), size: 16),
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(_getShortName(level), style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: unlocked ? color : Colors.grey)),
+      ],
     );
   }
 
+  Widget _statusBadge({required IconData icon, required String label, required bool active, required Color color, required bool isDark}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: active ? color.withOpacity(0.15) : (isDark ? Colors.white05 : Colors.black.withOpacity(0.03)),
+            border: Border.all(color: active ? color : Colors.transparent, width: 1.5),
+          ),
+          child: Icon(icon, color: active ? color : Colors.grey.withOpacity(0.5), size: 17),
+        ),
+        const SizedBox(height: 4),
+        Text(label.toUpperCase(), style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, color: active ? (isDark ? Colors.white : Colors.black87) : Colors.grey)),
+      ],
+    );
+  }
+
+  // --- Achievement Item ---
   Widget _buildAchievementItem(AchievementState st, bool isDark) {
     final progress = (st.progress / st.def.target).clamp(0.0, 1.0);
     final isCompleted = st.isCompleted;
@@ -580,253 +384,60 @@ class _AchievementsTabState extends State<AchievementsTab> {
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: canClaim ? Colors.green.withOpacity(0.3) : Colors.grey.withOpacity(0.1),
-          width: canClaim ? 1.5 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: canClaim ? Colors.green.withOpacity(0.3) : Colors.grey.withOpacity(0.05)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: canClaim
-                ? Colors.green.withOpacity(0.1)
-                : AppColors.brandLight.withOpacity(0.2),
+            backgroundColor: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandMain.withOpacity(0.1),
             radius: 24,
-            child: Icon(
-              AppBadgeTheme.iconForLevel(
-                AchievementService.getBadgeLevelByPoints(st.def.xpReward),
-              ),
-              color: canClaim ? Colors.green : Colors.grey,
-              size: 24,
-            ),
+            child: Icon(AppBadgeTheme.iconForLevel(AchievementService.getBadgeLevelByPoints(st.def.xpReward)), color: canClaim ? Colors.green : AppColors.brandMain, size: 24),
           ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        st.def.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _getTypeColor(st.def.resetPeriod, isDark).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: _getTypeColor(st.def.resetPeriod, isDark),
-                          width: 0.5,
-                        ),
-                      ),
-                      child: Text(
-                        _getTypeLabel(st.def.resetPeriod),
-                        style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: _getTypeColor(st.def.resetPeriod, isDark),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  st.def.description,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey,
-                    height: 1.4,
-                  ),
-                ),
+                Text(st.def.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(st.def.description, style: const TextStyle(fontSize: 11, color: Colors.grey, height: 1.3)),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: progress,
-                          minHeight: 6,
-                          backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
-                          valueColor: AlwaysStoppedAnimation(
-                            canClaim ? Colors.green : (isCompleted ? Colors.blue : Colors.orange),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      "${st.progress}/${st.def.target}",
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ],
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 6,
+                    backgroundColor: isDark ? Colors.white10 : Colors.grey[100],
+                    valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 15),
           if (canClaim)
             ElevatedButton(
               onPressed: () async {
-                // ✅ ১. ফিডব্যাক ও এনিমেশন
                 HapticFeedback.heavyImpact();
                 _confettiController.play();
-
-                // ✅ ২. ক্লেইম ফাংশন কল (অবশ্যই await দিতে হবে)
-                // এটি কল করলে Service-এর ভেতর থেকে Firestore আপডেট হবে
                 await AchievementService.claim(st.def.id);
-
-                // ✅ ৩. লোকাল UI আপডেট নিশ্চিত করা
                 if (mounted) setState(() {});
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                elevation: 4,
-                shadowColor: Colors.green.withOpacity(0.4),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12), // ✅ মডার্ন রাউন্ড শেপ
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "+${st.def.xpReward}",
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Text(
-                    "CLAIM",
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(horizontal: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: Text("+${st.def.xpReward} XP", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
             )
           else if (st.claimed)
-          // ✅ ক্লেইম হয়ে গেলে সুন্দর একটি চেক আইকন
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.green,
-                    size: 26,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "REWARDED",
-                    style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.green.withOpacity(0.8),
-                    ),
-                  ),
-                ],
-              ),
-            )
+            const Icon(Icons.check_circle_rounded, color: Colors.green, size: 30)
           else
-          // ✅ এখনো কাজ বাকি থাকলে যেটা দেখাবে
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "+${st.def.xpReward}",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white38 : AppColors.brandMain.withOpacity(0.5),
-                  ),
-                ),
-                const Text(
-                  "XP",
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
+            Text("+${st.def.xpReward} XP", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
         ],
       ),
     );
   }
 
-  // ✅ New badge milestone widget (clean + label)
-  Widget _badgeMilestone(BadgeLevel level, int currentPoints) {
-    final threshold = _getThreshold(level);
-    final unlocked = currentPoints >= threshold;
-    final color = AppBadgeTheme.colorForLevel(level);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: unlocked ? color.withOpacity(0.1) : Colors.transparent,
-            border: Border.all(
-              color: unlocked ? color : Colors.grey.withOpacity(0.2),
-              width: unlocked ? 2 : 1,
-            ),
-          ),
-          child: Icon(
-            AppBadgeTheme.baseIcon,
-            color: unlocked ? color : Colors.grey.withOpacity(0.4),
-            size: 16,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _getShortName(level),
-          style: TextStyle(
-            fontSize: 8,
-            fontWeight: FontWeight.w800,
-            color: unlocked ? color : Colors.grey,
-          ),
-        ),
-      ],
-    );
-  }
-
-// Helper: Threshold পাওয়ার জন্য
+  // --- Helpers ---
   int _getThreshold(BadgeLevel level) {
     switch (level) {
       case BadgeLevel.bronze: return BadgeService.bronzeThreshold;
@@ -838,7 +449,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
     }
   }
 
-// Helper: ছোট নাম দেখানোর জন্য
   String _getShortName(BadgeLevel level) {
     switch (level) {
       case BadgeLevel.bronze: return "BRNZ";
@@ -850,66 +460,58 @@ class _AchievementsTabState extends State<AchievementsTab> {
     }
   }
 
-  // ✅ New status widget (clean + label)
-  Widget _statusBadge({
-    required IconData icon,
-    required String label,
-    required bool active,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: active ? color.withOpacity(0.15) : (isDark ? Colors.white05 : Colors.black.withOpacity(0.03)),
-            border: Border.all(
-              color: active ? color : Colors.transparent,
-              width: 1.5,
-            ),
-          ),
-          child: Icon(
-            icon,
-            color: active ? color : Colors.grey.withOpacity(0.5),
-            size: 17,
-          ),
+  Widget _buildToggleButtons(bool isDark) {
+    return Container(
+      height: 45, padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey[200], borderRadius: BorderRadius.circular(15)),
+      child: Row(
+        children: [
+          _toggleItem("ACTIVE QUESTS", _isCollectPoint, () => setState(() => _isCollectPoint = true)),
+          _toggleItem("COMPLETED", !_isCollectPoint, () => setState(() => _isCollectPoint = false)),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleItem(String label, bool isActive, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () { HapticFeedback.lightImpact(); onTap(); },
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: isActive ? AppColors.brandMain : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+          child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: isActive ? Colors.white : Colors.grey)),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            fontSize: 7,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
-            color: active ? (isDark ? Colors.white : Colors.black87) : Colors.grey,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Color _getTypeColor(ResetPeriod period, bool isDark) {
     switch (period) {
-      case ResetPeriod.daily:
-        return Colors.blue;
-      case ResetPeriod.weekly:
-        return Colors.purple;
-      case ResetPeriod.none:
-        return isDark ? Colors.green : Colors.green[700]!;
+      case ResetPeriod.daily: return Colors.blue;
+      case ResetPeriod.weekly: return Colors.purple;
+      case ResetPeriod.none: return Colors.green;
     }
   }
 
   String _getTypeLabel(ResetPeriod period) {
     switch (period) {
-      case ResetPeriod.daily:
-        return "DAILY";
-      case ResetPeriod.weekly:
-        return "WEEKLY";
-      case ResetPeriod.none:
-        return "ONE-TIME";
+      case ResetPeriod.daily: return "DAILY";
+      case ResetPeriod.weekly: return "WEEKLY";
+      case ResetPeriod.none: return "ONE-TIME";
     }
+  }
+
+  Widget _buildEmptyState(bool isCollect) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 60),
+      child: Column(
+        children: [
+          Icon(Icons.emoji_events_outlined, size: 70, color: Colors.grey.withOpacity(0.3)),
+          const SizedBox(height: 15),
+          Text(isCollect ? "No active quests" : "No achievements yet", style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 }

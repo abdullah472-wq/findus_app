@@ -82,12 +82,11 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
             );
           }
 
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snapshot.data!.docs;
-          if (docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return ListView(
               children: const [
                 SizedBox(height: 120),
@@ -105,6 +104,8 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
               ],
             );
           }
+
+          final docs = snapshot.data!.docs;
 
           return ListView.builder(
             padding: const EdgeInsets.all(10),
@@ -129,7 +130,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     final receiverId = _s(job['receiverId']).trim(); // finder
     final workerId = _s(job['workerId']).trim();     // supporter
 
-    // ✅ other person based on who is viewing
+    // other person based on who is viewing
     final otherUserId = (currentUid == workerId) ? receiverId : workerId;
 
     final completedAt = _asDate(job['completedAt']);
@@ -172,7 +173,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
           final u = snap.data!.data() ?? {};
           name = (name == 'Unknown') ? _s(u['name'], _s(u['fullName'], 'Unknown')) : name;
           role = (role == 'User') ? _s(u['userRole'], _s(u['role'], 'User')) : role;
-          imageUrl = imageUrl.isEmpty ? _s(u['imageUrl'], _s(u['photoUrl'], '')) : imageUrl;
+          imageUrl = imageUrl.isEmpty ? _s(u['image'], _s(u['photoUrl'], '')) : imageUrl;
 
           // If job doc doesn't have these, take from user doc
           completedCount = completedCount == 0 ? _asInt(u['completedCount']) : completedCount;
@@ -220,12 +221,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                   topRight: Radius.circular(16),
                 ),
                 onTap: () {
-                  if (otherUserId.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("User id missing")),
-                    );
-                    return;
-                  }
+                  if (otherUserId.isEmpty) return;
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -234,6 +230,15 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                   );
                 },
                 onChatTap: () => _connectAgain(context, otherUserId, name, role, imageUrl),
+                onViewProfileTap: () {
+                  if (otherUserId.isEmpty) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false),
+                    ),
+                  );
+                },
               ),
 
               Container(
@@ -308,7 +313,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
       );
 
       if (!context.mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context); // Close loader
 
       Navigator.push(
         context,
@@ -322,7 +327,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
         ),
       );
     } catch (e) {
-      if (context.mounted) Navigator.pop(context);
+      if (context.mounted) Navigator.pop(context); // Close loader if error
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Could not connect: $e")),

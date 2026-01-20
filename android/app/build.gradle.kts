@@ -3,11 +3,9 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
+    id("com.google.firebase.crashlytics")  // ✅ যোগ করুন
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -18,9 +16,9 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.findus.app"          // তুমি যেটা দিয়েছো (example)
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    namespace = "com.findus.app"
+    compileSdk = 34  // ✅ সরাসরি 34 সেট করুন (সর্বশেষ)
+    ndkVersion = "26.1.10909125"  // ✅ সরাসরি NDK ভার্সন সেট করুন
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -32,33 +30,106 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.findus.app"  // একই, তুমি যা সেট করেছো
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId = "com.findus.app"
+        minSdk = 23  // ✅ Android 6.0+ (API 23) সেট করুন
+        targetSdk = 34  // ✅ সরাসরি 34 সেট করুন
+        versionCode = 1  // ✅ সরাসরি 1 সেট করুন
+        versionName = "1.0.0"  // ✅ সরাসরি 1.0.0 সেট করুন
+
+        // ✅ MultiDex enable করুন
+        multiDexEnabled = true
+
+        // ✅ Test runner
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // 🔹 নতুন অংশ: release signing config
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+            keyAlias = keystoreProperties.getProperty("keyAlias") ?: ""
+            keyPassword = keystoreProperties.getProperty("keyPassword") ?: ""
+            val storeFileProp = keystoreProperties.getProperty("storeFile")
+            if (storeFileProp != null) {
+                storeFile = rootProject.file(storeFileProp)
+            }
+            storePassword = keystoreProperties.getProperty("storePassword") ?: ""
+        }
+        // ✅ Debug signing config (optional)
+        getByName("debug") {
+            storeFile = file("debug.keystore")
         }
     }
 
     buildTypes {
-        release {
-            // আগের debug signingConfig আর থাকবে না
-            signingConfig = signingConfigs.getByName("release")
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+            // ✅ Debug features
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-DEBUG"
+            isDebuggable = true
             isMinifyEnabled = false
             isShrinkResources = false
         }
+
+        release {
+            // ✅ Signing config
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")  // Fallback
+            }
+
+            // ✅ Production optimization
+            isMinifyEnabled = true
+            isShrinkResources = true
+
+            // ✅ Proguard rules
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+
+            // ✅ Disable debug
+            isDebuggable = false
+            isJniDebuggable = false
+            isRenderscriptDebuggable = false
+
+            // ✅ Optimize PNG
+            crunchPngs = true
+        }
+    }
+
+    // ✅ Build features
+    buildFeatures {
+        buildConfig = true
+    }
+
+    // ✅ Packaging options
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
+        }
+    }
+
+    // ✅ Lint options (production এর জন্য)
+    lint {
+        abortOnError = true
+        warningsAsErrors = true
+        checkReleaseBuilds = true
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // ✅ MultiDex dependency (যদি app বড় হয়)
+    implementation("androidx.multidex:multidex:2.0.1")
+
+    // ✅ Test dependencies
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

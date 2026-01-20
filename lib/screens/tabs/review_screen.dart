@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/services/review_service.dart';
-import 'package:findus_app/services/notification_service.dart'; // 🔹 NEW: notification service import
+import 'package:findus_app/services/notification_service.dart'; // Notification service import
 
 class ReviewScreen extends StatefulWidget {
   final String workerId;     // যার উপর review দিচ্ছো (UID)
@@ -111,8 +111,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
       await NotificationService.sendNotificationToUser(
         toUserId: widget.workerId,        // যাকে রিভিউ দেওয়া হয়েছে (worker)
         title: "New review received",
-        body:
-        "You received a ${_rating.toStringAsFixed(1)}★ review for a recent job.",
+        body: "You received a ${_rating.toStringAsFixed(1)}★ review for a recent job.",
         type: "review",
         relatedPostId: widget.postId,     // কোন কাজের জন্য রিভিউ
         data: {
@@ -121,13 +120,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
           'tags': _selectedTags.toList(),
           'wouldHireAgain': _wouldHireAgain,
         },
-        // fromUserId না পাঠালে NotificationService currentUser.uid বসাবে
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Review submitted."),
+          content: Text("Review submitted successfully."),
           backgroundColor: AppColors.brandMain,
         ),
       );
@@ -187,8 +185,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
             // নিচে Submit বাটন
             Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
@@ -258,6 +255,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
           CircleAvatar(
             backgroundImage: NetworkImage(widget.imageUrl),
             radius: 26,
+            onBackgroundImageError: (_, __) => const Icon(Icons.person), // Error handling for image
+            backgroundColor: Colors.grey[200],
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -372,9 +371,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               selectedColor: AppColors.brandMain,
               backgroundColor: Colors.white,
               side: BorderSide(
-                color: selected
-                    ? AppColors.brandMain
-                    : Colors.grey.shade300,
+                color: selected ? AppColors.brandMain : Colors.grey.shade300,
               ),
               onSelected: (_) => _toggleTag(tag),
             );
@@ -434,9 +431,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
           ),
         ),
         subtitle: Text(
-          _wouldHireAgain
-              ? "Yes, I would hire again"
-              : "No, I won't hire again",
+          _wouldHireAgain ? "Yes, I would hire again" : "No, I won't hire again",
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ),

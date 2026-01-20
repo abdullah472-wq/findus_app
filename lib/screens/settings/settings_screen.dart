@@ -1,27 +1,30 @@
-import 'package:findus_app/screens/settings/notification_control_page.dart';
+// lib/screens/settings/settings_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'subscription_screen.dart';
-import 'kyc_screen.dart';
-import 'privacy_policy_screen.dart';
-import 'about_app_screen.dart';
-import 'faq_screen.dart';
-import 'language_settings_screen.dart';
-import 'package:findus_app/screens/ad_center/ad_center_screen.dart';
-import 'package:findus_app/services/blocked_user_service.dart';
-import 'driving_license_upload_screen.dart';
-import 'package:findus_app/screens/settings/terms_conditions_screen.dart';
-
-// নতুন: Analytics ও Community Standards এক্সটার্নাল পেজ
-import 'package:findus_app/screens/ad_center/analytics_screen.dart';
-import 'package:findus_app/screens/settings/theme_settings_screen.dart';
-import 'community_standards_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/services/user_service.dart';
+import 'package:findus_app/services/blocked_user_service.dart';
+
+// Screens
+import 'subscription_screen.dart';
+import 'language_settings_screen.dart';
+import 'notification_control_page.dart';
+import 'theme_settings_screen.dart';
 import 'help_center_screen.dart';
 import 'verification_screen.dart';
-
+import 'privacy_policy_screen.dart';
+import 'terms_conditions_screen.dart';
+import 'community_standards_screen.dart';
+import 'about_app_screen.dart';
+import 'package:findus_app/screens/ad_center/ad_center_screen.dart';
+import 'package:findus_app/screens/ad_center/analytics_screen.dart';
+import 'package:findus_app/screens/auth/login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -31,10 +34,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final bool _isNotificationOn = true;
   bool _isLocationEnabled = true;
-
-  // Location setting persist করার key
   static const String _prefsLocationKey = 'settings_location_enabled';
 
   @override
@@ -44,795 +44,210 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadLocationSetting() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getBool(_prefsLocationKey);
-      if (!mounted) return;
-      if (saved != null) {
-        setState(() {
-          _isLocationEnabled = saved;
-        });
-      }
-    } catch (_) {
-      // ignore; default true থাকবে
-    }
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _isLocationEnabled = prefs.getBool(_prefsLocationKey) ?? true);
   }
 
   Future<void> _updateLocationSetting(bool enabled) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefsLocationKey, enabled);
-    } catch (_) {
-      // ignore storage error
-    }
-    if (!mounted) return;
-    setState(() {
-      _isLocationEnabled = enabled;
-    });
-    // TODO: এখানে প্রকৃত location permission / service enable/disable integrate করবে
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsLocationKey, enabled);
+    setState(() => _isLocationEnabled = enabled);
+    HapticFeedback.lightImpact();
+    // ✅ Firebase Task: প্রোডাকশনে এখানে Firestore-এ ইউজারের 'isLocationEnabled' আপডেট করা উচিত।
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      body: Stack(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return FloatingScaffold(
+      title: "SETTINGS",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: true, // সেটিংসে অনেক অপশন তাই স্ক্রোলযোগ্য
+      bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Main Content (ListView)
-          ListView(
-            physics: const ClampingScrollPhysics(),
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
-            ),
-            children: [
-              // --- ১. অ্যাকাউন্ট ও সিকিউরিটি ---
-              _buildSectionTitle("ACCOUNT & SECURITY"),
+          // --- ১. অ্যাকাউন্ট ও সিকিউরিটি ---
+          _buildSectionHeader("ACCOUNT & SECURITY"),
+          _buildSettingsGroup([
+            _buildSettingsTile(Icons.verified_user_rounded, "Verification", "Identity & badges", () => _push(const VerificationScreen()), Colors.blue),
+            _buildSettingsTile(Icons.block_flipped, "Block List", "Manage blocked users", () => _push(const _BlockListScreen()), Colors.redAccent),
+          ], isDark),
 
-              _buildSettingsTile(
-                icon: Icons.verified_user,
-                title: "Verification",
-                subtitle: "Get verified badge & features",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const VerificationScreen()),
-                  );
-                },
-              ),
-              _buildSettingsTile(
-                icon: Icons.block,
-                title: "Block List",
-                subtitle: "Manage blocked users",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const _BlockListScreen()),
-                  );
-                },
-              ),
+          // --- ২. সাবস্ক্রিপশন ও প্রমোশন ---
+          _buildSectionHeader("GROW & PROMOTE"),
+          _buildSettingsGroup([
+            _buildSettingsTile(Icons.workspace_premium_rounded, "Subscription Plans", "Upgrade to Pro/Business", () => _push(const SubscriptionScreen()), Colors.amber),
+            _buildSettingsTile(Icons.campaign_rounded, "Ad Center", "Boost profile & posts", () => _push(const AdCenterScreen()), Colors.green),
+            _buildSettingsTile(Icons.analytics_rounded, "Analytics", "View your performance", () => _push(const AnalyticsScreen()), Colors.purple),
+          ], isDark),
 
-              const SizedBox(height: 25),
+          // --- ৩. জেনারেল সেটিংস ---
+          _buildSectionHeader("PREFERENCES"),
+          _buildSettingsGroup([
+            _buildSettingsTile(Icons.notifications_active_rounded, "Notifications", "Control alerts & sounds", () => _push(const NotificationControlPage()), Colors.orange),
+            _buildSettingsTile(Icons.palette_rounded, "Theme Settings", "Custom colors & dark mode", () async {
+              final userId = await UserService.getCurrentUserId();
+              final isPremium = await UserService.isPremiumUser();
+              final subscriptionType = await UserService.getSubscriptionType();
+              _push(ThemeSettingsScreen(workerKey: userId, isfree: !isPremium, subscriptionType: subscriptionType));
+            }, Colors.cyan),
+            _buildSwitchTile(Icons.location_on_rounded, "Location Services", "Enable real-time tracking", _isLocationEnabled, _updateLocationSetting, Colors.teal),
+            _buildSettingsTile(Icons.translate_rounded, "Language", "App display language", () => _push(const LanguageSettingsScreen()), Colors.indigo),
+          ], isDark),
 
-              // --- SUBSCRIPTION / PRO PLANS ---
-              _buildSectionTitle("SUBSCRIPTION"),
+          // --- ৪. সাপোর্ট ও লিগ্যাল ---
+          _buildSectionHeader("SUPPORT & LEGAL"),
+          _buildSettingsGroup([
+            _buildSettingsTile(Icons.headset_mic_rounded, "Help Center", "Get support from experts", () => _push(const HelpCenterScreen()), Colors.blueGrey),
+            _buildSettingsTile(Icons.policy_rounded, "Privacy Policy", "Data usage & privacy", () => _push(const PrivacyPolicyScreen()), Colors.grey),
+            _buildSettingsTile(Icons.rule_folder_rounded, "Community Standards", "Safe usage guidelines", () => _push(const CommunityStandardsScreen()), Colors.grey),
+            _buildSettingsTile(Icons.description_rounded, "Terms & Conditions", "Rules of the platform", () => _push(const TermsAndConditionsScreen()), Colors.grey),
+            _buildSettingsTile(Icons.info_outline_rounded, "About FINDUS", "Version 1.0.0", () => _push(const AboutAppScreen()), Colors.grey),
+          ], isDark),
 
-              _buildSettingsTile(
-                icon: Icons.workspace_premium_outlined,
-                title: "Subscription & Plans",
-                subtitle: "Upgrade to FINDUS Pro / Business",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SubscriptionScreen(),
-                    ),
-                  );
-                },
-              ),
+          const SizedBox(height: 30),
 
-              _buildSectionTitle("GROW & PROMOTE"),
-
-              _buildSettingsTile(
-                icon: Icons.campaign_outlined,
-                title: "Ad Center",
-                subtitle: "Boost profile & job visibility",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AdCenterScreen()),
-                  );
-                },
-              ),
-
-              // ✅ Analytics বাটন (external analytics_screen.dart)
-              _buildSettingsTile(
-                icon: Icons.analytics_outlined,
-                title: "Analytics",
-                subtitle: "View performance & insights",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AnalyticsScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 25),
-
-              // --- ২. জেনারেল সেটিংস ---
-              _buildSectionTitle("GENERAL"),
-
-              _buildSettingsTile(
-                icon: Icons.analytics_outlined,
-                title: "Notification",
-                subtitle: "Control what you want",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationControlPage(),
-                    ),
-                  );
-                },
-              ),
-
-              // নতুন: Theme টাইল যোগ করুন
-              // SettingsScreen-এ Theme টাইল:
-              _buildSettingsTile(
-                icon: Icons.color_lens_outlined,
-                title: "Theme Settings",
-                subtitle: "Advanced theme customization",
-                onTap: () async {
-                  final userId = await UserService.getCurrentUserId();
-                  final isPremium = await UserService.isPremiumUser();
-                  final subscriptionType = await UserService.getSubscriptionType();
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ThemeSettingsScreen(
-                        workerKey: userId,
-                        isfree: !isPremium,
-                        subscriptionType: subscriptionType,
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              _buildSwitchTile(
-                icon: Icons.location_on_outlined,
-                title: "Location Services",
-                subtitle: "Allow app to track location",
-                value: _isLocationEnabled,
-                onChanged: (val) => _updateLocationSetting(val),
-              ),
-
-              _buildSettingsTile(
-                icon: Icons.language,
-                title: "Language",
-                subtitle: "English (US)",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const LanguageSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 25),
-
-              // --- ৩. সাপোর্ট ও অন্যান্য ---
-              _buildSectionTitle("SUPPORT & MORE"),
-
-              _buildSettingsTile(
-                icon: Icons.headset_mic_outlined,
-                title: "Help Center",
-                subtitle: "Chat with support team",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const HelpCenterScreen()),
-                  );
-                },
-              ),
-              _buildSettingsTile(
-                icon: Icons.policy_outlined,
-                title: "Privacy Policy",
-                subtitle: "Terms and conditions",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PrivacyPolicyScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              // 🔹 Community Standards – নতুন বাটন
-              _buildSettingsTile(
-                icon: Icons.rule_folder_outlined,
-                title: "Community Standards",
-                subtitle: "Guidelines for safe usage",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const CommunityStandardsScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              _buildSettingsTile(
-                icon: Icons.article_outlined,
-                title: "Terms & Conditions",
-                subtitle: "Guidelines for safe usage",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TermsAndConditionsScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              _buildSettingsTile(
-                icon: Icons.info_outline,
-                title: "About App",
-                subtitle: "Version 1.0.0",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AboutAppScreen()),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 30),
-
-              // --- ৪. ডিলিট অ্যাকাউন্ট (ডেঞ্জার জোন) ---
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const _DeleteAccountScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.delete_forever, color: Colors.red),
-                  label: const Text(
-                    "Delete My Account",
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    backgroundColor: Colors.red.shade50,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-
-          // Floating AppBar
-          _buildFloatingAppBar(context),
+          // --- ৫. ডেঞ্জার জোন ---
+          _buildDangerZone(isDark),
+          const SizedBox(height: 100),
         ],
       ),
     );
   }
 
-  Widget _buildFloatingAppBar(BuildContext context) {
-    return Positioned(
-      top: 10,
-      left: 10,
-      right: 10,
-      child: Container(
-        height: kToolbarHeight + MediaQuery.of(context).padding.top,
-        decoration: BoxDecoration(
-          color: AppColors.brandLight,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(20),
-            bottomRight: Radius.circular(20),
-            topRight: Radius.circular(20),
-            topLeft: Radius.circular(20),
-          ),
-        ),
-        child: Column(
-          children: [
-            SizedBox(height: MediaQuery.of(context).padding.top),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    // Back Button
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_new,
-                        color: AppColors.brandDark,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+  // --- UI Helpers ---
 
-                    // Title
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: const Text(
-                            "SETTINGS",
-                            style: TextStyle(
-                              color: AppColors.brandDark,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionHeader(String title) {
     return Padding(
-        padding: const EdgeInsets.only(bottom: 15, left: 5),
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.brandMain,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-          ),
-        )
+      padding: const EdgeInsets.fromLTRB(8, 20, 0, 10),
+      child: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.2)),
     );
   }
 
-  Widget _buildSettingsTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildSettingsGroup(List<Widget> tiles, bool isDark) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
       ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-        leading: _buildIconBox(icon),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: AppColors.brandDark,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 12,
-          ),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey.shade400,
-        ),
-      ),
+      child: Column(children: tiles),
     );
   }
 
-  Widget _buildSwitchTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required Function(bool) onChanged,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: SwitchListTile(
-        value: value,
-        activeThumbColor: AppColors.brandMain,
-        onChanged: onChanged,
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-        secondary: _buildIconBox(icon),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: AppColors.brandDark,
-          ),
+  Widget _buildSettingsTile(IconData icon, String title, String sub, VoidCallback onTap, Color color) {
+    return ListTile(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+    );
+  }
+
+  Widget _buildSwitchTile(IconData icon, String title, String sub, bool value, Function(bool) onChanged, Color color) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      secondary: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      activeColor: AppColors.brandMain,
+    );
+  }
+
+  Widget _buildDangerZone(bool isDark) {
+    return InkWell(
+      onTap: () => _push(const _DeleteAccountScreen()),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.red.withOpacity(0.1)),
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 12,
-          ),
+        child: const Row(
+          children: [
+            Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+            SizedBox(width: 15),
+            Text("Delete My Account", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            Spacer(),
+            Icon(Icons.chevron_right_rounded, color: Colors.redAccent),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildIconBox(IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.brandLight.withOpacity(0.5),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, color: AppColors.brandDark, size: 22),
-    );
+  void _push(Widget page) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 }
 
-// --------------------------------------------------------
-// Block List Screen
-// --------------------------------------------------------
-class _BlockListScreen extends StatefulWidget {
+// --- ফিক্সড ব্লক লিস্ট স্ক্রিন ---
+class _BlockListScreen extends StatelessWidget {
   const _BlockListScreen();
 
   @override
-  State<_BlockListScreen> createState() => __BlockListScreenState();
-}
-
-class __BlockListScreenState extends State<_BlockListScreen> {
-  List<Map<String, String>> _blockedUsers = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBlockedUsers();
-  }
-
-  Future<void> _loadBlockedUsers() async {
-    setState(() => _isLoading = true);
-    final users = await BlockedUserService().getBlockedUsers();
-    if (!mounted) return;
-    setState(() {
-      _blockedUsers = users;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _unblockUser(String id, String name) async {
-    await BlockedUserService().unblockUser(id);
-    await _loadBlockedUsers();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("$name has been unblocked."),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      body: Stack(
-        children: [
-          // Main Content
-          _isLoading
-              ? const Center(
-            child: CircularProgressIndicator(
-              color: AppColors.brandMain,
+    return FloatingScaffold(
+      title: "BLOCKED USERS",
+      showBack: true,
+      body: FutureBuilder<List<Map<String, String>>>(
+        future: BlockedUserService().getBlockedUsers(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final users = snapshot.data!;
+          if (users.isEmpty) return const Center(child: Text("No blocked users."));
+          return ListView.builder(
+            itemCount: users.length,
+            itemBuilder: (ctx, i) => ListTile(
+              title: Text(users[i]['name'] ?? 'User'),
+              trailing: TextButton(onPressed: () {}, child: const Text("UNBLOCK")),
             ),
-          )
-              : _blockedUsers.isEmpty
-              ? const Center(
-            child: Text(
-              "No blocked users.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-              : ListView(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
-            ),
-            children: [
-              for (final item in _blockedUsers)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(
-                      Icons.block,
-                      color: Colors.redAccent,
-                    ),
-                    title: Text(
-                      item['name'] ?? 'User',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(
-                      "ID: ${item['id'] ?? ''}",
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => _unblockUser(item['id'] ?? '', item['name'] ?? ''),
-                      child: const Text("UNBLOCK"),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-
-          // Floating AppBar
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Container(
-              height: kToolbarHeight + MediaQuery.of(context).padding.top,
-              decoration: BoxDecoration(
-                color: AppColors.brandLight,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  topLeft: Radius.circular(20),
-                ),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          // Back Button
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: AppColors.brandDark,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-
-                          // Title
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
-                                  "Blocked Users",
-                                  style: TextStyle(
-                                    color: AppColors.brandDark,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 }
 
-// --------------------------------------------------------
-// Delete Account Screen
-// --------------------------------------------------------
+// --- ফিক্সড ডিলিট অ্যাকাউন্ট স্ক্রিন ---
 class _DeleteAccountScreen extends StatelessWidget {
   const _DeleteAccountScreen();
 
-  void _confirmDelete(BuildContext context) {
-    // TODO: Backend এ account delete API কল
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Account delete request sent."),
-      ),
-    );
-    Navigator.pop(context);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      body: Stack(
-        children: [
-          // Main Content
-          Padding(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
+    return FloatingScaffold(
+      title: "DELETE ACCOUNT",
+      showBack: true,
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 80, color: Colors.redAccent),
+            const SizedBox(height: 20),
+            const Text("Are you sure?", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text("Deleting your account is permanent. All your history, badges, and points will be lost forever.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+            const Spacer(),
+            ElevatedButton(
+              onPressed: () {
+                // ✅ Firebase Task: Auth delete + Firestore data scrub
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(double.infinity, 55)),
+              child: const Text("CONFIRM DELETE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Are you sure you want to delete your account?",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.redAccent,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "This action is permanent and cannot be undone. Your profile, history and data will be removed.",
-                  style: TextStyle(height: 1.5),
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () => _confirmDelete(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                    ),
-                    child: const Text(
-                      "YES, DELETE MY ACCOUNT",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-
-          // Floating AppBar
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Container(
-              height: kToolbarHeight + MediaQuery.of(context).padding.top,
-              decoration: BoxDecoration(
-                color: AppColors.brandLight,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  topLeft: Radius.circular(20),
-                ),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          // Back Button
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: AppColors.brandDark,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-
-                          // Title
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
-                                  "Delete Account",
-                                  style: TextStyle(
-                                    color: AppColors.brandDark,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

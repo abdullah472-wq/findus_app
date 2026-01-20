@@ -8,8 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/services/app_config_service.dart';
-import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class NotificationsPage extends StatefulWidget {
@@ -28,7 +26,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   late final List<_NotifItem> _staticNotifications;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _configSub;
 
-  // Global notice state
   bool _globalEnabled = false;
   String _globalTitle = '';
   String _globalBody = '';
@@ -61,17 +58,15 @@ class _NotificationsPageState extends State<NotificationsPage> {
         .doc('global')
         .snapshots()
         .listen((snap) {
-      if (!snap.exists) return;
+      if (!snap.exists || !mounted) return;
       final data = snap.data() ?? {};
-      if (mounted) {
-        setState(() {
-          _globalEnabled = data['globalNoticeEnabled'] == true;
-          _globalTitle = data['globalNoticeTitle'] ?? '';
-          _globalBody = data['globalNoticeBody'] ?? '';
-          _globalPriority = data['globalNoticePriority'] ?? 'normal';
-          _globalActionUrl = data['globalNoticeActionUrl'] ?? '';
-        });
-      }
+      setState(() {
+        _globalEnabled = data['globalNoticeEnabled'] == true;
+        _globalTitle = data['globalNoticeTitle'] ?? '';
+        _globalBody = data['globalNoticeBody'] ?? '';
+        _globalPriority = data['globalNoticePriority'] ?? 'normal';
+        _globalActionUrl = data['globalNoticeActionUrl'] ?? '';
+      });
     });
   }
 
@@ -83,11 +78,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
     super.dispose();
   }
 
-  // --- Helpers ---
   DateTime _toDateTime(dynamic dt) {
     if (dt is Timestamp) return dt.toDate();
     if (dt is DateTime) return dt;
-    return DateTime.now();
+    return DateTime.now(); // Fallback
   }
 
   String _timeAgo(DateTime dt) {
@@ -100,7 +94,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_uid.isEmpty) return const Scaffold(body: Center(child: Text("Please login to see notifications")));
+    if (_uid.isEmpty) {
+      return const Scaffold(body: Center(child: Text("Please login to see notifications")));
+    }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -117,45 +113,63 @@ class _NotificationsPageState extends State<NotificationsPage> {
           _buildSearchBar(isDark),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              // ✅ সরাসরি আপনার নতুন ফায়ারবেস স্কিমা অনুযায়ী কুয়েরি
               stream: FirebaseFirestore.instance
                   .collection('notifications')
                   .where('toUserId', isEqualTo: _uid)
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+                if (snapshot.hasError) {
+                  // যদি ইনডেক্স এরর দেয়, তবে এখানে মেসেজ দেখাবে
+                  if (snapshot.error.toString().contains('index')) {
+                    return const Center(child: Text("Firestore index is building. Please wait."));
+                  }
+                  return Center(child: Text("Error: ${snapshot.error}"));
+                }
 
                 final remoteDocs = snapshot.data?.docs ?? [];
 
-                // ১. সব নোটিফিকেশন একসাথে করা
-                List<_NotifItem> allItems = [
-                  if (_globalEnabled) _NotifItem.global(
+                // ১. লিস্ট তৈরি ও মার্জ করা
+                List<_NotifItem> allItems = [];
+
+                // অ্যাডমিন নোটিশ (সবার উপরে রাখার জন্য বর্তমান সময় দেওয়া হয়েছে)
+                if (_globalEnabled) {
+                  allItems.add(_NotifItem.global(
                       title: _globalTitle,
                       body: _globalBody,
                       priority: _globalPriority,
                       url: _globalActionUrl
-                  ),
-                  ..._staticNotifications,
-                  ...remoteDocs.map((doc) {
-                    final data = doc.data();
-                    return _NotifItem.remote(
-                      id: doc.id,
-                      title: data['title'] ?? 'No Title',
-                      body: data['body'] ?? '',
-                      createdAt: data['createdAt'] ?? Timestamp.now(),
-                      isRead: data['isRead'] == true,
-                      type: data['type'] ?? 'general',
-                    );
-                  }),
-                ];
-
-                // ২. সার্চ ফিল্টারিং
-                if (_query.isNotEmpty) {
-                  allItems = allItems.where((n) => n.title.toLowerCase().contains(_query) || n.body.toLowerCase().contains(_query)).toList();
+                  ));
                 }
 
-                if (snapshot.connectionState == ConnectionState.waiting && allItems.length <= 1) {
+                // স্ট্যাটিক নোটিশ
+                allItems.addAll(_staticNotifications);
+
+                // ফায়ারবেস থেকে আসা নোটিশ
+                allItems.addAll(remoteDocs.map((doc) {
+                  final data = doc.data();
+                  return _NotifItem.remote(
+                    id: doc.id,
+                    title: data['title'] ?? 'No Title',
+                    body: data['body'] ?? '',
+                    createdAt: data['createdAt'] ?? Timestamp.now(),
+                    isRead: data['isRead'] == true,
+                    type: data['type'] ?? 'general',
+                  );
+                }));
+
+                // ২. সার্চ ফিল্টারিং লজিক
+                if (_query.isNotEmpty) {
+                  allItems = allItems.where((n) =>
+                  n.title.toLowerCase().contains(_query) ||
+                      n.body.toLowerCase().contains(_query)
+                  ).toList();
+                }
+
+                // ৩. সর্টিং (টাইমস্ট্যাম্প অনুযায়ী নতুন গুলো উপরে)
+                allItems.sort((a, b) => _toDateTime(b.createdAt).compareTo(_toDateTime(a.createdAt)));
+
+                if (snapshot.connectionState == ConnectionState.waiting && allItems.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -188,7 +202,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           onChanged: (v) {
             _debounce?.cancel();
             _debounce = Timer(const Duration(milliseconds: 300), () {
-              setState(() => _query = v.trim().toLowerCase());
+              if (mounted) setState(() => _query = v.trim().toLowerCase());
             });
           },
           decoration: const InputDecoration(
@@ -235,16 +249,39 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(child: Text(item.title, style: TextStyle(fontWeight: isUnread ? FontWeight.bold : FontWeight.w600, fontSize: 15))),
+                        Expanded(
+                            child: Text(
+                                item.title,
+                                style: TextStyle(
+                                  fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                  fontSize: 15,
+                                  color: isDark ? Colors.white : AppColors.brandDark,
+                                )
+                            )
+                        ),
                         Text(_timeAgo(dt), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(item.body, style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.grey.shade700, height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(
+                        item.body,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white70 : Colors.grey.shade700,
+                            height: 1.4
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis
+                    ),
                   ],
                 ),
               ),
-              if (isUnread) Container(margin: const EdgeInsets.only(left: 8, top: 4), width: 8, height: 8, decoration: const BoxDecoration(color: AppColors.brandMain, shape: BoxShape.circle)),
+              if (isUnread)
+                Container(
+                    margin: const EdgeInsets.only(left: 8, top: 4),
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: AppColors.brandMain, shape: BoxShape.circle)
+                ),
             ],
           ),
         ),
@@ -279,20 +316,17 @@ class _NotificationsPageState extends State<NotificationsPage> {
   void _handleNotifTap(_NotifItem item) async {
     HapticFeedback.lightImpact();
 
-    // ১. গ্লোবাল নোটিশ হলে লিঙ্ক ওপেন করো
     if (item.source == _NotifSource.global && item.actionUrl.isNotEmpty) {
       final uri = Uri.tryParse(item.actionUrl);
       if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
       return;
     }
 
-    // ২. রিমোট নোটিশ হলে ফায়ারবেসে 'isRead' আপডেট করো
     if (item.source == _NotifSource.remote && !item.isRead) {
       await FirebaseFirestore.instance.collection('notifications').doc(item.id).update({'isRead': true});
     }
 
-    // ৩. লোকাল স্টেট আপডেট
-    setState(() => item.isRead = true);
+    if (mounted) setState(() => item.isRead = true);
   }
 
   Widget _buildEmptyState() {

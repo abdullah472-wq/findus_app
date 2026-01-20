@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart'; // System brightness এর জন্য
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeService {
-  // থিম সেটিংস মডেল
+  // থিম সেটিংস মডেল (ValueNotifier)
   static final ValueNotifier<ThemeSettings> themeSettings = ValueNotifier(
-    ThemeSettings(
+    const ThemeSettings(
       isDarkMode: false,
       isAutoTheme: true,
       fontSize: 1.0,
@@ -25,16 +26,17 @@ class ThemeService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      final isDarkMode = prefs.getBool(_keyDarkMode) ?? false;
+      final savedIsDarkMode = prefs.getBool(_keyDarkMode) ?? false;
       final isAutoTheme = prefs.getBool(_keyAutoTheme) ?? true;
       final fontSize = prefs.getDouble(_keyFontSize) ?? 1.0;
       final isHighContrast = prefs.getBool(_keyHighContrast) ?? false;
       final isReducedMotion = prefs.getBool(_keyReducedMotion) ?? false;
 
       // সিস্টেম থিম চেক করবে (যদি auto theme enabled থাকে)
-      bool finalIsDarkMode = isDarkMode;
+      bool finalIsDarkMode = savedIsDarkMode;
       if (isAutoTheme) {
-        finalIsDarkMode = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+        final brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
+        finalIsDarkMode = brightness == Brightness.dark;
       }
 
       themeSettings.value = ThemeSettings(
@@ -45,15 +47,12 @@ class ThemeService {
         isReducedMotion: isReducedMotion,
       );
 
-      // UI আপডেট করার জন্য notify
-      themeSettings.notifyListeners();
     } catch (e) {
-      // Error handling
       debugPrint('Error loading theme: $e');
     }
   }
 
-  /// সিঙ্গেল থিম সেটিং আপডেট করবে
+  /// সিঙ্গেল বা মাল্টিপল থিম সেটিং আপডেট করবে
   static Future<void> updateThemeSetting({
     bool? isDarkMode,
     bool? isAutoTheme,
@@ -63,116 +62,74 @@ class ThemeService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final current = themeSettings.value;
 
-      // বর্তমান সেটিংস নিবে
-      final currentSettings = themeSettings.value;
+      // ১. লজিক সেটআপ
+      bool newAutoTheme = isAutoTheme ?? current.isAutoTheme;
+      bool newDarkMode = isDarkMode ?? current.isDarkMode;
 
-      // নতুন সেটিংস তৈরি করবে
-      final newSettings = ThemeSettings(
-        isDarkMode: isDarkMode ?? currentSettings.isDarkMode,
-        isAutoTheme: isAutoTheme ?? currentSettings.isAutoTheme,
-        fontSize: fontSize ?? currentSettings.fontSize,
-        isHighContrast: isHighContrast ?? currentSettings.isHighContrast,
-        isReducedMotion: isReducedMotion ?? currentSettings.isReducedMotion,
-      );
-
-      // Auto theme চেক করবে
-      bool finalIsDarkMode = newSettings.isDarkMode;
-      if (newSettings.isAutoTheme) {
-        finalIsDarkMode = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
-        newSettings.isDarkMode = finalIsDarkMode;
+      // যদি ইউজার ম্যানুয়ালি ডার্ক মোড চেঞ্জ করে, তাহলে অটো থিম বন্ধ করে দিব
+      if (isDarkMode != null) {
+        newAutoTheme = false;
       }
 
-      // ValueNotifier আপডেট করবে
+      // যদি অটো থিম অন করা হয় (বা আগে থেকেই অন থাকে), তাহলে সিস্টেম থিম নিব
+      if (newAutoTheme) {
+        final brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
+        newDarkMode = brightness == Brightness.dark;
+      }
+
+      // ২. নতুন অবজেক্ট তৈরি (Immutable way)
+      final newSettings = ThemeSettings(
+        isDarkMode: newDarkMode,
+        isAutoTheme: newAutoTheme,
+        fontSize: fontSize ?? current.fontSize,
+        isHighContrast: isHighContrast ?? current.isHighContrast,
+        isReducedMotion: isReducedMotion ?? current.isReducedMotion,
+      );
+
+      // ৩. ValueNotifier আপডেট
       themeSettings.value = newSettings;
 
-      // SharedPreferences-এ সেভ করবে
+      // ৪. SharedPreferences-এ সেভ
       await prefs.setBool(_keyDarkMode, newSettings.isDarkMode);
       await prefs.setBool(_keyAutoTheme, newSettings.isAutoTheme);
       await prefs.setDouble(_keyFontSize, newSettings.fontSize);
       await prefs.setBool(_keyHighContrast, newSettings.isHighContrast);
       await prefs.setBool(_keyReducedMotion, newSettings.isReducedMotion);
 
-      // UI আপডেট করার জন্য notify
-      themeSettings.notifyListeners();
     } catch (e) {
       debugPrint('Error updating theme: $e');
     }
   }
 
-  /// সকল থিম সেটিংস রিসেট করবে (default ভ্যালুতে)
-  static Future<void> resetThemeSettings() async {
-    await updateThemeSetting(
-      isDarkMode: false,
-      isAutoTheme: true,
-      fontSize: 1.0,
-      isHighContrast: false,
-      isReducedMotion: false,
-    );
-  }
-
-  /// শুধু Dark Mode টগল করবে (সিঙ্গেল ফাংশন)
-  static Future<void> toggleDarkMode(bool isDark) async {
-    await updateThemeSetting(isDarkMode: isDark);
-  }
-
-  /// শুধু Auto Theme টগল করবে
-  static Future<void> toggleAutoTheme(bool isAuto) async {
-    await updateThemeSetting(isAutoTheme: isAuto);
-  }
-
-  /// সিস্টেম থিম পরিবর্তন হলে কল হবে
+  /// সিস্টেম থিম পরিবর্তন হলে কল হবে (অটোমেটিক ডিটেকশনের জন্য)
+  /// এটি main.dart এর didChangePlatformBrightness থেকে কল করতে পারেন
   static void onSystemThemeChanged() {
-    // যদি auto theme enabled থাকে
     if (themeSettings.value.isAutoTheme) {
-      final isSystemDark = WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+      final brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
+      final isSystemDark = brightness == Brightness.dark;
 
-      // সিস্টেম থিম বর্তমান থিমের সাথে মিলছে কিনা চেক করবে
       if (themeSettings.value.isDarkMode != isSystemDark) {
-        themeSettings.value = themeSettings.value.copyWith(isDarkMode: isSystemDark);
-        themeSettings.notifyListeners();
-
-        // SharedPreferences-এ আপডেট করবে
-        _saveToPrefs();
+        updateThemeSetting(isAutoTheme: true); // Force update logic
       }
     }
   }
 
-  /// SharedPreferences-এ থিম সেটিংস সেভ করবে (private method)
-  static Future<void> _saveToPrefs() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final settings = themeSettings.value;
+  // --- Convenience Methods ---
 
-      await prefs.setBool(_keyDarkMode, settings.isDarkMode);
-      await prefs.setBool(_keyAutoTheme, settings.isAutoTheme);
-      await prefs.setDouble(_keyFontSize, settings.fontSize);
-      await prefs.setBool(_keyHighContrast, settings.isHighContrast);
-      await prefs.setBool(_keyReducedMotion, settings.isReducedMotion);
-    } catch (e) {
-      debugPrint('Error saving theme to prefs: $e');
-    }
+  static Future<void> toggleDarkMode(bool isDark) async {
+    await updateThemeSetting(isDarkMode: isDark);
   }
 
-  /// Font size multiplier getter (UI-তে ব্যবহারের জন্য)
+  static Future<void> toggleAutoTheme(bool isAuto) async {
+    await updateThemeSetting(isAutoTheme: isAuto);
+  }
+
   static double get fontSizeMultiplier => themeSettings.value.fontSize;
-
-  /// High contrast mode getter
-  static bool get isHighContrast => themeSettings.value.isHighContrast;
-
-  /// Reduced motion mode getter
-  static bool get isReducedMotion => themeSettings.value.isReducedMotion;
-
-  /// Current theme mode getter
-  static ThemeMode get currentThemeMode {
-    if (themeSettings.value.isAutoTheme) {
-      return ThemeMode.system;
-    }
-    return themeSettings.value.isDarkMode ? ThemeMode.dark : ThemeMode.light;
-  }
 }
 
-/// থিম সেটিংস মডেল ক্লাস
+/// থিম সেটিংস মডেল ক্লাস (Immutable)
 class ThemeSettings {
   final bool isDarkMode;
   final bool isAutoTheme;
@@ -202,10 +159,5 @@ class ThemeSettings {
       isHighContrast: isHighContrast ?? this.isHighContrast,
       isReducedMotion: isReducedMotion ?? this.isReducedMotion,
     );
-  }
-
-  @override
-  String toString() {
-    return 'ThemeSettings(isDarkMode: $isDarkMode, isAutoTheme: $isAutoTheme, fontSize: $fontSize, isHighContrast: $isHighContrast, isReducedMotion: $isReducedMotion)';
   }
 }

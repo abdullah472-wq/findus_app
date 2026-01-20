@@ -1,65 +1,119 @@
 name: findus_app
-description: "A new Flutter project."
+description: "FindUS - Connect Workers and Supporters"
 publish_to: 'none'
 
+# Version: Major.Minor.Patch+Build
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.10.1
+  sdk: '>=3.10.0 <4.0.0'
+  flutter: ">=3.22.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
+  # ========== FIREBASE ==========
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.0
+  firebase_messaging: ^15.1.3
+  firebase_analytics: ^11.3.3
+  firebase_crashlytics: ^4.1.3
+  firebase_remote_config: ^5.1.3
 
+  # ========== UI & DESIGN ==========
+  google_fonts: ^6.2.1
+  font_awesome_flutter: ^10.7.0
   fl_chart: ^0.69.0
-  cupertino_icons: ^1.0.8
-  firebase_core: ^4.2.1
-  firebase_auth: ^6.1.2
-  cloud_firestore: ^6.1.0
-  google_fonts: ^6.3.3
-  font_awesome_flutter: ^10.12.0
-  image_picker: ^1.2.1
-  file_picker: ^8.0.0
-  shared_preferences: ^2.5.3
-  flutter_map: ^8.2.2
+  percent_indicator: ^4.2.3
+  lottie: ^3.1.3
+  tutorial_coach_mark: ^1.2.10
+  confetti: ^0.7.0
+  shimmer: ^3.0.0
+  cached_network_image: ^3.4.1
+  syncfusion_flutter_pdfviewer: ^26.1.40
+
+  # ========== MAP & LOCATION ==========
+  flutter_map: ^7.0.2
   latlong2: ^0.9.1
-  geolocator: ^14.0.2
-  percent_indicator: ^4.2.5
-  url_launcher: ^6.3.2
-  lottie: ^3.3.2
-  syncfusion_flutter_pdfviewer: ^31.2.18
-  http: ^1.2.0
-  uddoktapay: ^0.0.6
-  tutorial_coach_mark: ^1.2.8
+  geolocator: ^13.0.1
+
+  # ========== AUTHENTICATION ==========
   google_sign_in: ^6.2.1
-  flutter_facebook_auth: ^6.0.4
-  dash_chat_2: ^0.0.20
-  intl: ^0.20.2
+  flutter_facebook_auth: ^7.0.1
 
+  # ========== CHAT ==========
+  dash_chat_2: ^0.0.21
 
+  # ========== FILE & MEDIA ==========
+  image_picker: ^1.1.2
+  file_picker: ^8.1.2
+
+  # ========== NETWORK & API ==========
+  http: ^1.2.2
+  uddoktapay: ^0.0.6
+
+  # ========== SHARING & LAUNCHING ==========
+  share_plus: ^10.0.0
+  url_launcher: ^6.3.0
+
+  # ========== STORAGE ==========
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+
+  # ========== PERMISSIONS ==========
+  permission_handler: ^11.3.1
+
+  # ========== ENVIRONMENT ==========
+  flutter_dotenv: ^5.1.0
+
+  # ========== LOCALIZATION ==========
   flutter_localizations:
     sdk: flutter
+  intl: ^0.20.0  # লেটেস্ট ভার্সন রাখা হলো
 
+  # ========== ICONS ==========
+  cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.14.1
+
+# ✅✅✅ সমস্যা সমাধানের জন্য এই অংশটি যোগ করা হয়েছে ✅✅✅
+# এটি dash_chat_2 কে জোর করে intl 0.20.0 ব্যবহার করতে বাধ্য করবে
+dependency_overrides:
+  intl: ^0.20.0
 
 flutter:
   uses-material-design: true
 
+  # Fonts configuration
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+
+  # Assets
   assets:
     - assets/images/
     - assets/animations/
+    - assets/fonts/
+    - .env
 
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/images/app_icon.png"
   min_sdk_android: 21
-
-dependency_overrides:
-  intl: 0.20.2
+  adaptive_icon_background: "#38B6FF"
+  adaptive_icon_foreground: "assets/images/app_icon_foreground.png"

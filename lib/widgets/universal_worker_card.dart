@@ -1,54 +1,47 @@
+//lib/widgets/universal_worker_card
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/badge/badge_model.dart';
-import 'package:findus_app/localization/localization_extension.dart';
+import 'package:findus_app/badge/badge_model.dart'; // Ensure this path exists
 
 class UniversalWorkerCard extends StatelessWidget {
   final String? id;
   final String name;
   final String role;
-  final String? imageUrl; // ✅ null-safe
+  final String imageUrl;
   final String address;
   final String rating;
   final String completed;
   final String reviews;
   final String price;
   final String time;
-
   final String? phoneNumber;
+  final EdgeInsetsGeometry margin;
+  final int? followersCount;
   final String? facebookUrl;
   final String? emailAddress;
   final String? whatsappNumber;
   final String? websiteUrl;
-
-  final EdgeInsetsGeometry margin;
-  final int followersCount; // ✅ always show (default 0)
-
   final int? colorIndex;
   final bool isVerifiedWorker;
   final bool isTopRated;
   final bool isTrusted;
   final bool isEditable;
   final bool isOnline;
-
   final VoidCallback? onTap;
   final VoidCallback? onChatTap;
   final VoidCallback? onViewProfileTap;
   final VoidCallback? onShareTap;
-
   final BadgeLevel? badgeLevel;
-
   final bool isSaved;
   final VoidCallback? onSaveTap;
-
   final bool showActionButtons;
   final bool showStats;
   final bool showSaveButton;
   final bool showShareButton;
   final bool showOnlineStatus;
-
   final double? elevation;
   final BorderRadius? borderRadius;
   final bool enableImageZoom;
@@ -58,7 +51,7 @@ class UniversalWorkerCard extends StatelessWidget {
     this.id,
     required this.name,
     required this.role,
-    this.imageUrl,
+    required this.imageUrl,
     required this.address,
     required this.rating,
     required this.completed,
@@ -84,7 +77,7 @@ class UniversalWorkerCard extends StatelessWidget {
     this.isSaved = false,
     this.onSaveTap,
     this.margin = const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-    this.followersCount = 0, // ✅ default
+    this.followersCount,
     this.showActionButtons = true,
     this.showStats = true,
     this.showSaveButton = true,
@@ -97,23 +90,30 @@ class UniversalWorkerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final br = borderRadius ?? BorderRadius.circular(15);
-
     return Card(
       margin: margin,
-      elevation: elevation ?? 4,
-      shape: RoundedRectangleBorder(borderRadius: br),
+      elevation: elevation ?? 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(
+        borderRadius: borderRadius ?? BorderRadius.circular(15),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: br,
+        borderRadius: borderRadius ?? BorderRadius.circular(15),
         child: Container(
           padding: const EdgeInsets.all(15),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header section with image and basic info
               _buildHeaderSection(context),
-              const SizedBox(height: 12),
-              if (showStats) _buildStatsSection(context),
+
+              if (showStats) ...[
+                const SizedBox(height: 12),
+                _buildStatsSection(context),
+              ],
+
+              // Action buttons
               if (showActionButtons) ...[
                 const SizedBox(height: 16),
                 _buildActionButtons(context),
@@ -129,15 +129,19 @@ class UniversalWorkerCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Profile Image
         _buildProfileImage(context),
         const SizedBox(width: 12),
+
+        // User Info
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Name and verification
               Row(
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
                       name,
                       style: const TextStyle(
@@ -150,34 +154,75 @@ class UniversalWorkerCard extends StatelessWidget {
                   ),
                   if (isVerifiedWorker) ...[
                     const SizedBox(width: 4),
-                    const Icon(Icons.verified, color: Colors.blue, size: 16),
+                    const Icon(
+                      Icons.verified,
+                      color: Colors.blue,
+                      size: 16,
+                    ),
                   ],
                 ],
               ),
+
+              // Role
               Text(
                 role,
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              Text(
-                address,
-                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
+
+              const SizedBox(height: 4),
+
+              // Address
               Row(
                 children: [
+                  Icon(Icons.location_on_outlined, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 2),
+                  Expanded(
+                    child: Text(
+                      address,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 4),
+
+              // Price and Time
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
                   Text(
-                    "$price • ",
+                    price,
                     style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
                       color: AppColors.brandMain,
                     ),
                   ),
-                  Text(
-                    time,
-                    style: TextStyle(fontSize: 12, color: Colors.green[700]),
-                  ),
+                  if (time.isNotEmpty) ...[
+                    const Text(
+                      " • ",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ]
                 ],
               ),
             ],
@@ -188,24 +233,31 @@ class UniversalWorkerCard extends StatelessWidget {
   }
 
   Widget _buildProfileImage(BuildContext context) {
-    final url = (imageUrl ?? '').trim();
-    final hasUrl = url.isNotEmpty;
-
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: hasUrl
-              ? CachedNetworkImage(
-            imageUrl: url,
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
             width: 80,
             height: 80,
             fit: BoxFit.cover,
-            placeholder: (_, __) => _imageFallback(),
-            errorWidget: (_, __, ___) => _imageFallback(),
-          )
-              : _imageFallback(),
+            placeholder: (context, url) => Container(
+              width: 80,
+              height: 80,
+              color: Colors.grey[200],
+              child: const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
+            ),
+            errorWidget: (context, url, error) => Container(
+              width: 80,
+              height: 80,
+              color: Colors.grey[200],
+              child: const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
+            ),
+          ),
         ),
+
+        // Online status indicator
         if (showOnlineStatus && isOnline)
           Positioned(
             right: 2,
@@ -215,21 +267,12 @@ class UniversalWorkerCard extends StatelessWidget {
               height: 12,
               decoration: BoxDecoration(
                 color: Colors.green,
-                borderRadius: BorderRadius.circular(6),
+                shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
               ),
             ),
           ),
       ],
-    );
-  }
-
-  Widget _imageFallback() {
-    return Container(
-      width: 80,
-      height: 80,
-      color: Colors.grey[200],
-      child: const Icon(Icons.person, size: 40, color: Colors.grey),
     );
   }
 
@@ -240,7 +283,11 @@ class UniversalWorkerCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: AppColors.brandMain),
+              Icon(
+                icon,
+                size: 14,
+                color: AppColors.brandMain,
+              ),
               const SizedBox(width: 4),
               Text(
                 value,
@@ -255,55 +302,50 @@ class UniversalWorkerCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[600],
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ✅ followers always visible, same section style
   Widget _buildStatsSection(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.grey[50],
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              _buildStatItem(
-                completed,
-                context.tr('completed'),
-                Icons.check_circle_outline,
-              ),
-              Container(height: 30, width: 1, color: Colors.grey[300]),
-              _buildStatItem(
-                rating,
-                context.tr('rating'),
-                Icons.star_outline,
-              ),
-            ],
+          _buildStatItem(
+            completed,
+            "Completed", // Replaced context.tr()
+            Icons.check_circle_outline,
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              _buildStatItem(
-                reviews,
-                context.tr('reviews'),
-                Icons.reviews_outlined,
-              ),
-              Container(height: 30, width: 1, color: Colors.grey[300]),
-              _buildStatItem(
-                followersCount.toString(),
-                'Followers',
-                Icons.people_outline,
-              ),
-            ],
+          Container(
+            height: 20,
+            width: 1,
+            color: Colors.grey[300],
+          ),
+          _buildStatItem(
+            rating,
+            "Rating", // Replaced context.tr()
+            Icons.star_outline,
+          ),
+          Container(
+            height: 20,
+            width: 1,
+            color: Colors.grey[300],
+          ),
+          _buildStatItem(
+            reviews,
+            "Reviews", // Replaced context.tr()
+            Icons.rate_review_outlined,
           ),
         ],
       ),
@@ -313,63 +355,69 @@ class UniversalWorkerCard extends StatelessWidget {
   Widget _buildActionButtons(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _buildViewProfileButton(context)),
+        // View Profile Button
+        Expanded(
+          child: _buildViewProfileButton(context),
+        ),
+
         const SizedBox(width: 8),
 
+        // Chat Button
         if (onChatTap != null)
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.brandMain.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: IconButton(
-              onPressed: onChatTap,
-              icon: const Icon(
-                Icons.chat_outlined,
-                color: AppColors.brandMain,
-                size: 20,
-              ),
-            ),
+          _buildIconButton(
+            onTap: onChatTap!,
+            icon: Icons.chat_outlined,
+            color: AppColors.brandMain,
+            bgColor: AppColors.brandMain.withOpacity(0.1),
           ),
 
+        // Save Button
         if (showSaveButton && onSaveTap != null) ...[
           const SizedBox(width: 8),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: IconButton(
-              onPressed: onSaveTap,
-              icon: Icon(
-                isSaved ? Icons.favorite : Icons.favorite_border,
-                color: isSaved ? Colors.red : Colors.grey[600],
-                size: 20,
-              ),
-            ),
+          _buildIconButton(
+            onTap: onSaveTap!,
+            icon: isSaved ? Icons.favorite : Icons.favorite_border,
+            color: isSaved ? Colors.red : Colors.grey[600]!,
+            bgColor: Colors.grey[100]!,
           ),
         ],
 
+        // Share Button
         if (showShareButton && onShareTap != null) ...[
           const SizedBox(width: 8),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: IconButton(
-              onPressed: onShareTap,
-              icon: Icon(Icons.share_outlined, color: Colors.grey[600], size: 20),
-            ),
+          _buildIconButton(
+            onTap: onShareTap!,
+            icon: Icons.share_outlined,
+            color: Colors.grey[600]!,
+            bgColor: Colors.grey[100]!,
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildIconButton({
+    required VoidCallback onTap,
+    required IconData icon,
+    required Color color,
+    required Color bgColor,
+  }) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: IconButton(
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          icon,
+          color: color,
+          size: 20,
+        ),
+      ),
     );
   }
 
@@ -381,12 +429,14 @@ class UniversalWorkerCard extends StatelessWidget {
         onPressed: onViewProfileTap,
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: AppColors.brandMain),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: Colors.white.withOpacity(0.8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          backgroundColor: Colors.white,
         ),
-        child: Text(
-          context.tr('view_profile'),
-          style: const TextStyle(
+        child: const Text(
+          "View Profile", // Replaced context.tr()
+          style: TextStyle(
             color: AppColors.brandMain,
             fontWeight: FontWeight.bold,
             fontSize: 14,

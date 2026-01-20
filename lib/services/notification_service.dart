@@ -1,5 +1,3 @@
-// lib/services/notification_service.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NotificationService {
@@ -11,7 +9,7 @@ class NotificationService {
     required String fromUserId,
     required String title,
     required String body,
-    required String type, // 'hire_request', 'emergency', 'system', 'chat'
+    required String type,
     String? relatedId,
   }) async {
     await _db.collection('notifications').add({
@@ -33,14 +31,23 @@ class NotificationService {
     });
   }
 
-  // ✅ রিয়েল-টাইম নোটিফিকেশন স্ট্রিম (আপনার পেজের জন্য)
+  // ✅ রিয়েল-টাইম নোটিফিকেশন স্ট্রিম (পজিশনাল আর্গুমেন্ট uid সহ)
   static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>> streamMyNotifications(String uid) {
     return _db
         .collection('notifications')
         .where('toUserId', isEqualTo: uid)
         .orderBy('createdAt', descending: true)
-        .limit(50)
         .snapshots()
         .map((snap) => snap.docs);
+  }
+
+  // অপঠিত নোটিফিকেশনের সংখ্যা জানার জন্য (Notification Badge)
+  static Stream<int> getUnreadCount(String uid) {
+    return _db
+        .collection('notifications')
+        .where('toUserId', isEqualTo: uid)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs.length);
   }
 }

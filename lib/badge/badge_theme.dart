@@ -1,14 +1,12 @@
-// lib/constants/badge_theme.dart
 import 'package:flutter/material.dart';
-import 'package:findus_app/models/badge_model.dart';
-
-import 'badge_model.dart';
+import 'package:findus_app/badge/badge_model.dart';
 
 class AppBadgeTheme {
   // সব লেভেলের জন্য কমন badge icon
   static const IconData baseIcon = Icons.workspace_premium;
 
   // Colors
+  static const Color newbie   = Colors.blueGrey; // Newbie যোগ করা হলো
   static const Color bronze   = Colors.brown;
   static const Color silver   = Colors.grey;
   static const Color gold     = Colors.amber;
@@ -17,6 +15,8 @@ class AppBadgeTheme {
 
   static Color colorForLevel(BadgeLevel level) {
     switch (level) {
+      case BadgeLevel.newbie:
+        return newbie;
       case BadgeLevel.bronze:
         return bronze;
       case BadgeLevel.silver:
@@ -33,6 +33,8 @@ class AppBadgeTheme {
   // label string দিয়ে color (NEXT BADGE সেকশনের জন্য)
   static Color colorForLabel(String label) {
     switch (label.toUpperCase()) {
+      case 'NEWBIE':
+        return newbie;
       case 'BRONZE':
         return bronze;
       case 'SILVER':
@@ -47,4 +49,4 @@ class AppBadgeTheme {
         return gold;
     }
   }
-}// TODO Implement this library.
+}

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -13,27 +12,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+// Constants & Services
 import '../../../constants/app_colors.dart';
 import '../../../constants/dummy_data.dart';
 import 'package:findus_app/services/user_role_service.dart';
-
-import '../profile/earn_post_screen.dart';
-import '../profile/support_post_screen.dart';
-import 'profile_sidebar_menu.dart';
-import '../profile/support_post_screen.dart';
-import 'package:findus_app/screens/profile/earn_post_screen.dart';
-import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
-
-import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/services/profile_completion_service.dart';
-import 'package:findus_app/screens/profile/unified_profile_screen.dart';
-import 'package:findus_app/screens/explore/models/worker_profile_bottom_sheet.dart';
-import 'package:findus_app/screens/explore/models/filter_bottom_sheet.dart';
 import 'package:findus_app/services/blocked_user_service.dart';
 import 'package:findus_app/services/post_service.dart';
-import '../emergency_screen.dart';
-import 'package:findus_app/screens/explore/notifications_page.dart';
 import 'package:findus_app/services/notification_service.dart';
+
+// Models
+import 'package:findus_app/models/worker_model.dart';
+import 'package:findus_app/screens/explore/models/worker_profile_bottom_sheet.dart';
+import 'package:findus_app/screens/explore/models/filter_bottom_sheet.dart';
+
+// Screens
+import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
+import 'package:findus_app/screens/profile/earn_post_screen.dart';
+import 'package:findus_app/screens/profile/support_post_screen.dart';
+import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
+import 'package:findus_app/screens/explore/notifications_page.dart';
+import '../emergency_screen.dart';
+import 'profile_sidebar_menu.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -54,7 +54,11 @@ class _ExploreScreenState extends State<ExploreScreen>
   final LatLng _dhakaLocation = const LatLng(23.8103, 90.4125);
   final Distance _distance = const Distance();
 
+  // ✅ Missing variables defined here
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSuggestions = false;
   List<Map<String, dynamic>> _searchSuggestions = [];
+  Timer? _suggestDebounce;
 
   late AnimationController _shakeController;
   bool _hasUnreadNotifs = false;
@@ -80,8 +84,6 @@ class _ExploreScreenState extends State<ExploreScreen>
   final TextEditingController _locationSearchController = TextEditingController();
   final TextEditingController _mainSearchController = TextEditingController();
 
-  Timer? _searchDebounce; // main search debounce
-
   List<Map<String, dynamic>> _allWorkers = [];
   List<Map<String, dynamic>> _filteredWorkers = [];
 
@@ -93,10 +95,16 @@ class _ExploreScreenState extends State<ExploreScreen>
     super.initState();
     _mapController = MapController();
 
+    // Focus listener to hide suggestions when focus lost
     _searchFocusNode.addListener(() {
       if (!_searchFocusNode.hasFocus) {
-        setState(() {
-          _showSuggestions = false;
+        // Delay slightly to allow tap on suggestion item
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted && !_searchFocusNode.hasFocus) {
+            setState(() {
+              _showSuggestions = false;
+            });
+          }
         });
       }
     });
@@ -113,7 +121,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     _isSearchingLocation = true;
 
-
     if (!_hasInitialZoomHappened) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _startInitialZoomSequence();
@@ -129,8 +136,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     _shakeController.dispose();
     _locationSearchController.dispose();
     _mainSearchController.dispose();
+    _searchFocusNode.dispose(); // Dispose focus node
     _postsSub?.cancel();
-    _searchDebounce?.cancel();
+    _suggestDebounce?.cancel();
     super.dispose();
   }
 
@@ -151,19 +159,14 @@ class _ExploreScreenState extends State<ExploreScreen>
       if (!mounted) return;
 
       setState(() => _isWorker = isFinder);
-
-      // ✅ always start posts stream after role resolved
       _listenToPosts();
     } catch (_) {
-      // fallback: still listen to posts with default assumption
       if (!mounted) return;
-
-      setState(() => _isWorker = true); // default = finder/worker
+      setState(() => _isWorker = true);
       _listenToPosts();
     }
   }
 
-  /// Local demo pins to always show
   List<Map<String, dynamic>> _buildDemoPins() {
     final List<Map<String, dynamic>> demo = [];
     final rnd = Random();
@@ -181,6 +184,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       'COOK', 'DELIVERY', 'PAINTER',
     ];
 
+    // Demo Workers
     for (int i = 0; i < 25; i++) {
       final reg = regions[i % regions.length];
       final baseLat = reg['lat'] as double;
@@ -189,7 +193,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
       final latOffset = (rnd.nextDouble() - 0.5) * 0.08;
       final lngOffset = (rnd.nextDouble() - 0.5) * 0.08;
-
       final roleLabel = workerRoles[i % workerRoles.length];
 
       demo.add({
@@ -212,6 +215,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       });
     }
 
+    // Demo Supporters
     for (int i = 0; i < 25; i++) {
       final reg = regions[i % regions.length];
       final baseLat = reg['lat'] as double;
@@ -220,7 +224,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
       final latOffset = (rnd.nextDouble() - 0.5) * 0.08;
       final lngOffset = (rnd.nextDouble() - 0.5) * 0.08;
-
       final roleLabel = workerRoles[i % workerRoles.length];
 
       demo.add({
@@ -248,14 +251,12 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   void _listenToPosts() {
     _postsSub?.cancel();
-
     final viewerRole = _isWorker ? 'finder' : 'maker';
 
     _postsSub = PostService.streamPinsForViewerRole(viewerRole).listen((posts) {
       if (!mounted) return;
 
-      // ডেমো পিন এবং ফায়ারবেস পিন একত্রিত করুন
-      final demoPins = _buildDemoPins(); // এখানে কল করুন
+      final demoPins = _buildDemoPins();
       final all = <Map<String, dynamic>>[];
       all.addAll(demoPins);
       all.addAll(posts);
@@ -293,9 +294,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       const int minMillis = 2000;
       final int elapsed = DateTime.now().difference(start).inMilliseconds;
       if (elapsed < minMillis) {
-        await Future.delayed(
-          Duration(milliseconds: minMillis - elapsed),
-        );
+        await Future.delayed(Duration(milliseconds: minMillis - elapsed));
       }
     }
 
@@ -308,44 +307,17 @@ class _ExploreScreenState extends State<ExploreScreen>
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
-
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
 
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          await showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text("Location permission required"),
-              content: const Text(
-                "Nearby workers এবং jobs দেখতে Location permission Allow করতে হবে (Settings > Apps > FINDUS > Permissions > Location).",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-        }
+      if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
         await waitMin2Seconds();
         _cancelLoadingWithoutZoom();
         return;
       }
 
-      if (permission == LocationPermission.denied) {
-        await waitMin2Seconds();
-        _cancelLoadingWithoutZoom();
-        return;
-      }
-
-      Position p = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
+      Position p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       await waitMin2Seconds();
 
       _animateMapMove(LatLng(p.latitude, p.longitude), 15.0, const Duration(milliseconds: 1200));
@@ -371,7 +343,6 @@ class _ExploreScreenState extends State<ExploreScreen>
     _hasInitialZoomHappened = true;
   }
 
-  // Smooth map move helper
   void _animateMapMove(LatLng dest, double destZoom, Duration duration) {
     final latTween = Tween<double>(begin: _mapController.camera.center.latitude, end: dest.latitude);
     final lngTween = Tween<double>(begin: _mapController.camera.center.longitude, end: dest.longitude);
@@ -392,11 +363,9 @@ class _ExploreScreenState extends State<ExploreScreen>
         controller.dispose();
       }
     });
-
     controller.forward();
   }
 
-  // Smooth rotation to 0 deg
   void _animateMapRotationTo(double targetDeg, {Duration duration = const Duration(milliseconds: 300)}) {
     final start = _currentRotation;
     final rotTween = Tween<double>(begin: start, end: targetDeg);
@@ -413,7 +382,6 @@ class _ExploreScreenState extends State<ExploreScreen>
         controller.dispose();
       }
     });
-
     controller.forward();
   }
 
@@ -427,11 +395,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   double? _getDistanceKm(LatLng workerLocation) {
     if (_userCurrentLocation == null) return null;
-    return _distance.as(
-      LengthUnit.Kilometer,
-      _userCurrentLocation!,
-      workerLocation,
-    );
+    return _distance.as(LengthUnit.Kilometer, _userCurrentLocation!, workerLocation);
   }
 
   void _updateSearchSuggestions(String query) {
@@ -451,9 +415,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         return;
       }
 
-      // সাম্প্রতিক searches থেকে suggestion (এখন dummy data ব্যবহার করছি)
       final allItems = [..._allWorkers, ..._buildDemoPins()];
-
       final suggestions = allItems
           .where((item) {
         final name = (item['name'] ?? '').toString().toLowerCase();
@@ -461,7 +423,7 @@ class _ExploreScreenState extends State<ExploreScreen>
         final address = (item['address'] ?? '').toString().toLowerCase();
         return name.contains(q) || role.contains(q) || address.contains(q);
       })
-          .take(6) // শুধু ৫-৬টা suggestion
+          .take(6)
           .toList();
 
       setState(() {
@@ -471,17 +433,12 @@ class _ExploreScreenState extends State<ExploreScreen>
     });
   }
 
-  // ✅ ExploreScreen এর _mapDataToWorker() ঠিক করে দাও
-// কারণ নতুন Worker মডেলে fields বদলেছে:
-// - uid required
-// - userRole required
-// - id/role/isVerified/price (String) আর নেই
-// - priceText (String) আছে, price (num?) optional
-
+  // ✅ Updated _mapDataToWorker logic
   Worker _mapDataToWorker(Map<String, dynamic> data) {
+    // 1. UID extraction (Robust)
     final String uid = (data['ownerId'] ?? data['uid'] ?? data['userId'] ?? data['id'] ?? '').toString().trim();
 
-    // userRole নির্ধারণ - demo পিনের জন্য type চেক করুন
+    // 2. UserRole extraction
     String userRole = 'finder'; // default
     if (data['userRole'] != null) {
       userRole = data['userRole'].toString();
@@ -489,68 +446,56 @@ class _ExploreScreenState extends State<ExploreScreen>
       userRole = data['type'].toString();
     } else {
       final id = (data['id'] ?? '').toString();
-      // demo পিনের জন্য চেক
-      if (id.contains('supporter')) {
-        userRole = 'maker';
-      } else if (id.contains('worker')) {
-        userRole = 'finder';
-      }
+      if (id.contains('supporter')) userRole = 'maker';
+      else if (id.contains('worker')) userRole = 'finder';
     }
 
-    // priceText এবং price আলাদাভাবে হ্যান্ডেল করুন
+    // 3. Price and PriceText logic
     String priceText = 'Negotiable';
     num? price;
 
     final priceData = data['price'];
-    if (priceData is String) {
+    if (priceData is num) {
+      price = priceData;
+      priceText = '৳$priceData';
+    } else if (priceData is String) {
       priceText = priceData;
-      // স্ট্রিং থেকে সংখ্যা পার্স করার চেষ্টা করুন
+      // Try extracting number from string like "৳500 / day"
       final match = RegExp(r'\d+(\.\d+)?').firstMatch(priceData);
       if (match != null) {
         price = num.tryParse(match.group(0)!);
       }
-    } else if (priceData is num) {
-      price = priceData;
-      priceText = '৳$priceData';
+    }
+
+    // 4. Rating parsing
+    double rating = 0.0;
+    if (data['rating'] is num) {
+      rating = (data['rating'] as num).toDouble();
+    } else {
+      rating = double.tryParse(data['rating']?.toString() ?? '0') ?? 0.0;
     }
 
     return Worker(
       uid: uid,
       postId: data['id']?.toString(),
-      name: (data['name'] ?? '').toString(),
+      name: (data['name'] ?? 'Unknown').toString(),
       userRole: userRole,
       image: (data['image'] ?? '').toString(),
       location: (data['address'] ?? 'Bangladesh').toString(),
       priceText: priceText,
-      price: price,
-      rating: () {
-        final r = data['rating'];
-        if (r is num) return r.toDouble();
-        return double.tryParse(r?.toString() ?? '') ?? 0.0;
-      }(),
+      price: price, // Optional num
+      rating: rating,
       kycCompleted: data['verified'] == true,
-      isVerified: data['verified'] == true, // isVerified ফিল্ডও সেট করুন
-      // অন্যান্য optional ফিল্ড
-      age: null,
-      experience: data['experience']?.toDouble(),
+      isVerified: data['verified'] == true,
+
+      // Optional fields
+      experience: double.tryParse(data['experience']?.toString() ?? '0'),
       gender: data['gender']?.toString(),
-      languages: data['language']?.toString() != null
-          ? [data['language']!.toString()]
-          : null,
-      skills: null,
-      about: null,
+      languages: data['language'] != null ? [data['language'].toString()] : null,
       isLive: data['isLive'] ?? false,
       isTrusted: data['trusted'] ?? false,
       isPromoted: data['isPromoted'] ?? false,
       phone: data['phone']?.toString(),
-      email: null,
-      joinedDate: null,
-      lastActive: null,
-      totalJobs: null,
-      completedJobs: null,
-      cancellationRate: null,
-      responseRate: null,
-      responseTime: null,
     );
   }
 
@@ -566,17 +511,14 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const NotificationsPage(),
-      ),
+      MaterialPageRoute(builder: (_) => const NotificationsPage()),
     );
   }
 
   Future<void> _sendProfileViewNotification(Map<String, dynamic> data) async {
     try {
       final postId = data['id']?.toString() ?? '';
-      if (postId.isEmpty) return;
-      if (postId.startsWith('demo_')) return;
+      if (postId.isEmpty || postId.startsWith('demo_')) return;
 
       final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
       if (!doc.exists) return;
@@ -621,12 +563,10 @@ class _ExploreScreenState extends State<ExploreScreen>
     _loadBlockedUsers();
   }
 
-  // Geocode with Nominatim (Bangladesh)
   Future<LatLng?> _geocodeLocation(String query) async {
     final q = query.trim();
     if (q.isEmpty) return null;
 
-    // latitude,longitude ফরম্যাট হলে সরাসরি নাও
     final latLngMatch = RegExp(r'^\s*(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)\s*$').firstMatch(q);
     if (latLngMatch != null) {
       final lat = double.tryParse(latLngMatch.group(1)!);
@@ -639,11 +579,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
 
     try {
-      final resp = await http.get(
-        uri,
-        headers: {'User-Agent': 'findus-app/1.0'},
-      ).timeout(const Duration(seconds: 8));
-
+      final resp = await http.get(uri, headers: {'User-Agent': 'findus-app/1.0'}).timeout(const Duration(seconds: 8));
       if (resp.statusCode == 200) {
         final arr = jsonDecode(resp.body);
         if (arr is List && arr.isNotEmpty) {
@@ -659,7 +595,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   bool _looksLikeLocation(String text) {
     final t = text.trim().toLowerCase();
     if (t.isEmpty) return false;
-    if (t.contains(',')) return true; // "mirpur, dhaka" টাইপ
+    if (t.contains(',')) return true;
     const cities = [
       'dhaka','chattogram','chittagong','sylhet','rajshahi','khulna','barishal','barisal','mymensingh','rangpur',
       'gazipur','narayanganj','cumilla','comilla','bogura','bogra','tangail','narsingdi','brahmanbaria','feni',
@@ -674,7 +610,6 @@ class _ExploreScreenState extends State<ExploreScreen>
   Future<void> _maybeMoveCameraToSearchLocation({String? mainQuery}) async {
     final locText = _locationSearchController.text.trim();
     final mainText = (mainQuery ?? '').trim();
-
     String q = '';
     if (locText.isNotEmpty) {
       q = locText;
@@ -720,17 +655,15 @@ class _ExploreScreenState extends State<ExploreScreen>
       _trustedOnly = result.trustedOnly;
     });
 
-    // Apply করার পর ফিল্টার + লোকেশন ক্যামেরা মুভ
     _performSearch(_mainSearchController.text);
     _maybeMoveCameraToSearchLocation(mainQuery: _mainSearchController.text);
   }
 
   void _performSearch(String query) {
     FocusScope.of(context).unfocus();
-
     final searchText = query.trim();
+
     if (searchText.isEmpty) {
-      // Search text খালি হলে সব workers দেখাবে
       setState(() {
         _filteredWorkers = List.from(_allWorkers);
         _isSearchingWorker = false;
@@ -744,7 +677,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
 
-      final searchText = query.toLowerCase().trim();
+      final searchTextLower = searchText.toLowerCase();
       final locationText = _locationSearchController.text.toLowerCase().trim();
 
       List<Map<String, dynamic>> results = _allWorkers.where((worker) {
@@ -752,10 +685,10 @@ class _ExploreScreenState extends State<ExploreScreen>
         final role = worker['role'].toString().toLowerCase();
         final address = worker['address'].toString().toLowerCase();
 
-        final matchesMainQuery = searchText.isEmpty ||
-            name.contains(searchText) ||
-            role.contains(searchText) ||
-            address.contains(searchText);
+        final matchesMainQuery = searchTextLower.isEmpty ||
+            name.contains(searchTextLower) ||
+            role.contains(searchTextLower) ||
+            address.contains(searchTextLower);
 
         final matchesLocationQuery = locationText.isEmpty ||
             address.contains(locationText) ||
@@ -763,37 +696,26 @@ class _ExploreScreenState extends State<ExploreScreen>
 
         final matchesVerified = !_verifiedOnly || worker['verified'] == true;
         final matchesLive = !_liveOnly || worker['isLive'] == true;
-        final matchesGender =
-            _selectedGender == "Any" || worker['gender'] == _selectedGender;
-
+        final matchesGender = _selectedGender == "Any" || worker['gender'] == _selectedGender;
         final workerExp = (worker['experience'] ?? 0).toDouble();
         final matchesExp = workerExp >= _minExperience;
 
+        // Price filtering
         final priceStr = worker['price']?.toString() ?? '0';
         final priceMatch = RegExp(r'\d+').firstMatch(priceStr);
         final priceValue = int.tryParse(priceMatch?.group(0) ?? '0') ?? 0;
-        final matchesPrice =
-            priceValue >= _priceRange.start && priceValue <= _priceRange.end;
+        final matchesPrice = priceValue >= _priceRange.start && priceValue <= _priceRange.end;
 
         final rating = (worker['rating'] ?? 0).toDouble();
         final matchesTopRated = !_topRatedOnly || rating >= 4.8;
         final matchesTrusted = !_trustedOnly || worker['trusted'] == true || rating >= 4.2;
 
-        return matchesMainQuery &&
-            matchesLocationQuery &&
-            matchesVerified &&
-            matchesLive &&
-            matchesGender &&
-            matchesExp &&
-            matchesPrice &&
-            matchesTopRated &&
-            matchesTrusted;
+        return matchesMainQuery && matchesLocationQuery && matchesVerified && matchesLive && matchesGender && matchesExp && matchesPrice && matchesTopRated && matchesTrusted;
       }).toList();
 
       results.sort((a, b) {
         final aLoc = a['location'] as LatLng;
         final bLoc = b['location'] as LatLng;
-
         final aDist = _getDistanceKm(aLoc);
         final bDist = _getDistanceKm(bLoc);
 
@@ -801,7 +723,6 @@ class _ExploreScreenState extends State<ExploreScreen>
           final diff = aDist.compareTo(bDist);
           if (diff != 0) return diff;
         }
-
         final aRating = (a['rating'] ?? 0).toDouble();
         final bRating = (b['rating'] ?? 0).toDouble();
         return bRating.compareTo(aRating);
@@ -813,7 +734,6 @@ class _ExploreScreenState extends State<ExploreScreen>
         _showSuggestions = false;
       });
 
-      // ফলাফলের দিকে স্মুথ জুম
       if (results.isNotEmpty) {
         final firstLoc = results.first['location'] as LatLng;
         _animateMapMove(firstLoc, 15.0, const Duration(milliseconds: 500));
@@ -822,12 +742,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   void _openEmergency() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const EmergencyScreen(),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const EmergencyScreen()));
   }
 
   @override
@@ -844,9 +759,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             options: MapOptions(
               initialCenter: _dhakaLocation,
               initialZoom: 2.5,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all,
-              ),
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
               onPositionChanged: (camera, hasGesture) {
                 setState(() {
                   _currentZoom = camera.zoom;
@@ -861,10 +774,7 @@ class _ExploreScreenState extends State<ExploreScreen>
               ),
               MarkerLayer(
                 markers: _filteredWorkers
-                    .where((data) {
-                  final key = (data['id'] ?? data['name']).toString();
-                  return !_blockedUserIds.contains(key);
-                })
+                    .where((data) => !_blockedUserIds.contains((data['id'] ?? data['name']).toString()))
                     .map((data) {
                   final LatLng workerLoc = data['location'] as LatLng;
                   final double? distKm = _getDistanceKm(workerLoc);
@@ -886,8 +796,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                       ),
                     ),
                   );
-                })
-                    .toList(),
+                }).toList(),
               ),
               if (_userCurrentLocation != null)
                 MarkerLayer(
@@ -910,14 +819,11 @@ class _ExploreScreenState extends State<ExploreScreen>
             ],
           ),
 
-          // Suggestion backdrop (tap to hide)
           if (_showSuggestions)
             Positioned.fill(
               child: GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _showSuggestions = false;
-                  });
+                  setState(() => _showSuggestions = false);
                   _searchFocusNode.unfocus();
                 },
                 behavior: HitTestBehavior.translucent,
@@ -952,7 +858,6 @@ class _ExploreScreenState extends State<ExploreScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Main Search Bar
                   Container(
                     height: 55,
                     decoration: BoxDecoration(
@@ -983,13 +888,11 @@ class _ExploreScreenState extends State<ExploreScreen>
                               }
                             },
                             onChanged: (value) {
-                              // শুধু suggestion দেখাবে, actual search হবে না
                               _updateSearchSuggestions(value);
                               setState(() => _isSearchingWorker = false);
                             },
                             textInputAction: TextInputAction.search,
                             onSubmitted: (txt) {
-                              // Enter চাপলেই actual search হবে
                               _performSearch(txt);
                               _maybeMoveCameraToSearchLocation(mainQuery: txt);
                               setState(() => _showSuggestions = false);
@@ -1006,9 +909,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                         ),
                         const SizedBox(width: 10),
                         GestureDetector(
-                          onTap: () {
-                            _scaffoldKey.currentState?.openEndDrawer();
-                          },
+                          onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
                           child: Container(
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
@@ -1027,7 +928,6 @@ class _ExploreScreenState extends State<ExploreScreen>
                     ),
                   ),
 
-                  // Suggestion ড্রপডাউন
                   if (_showSuggestions && _searchSuggestions.isNotEmpty)
                     Container(
                       width: double.infinity,
@@ -1036,11 +936,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                          ),
+                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, spreadRadius: 2),
                         ],
                       ),
                       child: Column(
@@ -1052,13 +948,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                               children: [
                                 Icon(Icons.search, color: Colors.grey.shade600, size: 20),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Suggestions',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                                Text('Suggestions', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -1070,9 +960,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                 radius: 20,
                                 backgroundImage: NetworkImage(item['image'] ?? ''),
                                 backgroundColor: Colors.grey.shade200,
-                                child: item['image'] == null
-                                    ? Icon(Icons.person, color: Colors.grey.shade400)
-                                    : null,
+                                child: item['image'] == null ? Icon(Icons.person, color: Colors.grey.shade400) : null,
                               ),
                               title: Text(
                                 item['name']?.toString() ?? '',
@@ -1086,20 +974,16 @@ class _ExploreScreenState extends State<ExploreScreen>
                               ),
                               trailing: Text(
                                 item['price']?.toString() ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.brandMain,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.w600),
                               ),
                               onTap: () {
-                                // Suggestion ট্যাপ করলে actual search হবে
+                                final name = item['name']?.toString() ?? '';
                                 setState(() {
-                                  _mainSearchController.text = item['name']?.toString() ?? '';
+                                  _mainSearchController.text = name;
                                   _showSuggestions = false;
                                 });
-                                _performSearch(item['name']?.toString() ?? '');
-                                _maybeMoveCameraToSearchLocation(mainQuery: item['name']?.toString() ?? '');
+                                _performSearch(name);
+                                _maybeMoveCameraToSearchLocation(mainQuery: name);
                                 _searchFocusNode.unfocus();
                               },
                             );
@@ -1127,11 +1011,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                           child: Container(
                             width: 45,
                             height: 45,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                            ),
+                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
                             child: const Icon(Icons.notifications, color: Colors.redAccent),
                           ),
                         ),
@@ -1205,7 +1085,6 @@ class _ExploreScreenState extends State<ExploreScreen>
               child: FloatingActionButton.extended(
                 onPressed: () async {
                   final completed = await ProfileCompletionService.isCompleted();
-
                   if (!completed) {
                     final go = await showDialog<bool>(
                       context: context,
@@ -1226,13 +1105,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                     if (go == true) {
                       final uid = FirebaseAuth.instance.currentUser?.uid;
                       if (uid == null || uid.isEmpty) return;
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => UnifiedProfileEditScreen(uid: uid),
-                        ),
-                      );
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileEditScreen(uid: uid)));
                     }
                     return;
                   }

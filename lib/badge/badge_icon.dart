@@ -3,7 +3,7 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/badge/badge_service.dart';
 
-import '../badge/badge_model.dart';
+import 'badge_model.dart';
 
 class BadgeIcon extends StatelessWidget {
   final double size;
