@@ -15,7 +15,6 @@ import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/screens/profile/worker_cv_create_screen.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
-import 'worker_cv_create_screen.dart';
 
 class UnifiedProfileEditScreen extends StatefulWidget {
   final String uid;

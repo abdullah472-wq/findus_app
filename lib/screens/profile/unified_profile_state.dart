@@ -25,7 +25,6 @@ import 'package:findus_app/services/card_theme_service.dart';
 // Screens & Widgets
 import 'package:findus_app/screens/profile/unified_profile_screen.dart'; // Parent screen import
 import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
-import 'package:findus_app/screens/profile/followers_following_screen.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/screens/team/team_management_screen.dart';
 import 'package:findus_app/screens/settings/settings_screen.dart';
@@ -35,7 +34,7 @@ import 'package:findus_app/widgets/universal_worker_card.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import '../explore/notifications_page.dart';
 import 'card_theme_bottom_sheet.dart';
-import 'followersfollowingscreen.dart';
+import 'followers_following_screen.dart';
 
 // Enums
 enum ProfileMenuOwner {
@@ -173,7 +172,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     if (uid == null) return;
 
     _notifSub = FirebaseFirestore.instance
-        .collection('notificationId') // Check collection name carefully
+        .collection('notifications') // ✅ কালেকশনের নাম 'notificationId' থেকে 'notifications' করা হয়েছে
         .where('toUserId', isEqualTo: uid)
         .where('isRead', isEqualTo: false)
         .snapshots()
@@ -374,7 +373,9 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                   if (_isBusinessUser) {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => TeamManagementScreen(uid: widget.uid)),
+                      MaterialPageRoute(
+                        builder: (_) => TeamManagementScreen(userId: widget.uid), // ✅ সঠিক নাম
+                      ),
                     );
                   } else {
                     _showUpgradeToBusinessPopup();

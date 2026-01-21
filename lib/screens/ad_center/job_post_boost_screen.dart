@@ -1,6 +1,10 @@
+// lib/screens/ad_center/job_post_boost_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/wallet/payment_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class JobPostBoostScreen extends StatefulWidget {
   const JobPostBoostScreen({super.key});
@@ -13,144 +17,131 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
   int _days = 3;
   double _dailyBudget = 80;
 
-  double get _totalBudget => _days * _dailyBudget;
+  int get _totalBudget => (_days * _dailyBudget).round();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      appBar: AppBar(
-        backgroundColor: AppColors.brandLight,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        title: const Text(
-          "Promote Job Posts",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTypeInfoCard(),
-                  const SizedBox(height: 16),
-                  _buildDurationBudgetCard(),
-                  const SizedBox(height: 16),
-                  _buildSummaryCard(),
-                ],
-              ),
-            ),
-          ),
-          _buildBottomBar(context),
-        ],
-      ),
-    );
-  }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-  Widget _buildTypeInfoCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: const Column(
+    return FloatingScaffold(
+      title: "PROMOTE JOBS",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: true,
+      bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "Promote all your active job posts",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
+          // ১. ইনফো কার্ড (কেন প্রমোট করবেন)
+          _buildInfoBanner(isDark),
+
+          const SizedBox(height: 25),
+
+          // ২. কন্ট্রোল কার্ড (দিন ও বাজেট সিলেক্টর)
+          _buildBudgetControlCard(isDark),
+
+          const SizedBox(height: 25),
+
+          // ৩. পেমেন্ট সামারি কার্ড
+          _buildSummaryCard(isDark),
+
+          const SizedBox(height: 30),
+
+          // ৪. সাবমিট বাটন
+          _buildConfirmButton(context),
+
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoBanner(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.green.shade600,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.green.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.campaign_rounded, color: Colors.white, size: 50),
+          const SizedBox(height: 15),
+          const Text(
+            "Get Faster Responses",
+            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
-            "Your active job posts will be shown higher to nearby workers. "
-                "Good for getting faster responses.",
-            style: TextStyle(fontSize: 12, color: Colors.black87),
+            "Promoted jobs are shown 5x more to local workers.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDurationBudgetCard() {
+  Widget _buildBudgetControlCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Duration & daily budget",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Days: $_days",
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+          const Text("Customize Promotion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+
+          // দিন সিলেক্টর
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Duration", style: TextStyle(fontWeight: FontWeight.w600)),
+              Text("$_days Days", style: const TextStyle(color: AppColors.brandMain, fontWeight: FontWeight.bold)),
+            ],
           ),
           Slider(
             value: _days.toDouble(),
-            min: 1,
-            max: 14,
+            min: 1, max: 14,
             divisions: 13,
-            label: '$_days days',
             activeColor: AppColors.brandMain,
             onChanged: (v) {
+              HapticFeedback.selectionClick();
               setState(() => _days = v.round());
             },
           ),
-          const SizedBox(height: 8),
-          Text(
-            "Daily budget: ৳${_dailyBudget.round()}",
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+
+          const SizedBox(height: 15),
+
+          // বাজেট সিলেক্টর
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Daily Budget", style: TextStyle(fontWeight: FontWeight.w600)),
+              Text("৳${_dailyBudget.round()}", style: const TextStyle(color: AppColors.brandMain, fontWeight: FontWeight.bold)),
+            ],
           ),
           Slider(
             value: _dailyBudget,
-            min: 50,
-            max: 400,
-            divisions: 14,
-            label: '৳${_dailyBudget.round()}',
+            min: 50, max: 500,
+            divisions: 9,
             activeColor: AppColors.brandMain,
             onChanged: (v) {
+              HapticFeedback.selectionClick();
               setState(() => _dailyBudget = v);
             },
           ),
@@ -159,125 +150,111 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
     );
   }
 
-  Widget _buildSummaryCard() {
+  Widget _buildSummaryCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.green.withOpacity(0.2), width: 1.5),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Promotion summary",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _summaryRow("Type", "All active job posts"),
-          _summaryRow("Duration", "$_days days"),
-          _summaryRow(
-              "Daily budget", "৳${_dailyBudget.round()}"),
-          const Divider(height: 16),
-          _summaryRow(
-              "Estimated total budget",
-              "৳${_totalBudget.round()}",
-              bold: true),
-          const SizedBox(height: 6),
-          const Text(
-            "This is a demo setup. Connect this with wallet & analytics later.",
-            style: TextStyle(fontSize: 11, color: Colors.black54),
+          _row("Promotion Type", "All Active Posts"),
+          _row("Daily Reach", "Est. 150-300 people"),
+          _row("Total Duration", "$_days Days"),
+          const Divider(height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Total Investment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text("৳$_totalBudget", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.green)),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool bold = false}) {
+  Widget _row(String label, String val) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.black87,
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.brandDark,
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-            ),
-          ),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          Text(val, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
         ],
       ),
     );
   }
 
-  Widget _buildBottomBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 46,
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PaymentScreen(
-                  planId: 'job_posts_boost_${_days}d',
-                  amount: _totalBudget.round(),
-                  duration: 0,
-                  purpose: PaymentPurpose.profileBoost,
-                  description:
-                  'Promote all active job posts for $_days days.',
-                  referenceId: null,
+  Widget _buildConfirmButton(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ManualPaymentScreen(
+                    planId: 'JOB_BOOST_3D',
+                    amount: 240,
+                    duration: 3,
+                    purpose: PaymentPurpose.profileBoost,
+                    description: 'Boosting all job posts for 3 days',
+                  ),
                 ),
-              ),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brandDark,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandDark,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 5,
             ),
-          ),
-          child: const Text(
-            "CONFIRM PROMOTION",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            child: const Text(
+              "CONFIRM & PROMOTE",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
             ),
           ),
         ),
+        const SizedBox(height: 15),
+        const Text(
+          "Promotion will be applied to all your active posts",
+          style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
+
+  void _showSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 60),
+        content: const Text(
+          "Job Promotion Active! 📈\nYour job posts will now appear on top of search results.",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              },
+              child: const Text("GREAT!"),
+            ),
+          )
+        ],
       ),
     );
   }

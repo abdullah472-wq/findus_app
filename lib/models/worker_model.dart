@@ -1,31 +1,33 @@
 // lib/models/worker_model.dart
 
 class Worker {
-  /// user uid (NOT postId). profile open/chat open সবকিছুর জন্য এইটা লাগবে।
   final String uid;
-
-  /// (optional) post id যদি এই Worker কোনো পোস্ট/পিন থেকে আসে
   final String? postId;
-
   final String name;
-
-  /// DB role standard: 'finder' (worker/earner) or 'maker' (supporter/job maker)
   final String userRole;
-
   final String image;
   final String about;
   final bool kycCompleted;
-
   final double rating;
   final int completedCount;
   final int reviewsCount;
-
   final String location;
-  final String priceText; // display
-  final num? price; // numeric (optional)
+  final String priceText;
+  final num? price;
 
-  final String? companyName;
-  final String? companyContact;
+  // ✅ নতুন ফিল্ডসমূহ (এরর ফিক্সের জন্য)
+  final bool isVerified;        // এটি মিসিং ছিল
+  final List<String>? languages; // এটি মিসিং ছিল
+
+  final double? experience;
+  final String? gender;
+  final bool isLive;
+  final bool isTrusted;
+  final bool isPromoted;
+  final String? phone;
+
+  // Optional: Backward compatibility getters
+  String get id => uid;
 
   const Worker({
     required this.uid,
@@ -41,63 +43,22 @@ class Worker {
     this.location = "Bangladesh",
     this.priceText = "Negotiable",
     this.price,
-    this.companyName,
-    this.companyContact,
+
+    // ✅ নতুন ফিল্ডগুলো এখানে ইনিশিয়ালাইজ করা হলো
+    this.isVerified = false,
+    this.languages,
+
+    this.experience,
+    this.gender,
+    this.isLive = false,
+    this.isTrusted = false,
+    this.isPromoted = false,
+    this.phone,
   });
 
-  /// Backward compat: old code uses worker.id
-  /// -> keep a getter so old screens won't break
-  String get id => uid;
-
-  bool get isWorker => userRole.toLowerCase().trim() == 'finder';
-  bool get isSupporter => userRole.toLowerCase().trim() == 'maker';
-
-  Worker copyWith({
-    String? uid,
-    String? postId,
-    String? name,
-    String? userRole,
-    String? image,
-    String? about,
-    bool? kycCompleted,
-    double? rating,
-    int? completedCount,
-    int? reviewsCount,
-    String? location,
-    String? priceText,
-    num? price,
-    String? companyName,
-    String? companyContact,
-  }) {
-    return Worker(
-      uid: uid ?? this.uid,
-      postId: postId ?? this.postId,
-      name: name ?? this.name,
-      userRole: userRole ?? this.userRole,
-      image: image ?? this.image,
-      about: about ?? this.about,
-      kycCompleted: kycCompleted ?? this.kycCompleted,
-      rating: rating ?? this.rating,
-      completedCount: completedCount ?? this.completedCount,
-      reviewsCount: reviewsCount ?? this.reviewsCount,
-      location: location ?? this.location,
-      priceText: priceText ?? this.priceText,
-      price: price ?? this.price,
-      companyName: companyName ?? this.companyName,
-      companyContact: companyContact ?? this.companyContact,
-    );
-  }
-
-  /// ✅ For USERS collection docs: users/{uid}
+  // Factory Constructor (Firestore থেকে ডাটা নেওয়ার জন্য)
   factory Worker.fromUserDoc(Map<String, dynamic> map, String uid) {
     final role = (map['userRole'] ?? 'finder').toString().toLowerCase().trim();
-    final ratingRaw = map['rating'];
-
-    final doubleRating = (ratingRaw is num)
-        ? ratingRaw.toDouble()
-        : double.tryParse(ratingRaw?.toString() ?? '') ?? 0.0;
-
-    final priceText = (map['priceText'] ?? map['price'] ?? 'Negotiable').toString();
 
     return Worker(
       uid: uid,
@@ -106,55 +67,25 @@ class Worker {
       image: (map['image'] ?? '').toString(),
       about: (map['about'] ?? '').toString(),
       kycCompleted: map['kyc_completed'] == true,
-      rating: doubleRating,
-      completedCount: (map['completedCount'] is num)
-          ? (map['completedCount'] as num).toInt()
-          : int.tryParse(map['completedCount']?.toString() ?? '') ?? 0,
-      reviewsCount: (map['reviewsCount'] is num)
-          ? (map['reviewsCount'] as num).toInt()
-          : int.tryParse(map['reviewsCount']?.toString() ?? '') ?? 0,
-      location: (map['location'] ?? 'Bangladesh').toString(),
-      priceText: priceText,
-      price: (map['price'] is num) ? map['price'] as num : num.tryParse(map['price']?.toString() ?? ''),
-      companyName: map['companyName']?.toString(),
-      companyContact: map['companyContact']?.toString(),
-    );
-  }
 
-  /// ✅ For POSTS stream pins: posts/{postId}
-  /// Here uid should come from map['ownerId'].
-  factory Worker.fromPostPin(Map<String, dynamic> map) {
-    final ownerId = (map['ownerId'] ?? '').toString();
-    final postId = (map['id'] ?? '').toString();
+      // isVerified সাধারণত kycCompleted এর সমান হতে পারে বা আলাদা ফিল্ড হতে পারে
+      isVerified: (map['isVerified'] == true) || (map['kyc_completed'] == true),
 
-    return Worker(
-      uid: ownerId,
-      postId: postId.isEmpty ? null : postId,
-      name: (map['name'] ?? '').toString(),
-      userRole: 'finder', // NOTE: pins viewer দেখায় opposite role, কিন্তু Worker card/profile খুলতে uid দরকার
-      image: (map['image'] ?? '').toString(),
-      location: (map['address'] ?? 'Bangladesh').toString(),
-      priceText: (map['price'] ?? 'Negotiable').toString(),
       rating: (map['rating'] is num) ? (map['rating'] as num).toDouble() : 0.0,
-      kycCompleted: map['verified'] == true,
-    );
-  }
+      completedCount: (map['completedCount'] ?? 0) as int,
+      reviewsCount: (map['reviewsCount'] ?? 0) as int,
+      location: (map['location'] ?? 'Bangladesh').toString(),
+      priceText: (map['priceText'] ?? 'Negotiable').toString(),
+      price: (map['price'] is num) ? map['price'] as num : null,
 
-  Map<String, dynamic> toUserMap() {
-    return {
-      'name': name,
-      'userRole': userRole, // finder/maker only
-      'image': image,
-      'about': about,
-      'kyc_completed': kycCompleted,
-      'rating': rating,
-      'completedCount': completedCount,
-      'reviewsCount': reviewsCount,
-      'location': location,
-      'priceText': priceText,
-      'price': price,
-      'companyName': companyName,
-      'companyContact': companyContact,
-    }..removeWhere((k, v) => v == null);
+      // ✅ নতুন ফিল্ড ম্যাপ করা
+      experience: (map['experience'] is num) ? (map['experience'] as num).toDouble() : null,
+      gender: map['gender']?.toString(),
+      languages: (map['languages'] as List?)?.map((e) => e.toString()).toList(),
+      isLive: map['isLive'] == true,
+      isTrusted: map['isTrusted'] == true,
+      isPromoted: map['isPromoted'] == true,
+      phone: map['phone']?.toString(),
+    );
   }
 }

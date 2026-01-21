@@ -1,6 +1,9 @@
+// lib/screens/tabs/completed_work_tab.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
@@ -40,7 +43,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
 
   Future<void> _refresh() async {
     setState(() {});
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 500));
   }
 
   @override
@@ -60,6 +63,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
 
     return RefreshIndicator(
       onRefresh: _refresh,
+      color: AppColors.brandMain,
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
@@ -68,47 +72,23 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
             final isIndex = err.contains('FAILED_PRECONDITION') || err.contains('index');
             return ListView(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    isIndex
-                        ? "Firestore index required.\nFirestore Console → Indexes এ গিয়ে index create করুন.\n\n$err"
-                        : "Something went wrong.\n\n$err",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
+                _buildErrorState(isIndex ? "Index Building... Please wait 5 mins." : "Error: $err"),
               ],
             );
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(strokeWidth: 2));
           }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return ListView(
-              children: const [
-                SizedBox(height: 120),
-                Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.work_outline, size: 80, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text("No completed jobs yet", style: TextStyle(fontSize: 18, color: Colors.grey)),
-                      SizedBox(height: 8),
-                      Text("Complete jobs from 'Work in Progress' tab", style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                ),
-              ],
-            );
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return _buildEmptyState();
           }
-
-          final docs = snapshot.data!.docs;
 
           return ListView.builder(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 100),
+            physics: const BouncingScrollPhysics(),
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final doc = docs[index];
@@ -127,77 +107,43 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
         required Map<String, dynamic> job,
         required String currentUid,
       }) {
-    final receiverId = _s(job['receiverId']).trim(); // finder
-    final workerId = _s(job['workerId']).trim();     // supporter
-
-    // other person based on who is viewing
+    final receiverId = _s(job['receiverId']).trim();
+    final workerId = _s(job['workerId']).trim();
     final otherUserId = (currentUid == workerId) ? receiverId : workerId;
 
     final completedAt = _asDate(job['completedAt']);
     final timeAgo = _getTimeAgo(completedAt);
 
-    // job common fields
-    final address = _s(job['location'], 'Not provided');
-    final price = _s(job['price'], _s(job['offerPrice'], 'Negotiable'));
+    final address = _s(job['location'], 'Location Hidden');
+    final price = _s(job['price'] ?? job['offerPrice'], 'Negotiable');
 
-    // Try denormalized fields first:
-    final String otherNameFromDoc = (currentUid == workerId)
-        ? _s(job['receiverName'])
-        : _s(job['workerName']);
-
-    final String otherImageFromDoc = (currentUid == workerId)
-        ? _s(job['receiverImage'])
-        : _s(job['workerImage']);
-
-    final String otherRoleFromDoc = (currentUid == workerId)
-        ? _s(job['receiverRole'])
-        : _s(job['workerRole']);
-
-    final needUserFetch = otherUserId.isNotEmpty &&
-        (otherNameFromDoc.isEmpty || otherRoleFromDoc.isEmpty || otherImageFromDoc.isEmpty);
+    // Denormalized fallback
+    final String otherNameFromDoc = (currentUid == workerId) ? _s(job['receiverName']) : _s(job['workerName']);
+    final String otherImageFromDoc = (currentUid == workerId) ? _s(job['receiverImage']) : _s(job['workerImage']);
+    final String otherRoleFromDoc = (currentUid == workerId) ? _s(job['receiverRole']) : _s(job['workerRole']);
 
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: needUserFetch ? _db.collection('users').doc(otherUserId).get() : Future.value(null),
+      future: (otherNameFromDoc.isEmpty || otherImageFromDoc.isEmpty)
+          ? _db.collection('users').doc(otherUserId).get()
+          : Future.value(null),
       builder: (context, snap) {
-        String name = otherNameFromDoc.isNotEmpty ? otherNameFromDoc : 'Unknown';
-        String role = otherRoleFromDoc.isNotEmpty ? otherRoleFromDoc : 'User';
+        String name = otherNameFromDoc.isNotEmpty ? otherNameFromDoc : 'User';
+        String role = otherRoleFromDoc.isNotEmpty ? otherRoleFromDoc : 'Member';
         String imageUrl = otherImageFromDoc;
-
-        // extra stats (optional)
-        int completedCount = _asInt(job['completedCount']);
-        int reviewsCount = _asInt(job['reviewsCount']);
-        int followersCount = _asInt(job['followersCount']);
-        double ratingVal = _asDouble(job['rating']);
 
         if (snap.data != null && snap.data!.exists) {
           final u = snap.data!.data() ?? {};
-          name = (name == 'Unknown') ? _s(u['name'], _s(u['fullName'], 'Unknown')) : name;
-          role = (role == 'User') ? _s(u['userRole'], _s(u['role'], 'User')) : role;
-          imageUrl = imageUrl.isEmpty ? _s(u['image'], _s(u['photoUrl'], '')) : imageUrl;
-
-          // If job doc doesn't have these, take from user doc
-          completedCount = completedCount == 0 ? _asInt(u['completedCount']) : completedCount;
-          reviewsCount = reviewsCount == 0 ? _asInt(u['reviewsCount']) : reviewsCount;
-          followersCount = followersCount == 0 ? _asInt(u['followersCount']) : followersCount;
-          ratingVal = ratingVal == 0 ? _asDouble(u['rating']) : ratingVal;
+          name = _s(u['name'] ?? u['fullName'], name);
+          role = _s(u['userRole'] ?? u['role'], role);
+          imageUrl = _s(u['image'] ?? u['imageUrl'], imageUrl);
         }
 
-        final ratingStr = ratingVal.toStringAsFixed(1);
-        final isVerified = (job['isVerified'] == true) || (completedCount >= 50);
-        final isTopRated = ratingVal >= 4.7;
-
         return Container(
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             color: Theme.of(context).cardColor,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
           ),
           child: Column(
             children: [
@@ -207,81 +153,46 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                 role: role,
                 imageUrl: imageUrl,
                 address: address,
-                rating: ratingStr,
-                completed: completedCount.toString(),
-                reviews: reviewsCount.toString(),
+                rating: _asDouble(job['rating'], fallback: 4.8).toStringAsFixed(1),
+                completed: _asInt(job['completedCount']).toString(),
+                reviews: _asInt(job['reviewsCount']).toString(),
                 price: price,
                 time: timeAgo,
-                isVerifiedWorker: isVerified,
-                isTopRated: isTopRated,
-                followersCount: followersCount,
+                isVerifiedWorker: job['isVerified'] == true,
+                followersCount: _asInt(job['followersCount']),
                 margin: EdgeInsets.zero,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                ),
-                onTap: () {
-                  if (otherUserId.isEmpty) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false),
-                    ),
-                  );
-                },
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                onTap: () => _openProfile(otherUserId),
                 onChatTap: () => _connectAgain(context, otherUserId, name, role, imageUrl),
-                onViewProfileTap: () {
-                  if (otherUserId.isEmpty) return;
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false),
-                    ),
-                  );
-                },
               ),
 
-              Container(
-                padding: const EdgeInsets.all(16),
+              Padding(
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: otherUserId.isEmpty
-                            ? null
-                            : () => _showReviewDialog(
-                          context,
-                          jobId: jobId,
-                          revieweeId: otherUserId,
-                          revieweeName: name,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showReviewDialog(context, jobId: jobId, targetId: otherUserId, targetName: name),
+                        icon: const Icon(Icons.rate_review_outlined, size: 18),
+                        label: const Text("Review"),
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          foregroundColor: Colors.grey.shade700,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[100],
-                          foregroundColor: Colors.grey[800],
-                          minimumSize: const Size(0, 48),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        icon: const Icon(Icons.rate_review_outlined, size: 20),
-                        label: const Text("Review", style: TextStyle(fontWeight: FontWeight.w500)),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: otherUserId.isEmpty
-                            ? null
-                            : () => _connectAgain(context, otherUserId, name, role, imageUrl),
+                        onPressed: () => _connectAgain(context, otherUserId, name, role, imageUrl),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text("Connect"),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.brandMain,
                           foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 48),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
                         ),
-                        icon: const Icon(Icons.repeat_outlined, size: 20),
-                        label: const Text("Connect Again", style: TextStyle(fontWeight: FontWeight.w500)),
                       ),
                     ),
                   ],
@@ -294,166 +205,133 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     );
   }
 
-  Future<void> _connectAgain(
-      BuildContext context,
-      String otherUserId,
-      String name,
-      String role,
-      String imageUrl,
-      ) async {
-    try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-
-      final convId = await FirestoreChatService.getOrCreateConversation(
-        otherUserId: otherUserId,
-      );
-
-      if (!context.mounted) return;
-      Navigator.pop(context); // Close loader
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(
-            conversationId: convId,
-            userName: name,
-            userRole: role,
-            userImage: imageUrl,
-          ),
+  void _openProfile(String uid) {
+    if (uid.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UnifiedProfileScreen(
+          uid: uid,
+          isOwner: false,
+          showBack: true, // ✅ এই লাইনটি যোগ করুন
         ),
-      );
+      ),
+    );
+  }
+
+  Future<void> _connectAgain(BuildContext context, String otherId, String name, String role, String img) async {
+    HapticFeedback.lightImpact();
+    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherId);
+      if (!context.mounted) return;
+      Navigator.pop(context);
+
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
+        conversationId: convId,
+        userName: name,
+        userRole: role,
+        userImage: img,
+      )));
     } catch (e) {
-      if (context.mounted) Navigator.pop(context); // Close loader if error
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Could not connect: $e")),
-        );
+      if (context.mounted) Navigator.pop(context);
+      _showToast(context, "Connect failed: $e", isError: true);
+    }
+  }
+
+  Future<void> _showReviewDialog(BuildContext context, {required String jobId, required String targetId, required String targetName}) async {
+    final myUid = _auth.currentUser?.uid;
+    if (myUid == null) return;
+
+    final controller = TextEditingController();
+    double rating = 5.0;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Rate $targetName"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (i) => IconButton(
+                  icon: Icon(i < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: Colors.amber, size: 32),
+                  onPressed: () => setModalState(() => rating = i + 1.0),
+                )),
+              ),
+              TextField(
+                controller: controller,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Write your experience...",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Submit")),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _db.collection('reviews').add({
+          'fromUserId': myUid,        // ✅ Schema match
+          'targetUserId': targetId,   // ✅ Schema match
+          'jobId': jobId,
+          'rating': rating,
+          'comment': controller.text.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'isAnonymous': "false",
+        });
+        if (context.mounted) _showToast(context, "Review submitted!");
+      } catch (e) {
+        if (context.mounted) _showToast(context, "Failed: $e", isError: true);
       }
     }
   }
 
-  Future<void> _showReviewDialog(
-      BuildContext context, {
-        required String jobId,
-        required String revieweeId,
-        required String revieweeName,
-      }) async {
-    final reviewerId = _auth.currentUser?.uid;
-    if (reviewerId == null) return;
-
-    final reviewController = TextEditingController();
-    double selectedRating = 5.0;
-
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text("Leave a Review"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    revieweeName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text("Rating:"),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        icon: Icon(
-                          index < selectedRating ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 32,
-                        ),
-                        onPressed: () => setState(() => selectedRating = index + 1.0),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text("Your Review:"),
-                  TextField(
-                    controller: reviewController,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: "How was your experience?",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain),
-                child: const Text("Submit Review"),
-              ),
-            ],
-          );
-        },
+  // --- UI Static Helpers ---
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.assignment_turned_in_outlined, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          const Text("No completed jobs yet", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.grey)),
+          const Text("Finished jobs will appear here.", style: TextStyle(color: Colors.grey)),
+        ],
       ),
-    ) ??
-        false;
+    );
+  }
 
-    if (submitted != true) {
-      reviewController.dispose();
-      return;
-    }
+  Widget _buildErrorState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Text(msg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+      ),
+    );
+  }
 
-    try {
-      await _db.collection('reviews').add({
-        'reviewerId': reviewerId,
-        'revieweeId': revieweeId,
-        'jobId': jobId,
-        'rating': selectedRating,
-        'comment': reviewController.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Review submitted successfully!"), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to submit review: $e"), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      reviewController.dispose();
-    }
+  void _showToast(BuildContext context, String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green));
   }
 
   String _getTimeAgo(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 365) {
-      final years = (difference.inDays / 365).floor();
-      return '$years year${years > 1 ? 's' : ''} ago';
-    } else if (difference.inDays > 30) {
-      final months = (difference.inDays / 30).floor();
-      return '$months month${months > 1 ? 's' : ''} ago';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
-    } else {
-      return 'Just now';
-    }
+    final diff = DateTime.now().difference(date);
+    if (diff.inDays > 0) return "${diff.inDays}d ago";
+    if (diff.inHours > 0) return "${diff.inHours}h ago";
+    if (diff.inMinutes > 0) return "${diff.inMinutes}m ago";
+    return "Just now";
   }
 }

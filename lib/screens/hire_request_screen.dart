@@ -2,12 +2,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
-import 'package:findus_app/services/notification_service.dart'; // optional push
+import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class HireRequestScreen extends StatefulWidget {
@@ -34,32 +35,24 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
   Future<void> _sendRequest() async {
     final details = _detailsController.text.trim();
     if (details.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please describe your problem briefly")),
-      );
+      _showSnackbar("Please describe your problem briefly", isError: true);
       return;
     }
 
-    final finderId = widget.worker.uid.trim(); // receiver
+    final finderId = widget.worker.uid.trim();
     if (finderId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Worker user ID missing")),
-      );
+      _showSnackbar("Worker user ID missing", isError: true);
       return;
     }
 
     final supporter = FirebaseAuth.instance.currentUser;
     if (supporter == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please login again")),
-      );
+      _showSnackbar("Please login again", isError: true);
       return;
     }
 
     if (supporter.uid == finderId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You cannot send request to yourself")),
-      );
+      _showSnackbar("You cannot send request to yourself", isError: true);
       return;
     }
 
@@ -74,22 +67,24 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
         details: details,
       );
 
-      // Optional: Push/FCM (যদি আপনার NotificationService push পাঠায়)
-      // Firestore notification already created above, তাই এটা fail হলেও request success থাকবে।
+      // ✅ Notification with correct parameters
       try {
         await NotificationService.sendNotificationToUser(
           toUserId: finderId,
           title: "New hire request",
           body: "You have a new ${_selectedWorkType.toLowerCase()} hire request.",
           type: "hire_request",
-          status: "pending",
+          relatedPostId: requestId, // Linking request ID
           data: {
             'requestId': requestId,
             'workType': _selectedWorkType,
             'offerPrice': _offerPrice.toInt(),
+            'status': "pending", // ✅ Moved status inside data map
           },
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint("Push notification failed: $e");
+      }
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -97,9 +92,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send request.\n$e")),
-      );
+      _showSnackbar("Failed to send request.\n$e", isError: true);
     }
   }
 
@@ -112,46 +105,41 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
   }) async {
     final db = FirebaseFirestore.instance;
 
-    // ✅ supporter profile data (denormalize)
+    // Fetch supporter profile data
     final userSnap = await db.collection('users').doc(supporterId).get();
     final u = userSnap.data() ?? <String, dynamic>{};
 
-    final supporterName =
-    (u['name'] ?? u['fullName'] ?? u['displayName'] ?? 'User').toString();
-    final supporterImage =
-    (u['imageUrl'] ?? u['photoUrl'] ?? u['image'] ?? '').toString();
-    final supporterRole =
-    (u['userRole'] ?? u['role'] ?? 'supporter').toString();
+    final supporterName = (u['name'] ?? u['fullName'] ?? 'User').toString();
+    final supporterImage = (u['imageUrl'] ?? u['image'] ?? '').toString();
+    final supporterRole = (u['userRole'] ?? 'supporter').toString();
     final supporterRating = (u['rating'] is num) ? (u['rating'] as num).toDouble() : 0.0;
 
-    // ✅ 1) hire_requests create
-    final reqRef = db.collection('hire_requests').doc(); // auto id
+    // 1) Create Hire Request
+    final reqRef = db.collection('hire_requests').doc();
     await reqRef.set({
+      'requestId': reqRef.id,
       'senderId': supporterId,
       'senderName': supporterName,
       'senderRole': supporterRole,
       'senderImage': supporterImage,
       'rating': supporterRating,
-
       'receiverId': finderId,
       'status': 'pending',
-
       'workType': workType,
       'offerPrice': offerPrice.toInt(),
       'details': details,
-
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // ✅ 2) notifications create (rules অনুযায়ী fromUserId must be auth.uid)
+    // 2) Create In-App Notification
     await db.collection('notifications').add({
       'toUserId': finderId,
       'fromUserId': supporterId,
       'type': 'hire_request',
       'title': 'New hire request',
       'body': 'WorkType: $workType, Offer: ৳${offerPrice.toInt()}',
-      'requestId': reqRef.id,
+      'relatedPostId': reqRef.id,
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -161,7 +149,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
   void _showSuccessBottomSheet({required String requestId}) {
     final rootNav = Navigator.of(context, rootNavigator: true);
-    final worker = widget.worker; // capture before pops
+    final worker = widget.worker;
     final otherUid = worker.uid.trim();
 
     showModalBottomSheet(
@@ -169,16 +157,13 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetCtx) => Container(
-        height: 400,
+        padding: const EdgeInsets.all(24),
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(30),
-            topRight: Radius.circular(30),
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(20),
@@ -186,13 +171,13 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                 color: Colors.green.shade50,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_circle, color: Colors.green, size: 80),
+              child: const Icon(Icons.check_circle, color: Colors.green, size: 60),
             ),
             const SizedBox(height: 20),
             const Text(
               "Request Sent!",
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: AppColors.brandDark,
               ),
@@ -203,54 +188,42 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
-            const SizedBox(height: 10),
-            Text(
-              "Request ID: $requestId",
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(sheetCtx); // Close sheet
 
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    // close sheet first
-                    Navigator.pop(sheetCtx);
+                  if (otherUid.isEmpty) return;
 
-                    if (otherUid.isEmpty) return;
+                  final cid = await FirestoreChatService.getOrCreateConversation(
+                    otherUserId: otherUid,
+                  );
 
-                    final cid = await FirestoreChatService.getOrCreateConversation(
-                      otherUserId: otherUid,
-                    );
+                  if (rootNav.canPop()) rootNav.pop(); // Close Request Screen
 
-                    // close HireRequestScreen (optional)
-                    if (rootNav.canPop()) rootNav.pop();
-
-                    // push chat from root navigator
-                    if (!rootNav.context.mounted) return;
-                    rootNav.push(
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          conversationId: cid,
-                          userName: worker.name,
-                          userRole: worker.userRole,
-                          userImage: worker.image,
-                        ),
+                  if (!rootNav.context.mounted) return;
+                  rootNav.push(
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        conversationId: cid,
+                        userName: worker.name,
+                        userRole: worker.userRole,
+                        userImage: worker.image,
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandMain,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  ),
-                  child: const Text(
-                    "Go to Chat",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text(
+                  "Go to Chat",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -260,16 +233,24 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     );
   }
 
+  void _showSnackbar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasImg = widget.worker.image.trim().isNotEmpty;
-
     return FloatingScaffold(
       title: "Hire Details",
       backgroundColor: AppColors.brandLight,
       titleColor: AppColors.brandDark,
       iconColor: AppColors.brandDark,
-      scrollable: false, // ✅ avoid double scroll
+      scrollable: false, // Prevent double scroll
       bodyPadding: EdgeInsets.zero,
       body: Container(
         color: AppColors.brandLight,
@@ -278,46 +259,8 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Worker info card
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                ),
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: hasImg
-                        ? Image.network(
-                      widget.worker.image,
-                      height: 60,
-                      width: 60,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _fallbackAvatar(),
-                    )
-                        : _fallbackAvatar(),
-                  ),
-                  title: Text(
-                    "Hiring ${widget.worker.name}",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark,
-                    ),
-                  ),
-                  subtitle: Text(
-                    widget.worker.userRole,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ),
-              ),
+              // Worker Info Card
+              _buildWorkerInfoCard(),
 
               const SizedBox(height: 25),
 
@@ -358,6 +301,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
               const SizedBox(height: 25),
 
+              // Price Slider
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -371,25 +315,25 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
-
+              const SizedBox(height: 10),
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   activeTrackColor: AppColors.brandMain,
-                  inactiveTrackColor: AppColors.brandLight,
+                  inactiveTrackColor: Colors.grey.shade300,
                   thumbColor: AppColors.brandDark,
                   overlayColor: AppColors.brandMain.withOpacity(0.2),
+                  trackHeight: 6.0,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10.0),
                 ),
                 child: Slider(
                   value: _offerPrice,
                   min: 50,
-                  max: 2000,
-                  divisions: 39, // step ~50
+                  max: 5000,
+                  divisions: 99,
                   label: _offerPrice.round().toString(),
                   onChanged: (v) => setState(() => _offerPrice = v),
                 ),
               ),
-
               Center(
                 child: Text(
                   "Base Charge starts from ${widget.worker.priceText}",
@@ -399,6 +343,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
               const SizedBox(height: 40),
 
+              // Send Button
               SizedBox(
                 width: double.infinity,
                 height: 55,
@@ -411,7 +356,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                     elevation: 5,
                   ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
+                      ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
                       : const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -422,6 +367,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -429,12 +375,56 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     );
   }
 
-  Widget _fallbackAvatar() {
+  Widget _buildWorkerInfoCard() {
     return Container(
-      height: 60,
-      width: 60,
-      color: Colors.grey.shade200,
-      child: const Icon(Icons.person, color: Colors.grey, size: 32),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: CachedNetworkImage(
+              imageUrl: widget.worker.image,
+              height: 60,
+              width: 60,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => Container(color: Colors.grey[200]),
+              errorWidget: (context, url, error) => Container(
+                color: Colors.grey[200],
+                child: const Icon(Icons.person, color: Colors.grey),
+              ),
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Hiring ${widget.worker.name}",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandDark,
+                  ),
+                ),
+                Text(
+                  widget.worker.userRole.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -443,20 +433,25 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedWorkType = value),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? AppColors.brandMain : Colors.white,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected ? AppColors.brandMain : Colors.grey.shade300,
+              width: isSelected ? 0 : 1,
             ),
+            boxShadow: isSelected
+                ? [BoxShadow(color: AppColors.brandMain.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                : [],
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey,
+                color: isSelected ? Colors.white : Colors.grey[600],
                 fontWeight: FontWeight.bold,
               ),
             ),

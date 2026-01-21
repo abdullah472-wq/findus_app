@@ -1,11 +1,16 @@
+// lib/screens/tabs/review_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/services/review_service.dart';
-import 'package:findus_app/services/notification_service.dart'; // Notification service import
+import 'package:findus_app/services/notification_service.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class ReviewScreen extends StatefulWidget {
-  final String workerId;     // যার উপর review দিচ্ছো (UID)
-  final String postId;       // কোন job/post এর জন্য
+  final String workerId;     // যার উপর review দিচ্ছো (targetUserId)
+  final String postId;
   final String workerName;
   final String role;
   final String imageUrl;
@@ -27,17 +32,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
   double _rating = 0.0;
   final TextEditingController _commentController = TextEditingController();
 
-  // Quick feedback tags
-  final List<String> _tags = [
-    "On time",
-    "Polite",
-    "Skilled",
-    "Clean work",
-    "Value for money",
-    "Not satisfied",
-  ];
+  final List<String> _tags = ["On time", "Polite", "Skilled", "Clean work", "Value for money", "Not satisfied"];
   final Set<String> _selectedTags = {};
-
   bool _wouldHireAgain = true;
   bool _isSaving = false;
 
@@ -48,244 +44,127 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   String get _ratingLabel {
-    if (_rating >= 4.5) return "Excellent";
-    if (_rating >= 3.5) return "Good";
-    if (_rating >= 2.5) return "Average";
-    if (_rating >= 1.5) return "Poor";
-    if (_rating > 0) return "Very Bad";
+    if (_rating >= 4.5) return "Excellent! 😍";
+    if (_rating >= 3.5) return "Good Work! 🙂";
+    if (_rating >= 2.5) return "Average 😐";
+    if (_rating > 0) return "Needs Improvement ☹️";
     return "Tap a star to rate";
-  }
-
-  void _toggleTag(String tag) {
-    setState(() {
-      if (_selectedTags.contains(tag)) {
-        _selectedTags.remove(tag);
-      } else {
-        _selectedTags.add(tag);
-      }
-    });
   }
 
   Future<void> _submitReview() async {
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please give a star rating first."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showSnack("Please select a star rating", Colors.orange);
       return;
     }
 
     setState(() => _isSaving = true);
+    HapticFeedback.mediumImpact();
 
     try {
-      // extra comment এর সাথে tags + hireAgain information জুড়ে দিচ্ছি
+      // ১. কমেন্টের সাথে ট্যাগগুলো যুক্ত করা
       final baseComment = _commentController.text.trim();
-      final extraParts = <String>[];
-
+      String fullComment = baseComment;
       if (_selectedTags.isNotEmpty) {
-        extraParts.add("Tags: ${_selectedTags.join(', ')}");
+        fullComment += "\n\nFeedback: ${_selectedTags.join(', ')}";
       }
-      extraParts.add(
-        "Would hire again: ${_wouldHireAgain ? "Yes" : "No"}",
-      );
 
-      final fullComment = [
-        baseComment,
-        ...extraParts,
-      ].where((s) => s.isNotEmpty).join("\n");
-
-      // 🔹 ১) আগে Firestore এ review save
+      // ২. Firestore এ রিভিউ সেভ (ReviewService অনুযায়ী ফিক্সড)
       await ReviewService.addReview(
         targetUserId: widget.workerId,
+        // ❌ 'fromUserId' রিমুভ করা হয়েছে (এটি সার্ভিস ক্লাসে অটোমেটিক হ্যান্ডেল হয়)
         postId: widget.postId,
         rating: _rating,
         comment: fullComment,
-        targetRole: 'worker',     // এই screen থেকে শুধু worker রিভিউ ধরলাম
-        fromRole: 'supporter',    // সাধারণত supporter থেকেই worker কে রিভিউ
-        isAnonymous: false,       // future এ চাইলে UI তে checkbox দিয়ে নেবে
+        targetRole: 'worker',
+        fromRole: 'supporter',
+        isAnonymous: false, // ✅ কোটেশন ছাড়া শুধু false (Boolean type)
       );
 
-      // 🔹 ২) তারপর worker এর জন্য `review` টাইপ notification
-      await NotificationService.sendNotificationToUser(
-        toUserId: widget.workerId,        // যাকে রিভিউ দেওয়া হয়েছে (worker)
-        title: "New review received",
-        body: "You received a ${_rating.toStringAsFixed(1)}★ review for a recent job.",
+      // ৩. নোটিফিকেশন পাঠানো
+      final myUid = FirebaseAuth.instance.currentUser?.uid;
+      await NotificationService.sendNotification(
+        toUserId: widget.workerId,
+        fromUserId: myUid ?? 'system',
+        title: "New Review Received! ⭐",
+        body: "You received a ${_rating.toStringAsFixed(1)} star review for your work.",
         type: "review",
-        relatedPostId: widget.postId,     // কোন কাজের জন্য রিভিউ
-        data: {
-          'rating': _rating,
-          'comment': fullComment,
-          'tags': _selectedTags.toList(),
-          'wouldHireAgain': _wouldHireAgain,
-        },
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Review submitted successfully."),
-          backgroundColor: AppColors.brandMain,
-        ),
-      );
+      _showSnack("Review submitted successfully!", Colors.green);
       Navigator.pop(context);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Failed to submit review: $e"),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showSnack("Error: $e", Colors.red);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE0F7FA),
-      appBar: AppBar(
-        title: const Text(
-          "Rate & Review",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // উপরের অংশ স্ক্রলেবল
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildWorkerHeader(),
-                    const SizedBox(height: 20),
-                    _buildRatingSection(),
-                    const SizedBox(height: 20),
-                    _buildTagSection(),
-                    const SizedBox(height: 20),
-                    _buildCommentBox(),
-                    const SizedBox(height: 20),
-                    _buildHireAgainToggle(),
-                  ],
-                ),
-              ),
-            ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-            // নিচে Submit বাটন
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, -3),
-                  )
+    return FloatingScaffold(
+      title: "SUBMIT REVIEW",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      bodyPadding: EdgeInsets.zero,
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  _buildHeader(isDark),
+                  const SizedBox(height: 25),
+                  _buildStarPicker(isDark),
+                  const SizedBox(height: 25),
+                  _buildTagSelection(isDark),
+                  const SizedBox(height: 25),
+                  _buildCommentInput(isDark),
+                  const SizedBox(height: 20),
+                  _buildHireAgainSwitch(isDark),
+                  const SizedBox(height: 100),
                 ],
               ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: _isSaving ? null : _submitReview,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandMain,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isSaving
-                      ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                      : const Text(
-                    "SUBMIT REVIEW",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
             ),
-          ],
-        ),
+          ),
+          _buildSubmitButton(),
+        ],
       ),
     );
   }
 
-  // --------- UI সেকশনগুলো ---------
-
-  Widget _buildWorkerHeader() {
+  Widget _buildHeader(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          )
-        ],
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
       ),
       child: Row(
         children: [
           CircleAvatar(
+            radius: 30,
             backgroundImage: NetworkImage(widget.imageUrl),
-            radius: 26,
-            onBackgroundImageError: (_, __) => const Icon(Icons.person), // Error handling for image
-            backgroundColor: Colors.grey[200],
+            backgroundColor: Colors.grey.shade200,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.workerName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  widget.role.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  "Rate this completed work",
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                ),
+                Text(widget.workerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(widget.role.toUpperCase(), style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -294,86 +173,55 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildRatingSection() {
+  Widget _buildStarPicker(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.brandLight.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         children: [
-          const Text(
-            "How was your experience?",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 10),
+          Text(_ratingLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              5,
-                  (i) => IconButton(
-                onPressed: () {
-                  setState(() => _rating = i + 1.0);
-                },
-                icon: Icon(
-                  Icons.star,
-                  size: 32,
-                  color: i < _rating ? Colors.amber : Colors.grey[300],
-                ),
+            children: List.generate(5, (i) => IconButton(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                setState(() => _rating = i + 1.0);
+              },
+              icon: Icon(
+                i < _rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: 40, color: i < _rating ? Colors.amber : Colors.grey.shade300,
               ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _ratingLabel,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black87,
-            ),
+            )),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTagSection() {
+  Widget _buildTagSelection(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Quick feedback (optional)",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.brandDark,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 8),
+        const Text("Quick Feedback", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 12),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 10, runSpacing: 10,
           children: _tags.map((tag) {
-            final bool selected = _selectedTags.contains(tag);
+            final isSelected = _selectedTags.contains(tag);
             return ChoiceChip(
-              label: Text(
-                tag,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: selected ? Colors.white : AppColors.brandDark,
-                ),
-              ),
-              selected: selected,
+              label: Text(tag),
+              selected: isSelected,
+              onSelected: (v) {
+                HapticFeedback.selectionClick();
+                setState(() => v ? _selectedTags.add(tag) : _selectedTags.remove(tag));
+              },
               selectedColor: AppColors.brandMain,
-              backgroundColor: Colors.white,
-              side: BorderSide(
-                color: selected ? AppColors.brandMain : Colors.grey.shade300,
-              ),
-              onSelected: (_) => _toggleTag(tag),
+              labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontSize: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             );
           }).toList(),
         ),
@@ -381,59 +229,57 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildCommentBox() {
+  Widget _buildCommentInput(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "Write your review",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.brandDark,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 8),
+        const Text("Write a Comment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 10),
         TextField(
           controller: _commentController,
           maxLines: 4,
           decoration: InputDecoration(
-            hintText: "Describe your experience (optional)...",
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+            hintText: "Tell others about your experience...",
             filled: true,
-            fillColor: Colors.white,
+            fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildHireAgainToggle() {
+  Widget _buildHireAgainSwitch(bool isDark) {
     return Container(
-      margin: const EdgeInsets.only(top: 4),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: SwitchListTile(
         value: _wouldHireAgain,
-        activeColor: AppColors.brandMain,
         onChanged: (v) => setState(() => _wouldHireAgain = v),
-        title: const Text(
-          "Would you hire this worker again?",
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: AppColors.brandDark,
-            fontSize: 14,
-          ),
+        title: const Text("Would hire again?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        activeColor: AppColors.brandMain,
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: Colors.transparent,
+      child: ElevatedButton(
+        onPressed: _isSaving ? null : _submitReview,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.brandDark,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 56),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 5,
         ),
-        subtitle: Text(
-          _wouldHireAgain ? "Yes, I would hire again" : "No, I won't hire again",
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-        ),
+        child: _isSaving
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text("SUBMIT REVIEW", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
       ),
     );
   }

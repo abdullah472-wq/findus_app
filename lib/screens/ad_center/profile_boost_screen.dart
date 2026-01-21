@@ -1,6 +1,10 @@
+// lib/screens/ad_center/profile_boost_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/wallet/payment_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class ProfileBoostScreen extends StatefulWidget {
   const ProfileBoostScreen({super.key});
@@ -10,142 +14,137 @@ class ProfileBoostScreen extends StatefulWidget {
 }
 
 class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
-  int _selectedDays = 3; // 1 / 3 / 7
-  String _targetArea = "nearby"; // nearby / city
+  int _selectedDays = 3;
+  String _targetArea = "nearby";
 
-  int get _basePerDayNearby => 30; // demo cost per day
-  int get _basePerDayCity => 50;
+  // প্রাইসিং কনফিগ
+  final Map<int, int> _pricesNearby = {1: 30, 3: 80, 7: 180};
+  final Map<int, int> _pricesCity = {1: 50, 3: 130, 7: 280};
 
   int get _totalCost {
-    final perDay =
-    _targetArea == "city" ? _basePerDayCity : _basePerDayNearby;
-    return perDay * _selectedDays;
+    return _targetArea == "city" ? _pricesCity[_selectedDays]! : _pricesNearby[_selectedDays]!;
   }
 
   int get _estimatedViews {
-    final baseViewsPerDay = 120;
-    final multiplier = _targetArea == "city" ? 1.5 : 1.0;
-    return (baseViewsPerDay * _selectedDays * multiplier).round();
+    final base = _selectedDays * 120;
+    return _targetArea == "city" ? (base * 1.5).round() : base;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      appBar: AppBar(
-        backgroundColor: AppColors.brandLight,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        title: const Text(
-          "Promote Profile",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildDurationCard(),
-                  const SizedBox(height: 16),
-                  _buildTargetAreaCard(),
-                  const SizedBox(height: 16),
-                  _buildSummaryCard(),
-                ],
-              ),
-            ),
-          ),
-          _buildBottomConfirmBar(context),
-        ],
-      ),
-    );
-  }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-  Widget _buildDurationCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
+    return FloatingScaffold(
+      title: "BOOST PROFILE",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: true,
+      bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Select boost duration",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _durationChip(
-                1,
-                "1 day",
-                "৳${_targetArea == 'city' ? _basePerDayCity : _basePerDayNearby}",
-              ),
-              const SizedBox(width: 8),
-              _durationChip(3, "3 days", "Popular"),
-              const SizedBox(width: 8),
-              _durationChip(7, "7 days", "Best value"),
-            ],
-          ),
+          // ১. টপ প্রোমো ব্যানার
+          _buildPromoBanner(),
+
+          const SizedBox(height: 25),
+
+          // ২. ডিউরেশন সিলেকশন
+          const Text("Select Duration", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          _buildDurationOptions(isDark),
+
+          const SizedBox(height: 25),
+
+          // ৩. টার্গেট এরিয়া সিলেকশন
+          const Text("Target Audience", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          _buildTargetOptions(isDark),
+
+          const SizedBox(height: 25),
+
+          // ৪. ইমপ্যাক্ট ও সামারি কার্ড
+          _buildSummaryCard(isDark),
+
+          const SizedBox(height: 30),
+
+          // ৫. একশন বাটন
+          _buildConfirmButton(context),
+
+          const SizedBox(height: 100),
         ],
       ),
     );
   }
 
-  Widget _durationChip(int days, String label, String sub) {
-    final bool selected = _selectedDays == days;
+  Widget _buildPromoBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF38B6FF), Color(0xFF003F67)]),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Get 3x More Leads", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                SizedBox(height: 5),
+                Text("Your profile will appear on top of search results and home feed.", style: TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Icon(Icons.trending_up_rounded, color: Colors.white, size: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDurationOptions(bool isDark) {
+    return Row(
+      children: [
+        _durationCard(1, "1 Day", isDark, null),
+        const SizedBox(width: 10),
+        _durationCard(3, "3 Days", isDark, "POPULAR"),
+        const SizedBox(width: 10),
+        _durationCard(7, "7 Days", isDark, "BEST VALUE"),
+      ],
+    );
+  }
+
+  Widget _durationCard(int days, String label, bool isDark, String? tag) {
+    final isSelected = _selectedDays == days;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _selectedDays = days),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          setState(() => _selectedDays = days);
+        },
         child: Container(
-          padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 15),
           decoration: BoxDecoration(
-            color: selected ? AppColors.brandMain : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color:
-              selected ? AppColors.brandMain : Colors.grey.shade300,
-            ),
+            color: isSelected ? AppColors.brandMain : (isDark ? const Color(0xFF2C2C2C) : Colors.white),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.2), width: 2),
+            boxShadow: isSelected ? [BoxShadow(color: AppColors.brandMain.withOpacity(0.3), blurRadius: 10)] : [],
           ),
           child: Column(
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: selected ? Colors.white : AppColors.brandDark,
+              if (tag != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  margin: const EdgeInsets.only(bottom: 5),
+                  decoration: BoxDecoration(color: isSelected ? Colors.white24 : AppColors.brandMain.withOpacity(0.1), borderRadius: BorderRadius.circular(5)),
+                  child: Text(tag, style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppColors.brandMain)),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                sub,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: selected ? Colors.white70 : Colors.black54,
-                ),
-              ),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppColors.brandDark)),
+              Text("৳${_targetArea == 'city' ? _pricesCity[days] : _pricesNearby[days]}", style: TextStyle(fontSize: 10, color: isSelected ? Colors.white70 : Colors.grey)),
             ],
           ),
         ),
@@ -153,191 +152,130 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
     );
   }
 
-  Widget _buildTargetAreaCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Target area",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          RadioListTile<String>(
-            value: "nearby",
-            groupValue: _targetArea,
-            activeColor: AppColors.brandMain,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => _targetArea = v);
-            },
-            title: const Text(
-              "Nearby only",
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-            subtitle: const Text(
-              "Best for local workers & supporters around your current area.",
-              style: TextStyle(fontSize: 11),
-            ),
-          ),
-          RadioListTile<String>(
-            value: "city",
-            groupValue: _targetArea,
-            activeColor: AppColors.brandMain,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => _targetArea = v);
-            },
-            title: const Text(
-              "All city (wider reach)",
-              style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.bold),
-            ),
-            subtitle: const Text(
-              "Show your profile across the whole city. Higher cost but more views.",
-              style: TextStyle(fontSize: 11),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildTargetOptions(bool isDark) {
+    return Column(
+      children: [
+        _targetTile("nearby", "Nearby Only", "Reach workers/clients within 10km", Icons.location_on_rounded, isDark),
+        const SizedBox(height: 12),
+        _targetTile("city", "Whole City", "Expand your visibility across the entire city", Icons.location_city_rounded, isDark), // ✅ 'location_city_rounded' ব্যবহার করুন
+      ],
     );
   }
 
-  Widget _buildSummaryCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "Promotion summary",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _summaryRow("Duration", "$_selectedDays days"),
-          _summaryRow("Target",
-              _targetArea == "city" ? "All city" : "Nearby only"),
-          const Divider(height: 16),
-          _summaryRow("Estimated cost", "৳$_totalCost", bold: true),
-          _summaryRow("Estimated extra views",
-              "$_estimatedViews+", bold: true),
-          const SizedBox(height: 6),
-          const Text(
-            "This is a demo estimation. Actual performance may vary.",
-            style: TextStyle(fontSize: 11, color: Colors.black54),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryRow(String label, String value, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.black87,
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.brandDark,
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomConfirmBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 46,
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PaymentScreen(
-                  planId:
-                  'profile_boost_${_selectedDays}d_${_targetArea}',
-                  amount: _totalCost,
-                  duration: 0,
-                  purpose: PaymentPurpose.profileBoost,
-                  description:
-                  'Boost your profile for $_selectedDays days (${_targetArea == 'city' ? 'All city' : 'Nearby only'})',
-                  referenceId: null,
-                ),
-              ),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brandDark,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: const Text(
-            "CONFIRM PROMOTION",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
+  Widget _targetTile(String val, String title, String sub, IconData icon, bool isDark) {
+    final isSelected = _targetArea == val;
+    return InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() => _targetArea = val);
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandMain.withOpacity(0.05) : (isDark ? Colors.white.withOpacity(0.05) : Colors.white),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.1), width: 1.5),
         ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? AppColors.brandMain : Colors.grey),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                ],
+              ),
+            ),
+            Icon(isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded, color: isSelected ? AppColors.brandMain : Colors.grey.shade300),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Estimated Reach", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+              Text("$_estimatedViews+ Views", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          LinearProgressIndicator(value: _selectedDays / 7, backgroundColor: Colors.grey.shade100, color: AppColors.brandMain, minHeight: 8, borderRadius: BorderRadius.circular(10)),
+          const Divider(height: 40),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Total Investment", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("৳$_totalCost", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConfirmButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 58,
+      child: ElevatedButton(
+        onPressed: () {
+          HapticFeedback.mediumImpact();
+
+          // ✅ PaymentScreen এর বদলে ManualPaymentScreen কল করা হচ্ছে
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ManualPaymentScreen(
+                planId: 'PROFILE_BOOST_${_selectedDays}D_${_targetArea.toUpperCase()}',
+                amount: _totalCost,
+                duration: _selectedDays,
+                purpose: PaymentPurpose.profileBoost,
+                description: 'Boosting profile for $_selectedDays days.',
+              ),
+            ),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.brandDark,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 8,
+          shadowColor: AppColors.brandDark.withOpacity(0.4),
+        ),
+        child: const Text(
+          "ACTIVATE BOOST NOW",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccess(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Icon(Icons.verified_rounded, color: Colors.green, size: 60),
+        content: const Text("Your profile is now being promoted! 🚀", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [Center(child: ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.pop(context); }, child: const Text("DONE")))],
       ),
     );
   }

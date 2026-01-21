@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
@@ -24,7 +22,6 @@ import 'community_standards_screen.dart';
 import 'about_app_screen.dart';
 import 'package:findus_app/screens/ad_center/ad_center_screen.dart';
 import 'package:findus_app/screens/ad_center/analytics_screen.dart';
-import 'package:findus_app/screens/auth/login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

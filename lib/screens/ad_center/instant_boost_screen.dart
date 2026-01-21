@@ -1,6 +1,10 @@
+// lib/screens/ad_center/instant_boost_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/wallet/payment_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class InstantBoostScreen extends StatefulWidget {
   const InstantBoostScreen({super.key});
@@ -11,196 +15,229 @@ class InstantBoostScreen extends StatefulWidget {
 
 class _InstantBoostScreenState extends State<InstantBoostScreen> {
   final int _hours = 24;
-  final int _cost = 120;      // demo cost
-  final int _extraViews = 250; // demo estimate
+  final int _cost = 120;
+  final int _extraViews = 250;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgBlue,
-      appBar: AppBar(
-        backgroundColor: AppColors.brandLight,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        title: const Text(
-          "Instant Boost (24 hrs)",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildInfoCard(),
-                  const SizedBox(height: 16),
-                  _buildSummaryCard(),
-                ],
-              ),
-            ),
-          ),
-          _buildBottomBar(context),
-        ],
-      ),
-    );
-  }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-  Widget _buildInfoCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: const Column(
+    return FloatingScaffold(
+      title: "INSTANT BOOST",
+      backgroundColor: AppColors.brandLight,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: true,
+      bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            "24 hours instant boost",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
+          // ১. ফিচার এনিমেশন/আইকন কার্ড
+          _buildBoltHeader(isDark),
+
+          const SizedBox(height: 25),
+
+          // ২. বেনিফিট কার্ড
+          _buildBenefitCard(isDark),
+
+          const SizedBox(height: 20),
+
+          // ৩. প্রাইসিং ও সামারি কার্ড
+          _buildPricingSummary(isDark),
+
+          const SizedBox(height: 30),
+
+          // ৪. কনফার্ম বাটন
+          _buildConfirmButton(context),
+
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBoltHeader(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.orange.shade700, Colors.orange.shade400],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.bolt_rounded, color: Colors.white, size: 60),
+          const SizedBox(height: 15),
+          const Text(
+            "Get Instant Visibility",
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
           ),
-          SizedBox(height: 6),
+          const SizedBox(height: 5),
           Text(
-            "Perfect when you need results today. Your profile or jobs will get a short powerful boost.",
-            style: TextStyle(fontSize: 12, color: Colors.black87),
+            "Push your profile to the top for the next $_hours hours!",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCard() {
+  Widget _buildBenefitCard(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Boost summary",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.brandDark,
-            ),
-          ),
-          const SizedBox(height: 6),
-          _summaryRow("Duration", "$_hours hours"),
-          _summaryRow("Estimated extra views", "$_extraViews+"),
-          const Divider(height: 16),
-          _summaryRow("Boost cost", "৳$_cost", bold: true),
-          const SizedBox(height: 6),
-          const Text(
-            "Use this when you want a quick push for urgent hiring or urgent work.",
-            style: TextStyle(fontSize: 11, color: Colors.black54),
-          ),
+          const Text("Why Boost Now?", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 15),
+          _benefitRow(Icons.rocket_launch_rounded, "Top position in search results"),
+          _benefitRow(Icons.visibility_rounded, "Reach up to $_extraViews+ extra clients"),
+          _benefitRow(Icons.chat_bubble_rounded, "Higher chance of getting hired instantly"),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool bold = false}) {
+  Widget _benefitRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.black87,
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            ),
+          Icon(icon, size: 18, color: Colors.orange),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPricingSummary(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.orange.withOpacity(0.2), width: 1.5),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Boost Duration", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Text("$_hours Hours", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ],
           ),
-          const Spacer(),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.brandDark,
-              fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-            ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("Cost", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Text("৳$_cost", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: AppColors.brandMain)),
+            ],
+          ),
+          const Divider(height: 30),
+          const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  "This is a one-time non-recurring payment.",
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBottomBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 46,
-        child: ElevatedButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PaymentScreen(
-                  planId: 'instant_boost_24h',
-                  amount: _cost,          // int
-                  duration: 0,
-                  purpose: PaymentPurpose.profileBoost,
-                  description:
-                  'Instant 24-hour boost for urgent needs.',
-                  referenceId: null,
+  Widget _buildConfirmButton(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ManualPaymentScreen(
+                    planId: 'INSTANT_BOOST_24H',
+                    amount: 120,
+                    duration: 0,
+                    purpose: PaymentPurpose.profileBoost,
+                    description: 'Profile visibility for 24 hours',
+                  ),
                 ),
-              ),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brandDark,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandDark,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 5,
             ),
-          ),
-          child: const Text(
-            "CONFIRM BOOST",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+            child: const Text(
+              "CONFIRM & ACTIVATE",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
             ),
           ),
         ),
+        const SizedBox(height: 15),
+        const Text(
+          "Boost starts immediately after payment",
+          style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+        ),
+      ],
+    );
+  }
+
+  void _showSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 50),
+        content: const Text(
+          "Boost Activated! 🚀\nYour profile is now being promoted to more people around you.",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx); // Close dialog
+                Navigator.pop(context); // Close Boost Screen
+              },
+              child: const Text("AWESOME!"),
+            ),
+          )
+        ],
       ),
     );
   }

@@ -192,21 +192,33 @@ class _SaveScreenState extends State<SaveScreen> {
       followersCount: _asInt(data['followersCount']),
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
 
-      // ✅ Card Tap -> Open Profile
+      // ✅ কার্ডে ট্যাপ করলে প্রোফাইল ওপেন হবে (showBack: true যোগ করা হয়েছে)
       onTap: () {
         if (workerId.isEmpty) return;
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: workerId, isOwner: false)),
+          MaterialPageRoute(
+            builder: (_) => UnifiedProfileScreen(
+              uid: workerId,
+              isOwner: false,
+              showBack: true, // ✅ এখন আর এরর আসবে না
+            ),
+          ),
         );
       },
 
-      // ✅ View Profile Button -> Open Profile
+      // ✅ ভিউ প্রোফাইল বাটনে ট্যাপ করলে (showBack: true যোগ করা হয়েছে)
       onViewProfileTap: () {
         if (workerId.isEmpty) return;
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: workerId, isOwner: false)),
+          MaterialPageRoute(
+            builder: (_) => UnifiedProfileScreen(
+              uid: workerId,
+              isOwner: false,
+              showBack: true, // ✅ এখন আর এরর আসবে না
+            ),
+          ),
         );
       },
 
@@ -217,7 +229,7 @@ class _SaveScreenState extends State<SaveScreen> {
         try {
           final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: workerId);
           if (!mounted) return;
-          Navigator.pop(context); // Close loading
+          Navigator.pop(context);
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -230,15 +242,13 @@ class _SaveScreenState extends State<SaveScreen> {
             ),
           );
         } catch (_) {
-          if (mounted) Navigator.pop(context); // Close loading on error
+          if (mounted) Navigator.pop(context);
         }
       },
-
-      // ✅ Save Button -> Remove from Save
       isSaved: true,
       onSaveTap: () async {
         await SavedService.toggleSave(data);
-        setState(() {}); // Refresh UI
+        setState(() {});
       },
     );
   }

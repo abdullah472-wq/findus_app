@@ -6,13 +6,30 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+import 'package:findus_app/screens/settings/activation_screen.dart'; // ✅ সাকসেস হলে এখানে পাঠাবে
+
+enum PaymentPurpose {
+  subscription,
+  profileBoost,
+  workerPayment,
+  supporterPayment,
+}
 
 class ManualPaymentScreen extends StatefulWidget {
   final String planId;
   final int amount;
   final int duration;
+  final PaymentPurpose purpose;
+  final String description;
 
-  const ManualPaymentScreen({super.key, required this.planId, required this.amount, required this.duration});
+  const ManualPaymentScreen({
+    super.key,
+    required this.planId,
+    required this.amount,
+    required this.duration,
+    required this.purpose,
+    required this.description,
+  });
 
   @override
   State<ManualPaymentScreen> createState() => _ManualPaymentScreenState();
@@ -24,11 +41,11 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
   String _selectedMethod = 'bKash';
   bool _isSubmitting = false;
 
-  // আপনার পার্সোনাল নম্বরগুলো এখানে দিন
+  // ✅ আপনার পার্সোনাল নম্বরগুলো এখানে দিন
   final Map<String, String> _adminNumbers = {
-    'bKash': '017XXXXXXXX (Personal)',
-    'Nagad': '018XXXXXXXX (Personal)',
-    'Rocket': '019XXXXXXXX (Personal)',
+    'bKash': '017XXXXXXXX',
+    'Nagad': '018XXXXXXXX',
+    'Rocket': '019XXXXXXXX',
   };
 
   Future<void> _submitRequest() async {
@@ -36,7 +53,7 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
     final trxId = _trxIdController.text.trim();
 
     if (sender.isEmpty || trxId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+      _showSnack("Please fill all fields", Colors.red);
       return;
     }
 
@@ -44,130 +61,204 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
 
-      // Firestore-এ 'payment_requests' কালেকশনে ডাটা সেভ হবে
+      // ১. Firestore-এ রিকোয়েস্ট সেভ করা
       await FirebaseFirestore.instance.collection('payment_requests').add({
         'uid': uid,
         'planId': widget.planId,
         'amount': widget.amount,
         'duration': widget.duration,
+        'purpose': widget.purpose.name,
         'method': _selectedMethod,
         'senderNumber': sender,
         'trxId': trxId,
-        'status': 'pending', // আপনি ম্যানুয়ালি এটি 'approved' করবেন
+        'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
+      // ২. ইউজারের স্ট্যাটাস 'pending' করে রাখা (যাতে এক্টিভেশন স্ক্রিন লিসেন করতে পারে)
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'subStatus': 'pending',
+        'lastPaymentMethod': _selectedMethod,
+        'lastTrxId': trxId,
+      });
+
       if (mounted) {
-        _showPendingDialog();
+        // ৩. সাকসেস হলে এক্টিভেশন স্ক্রিনে পাঠানো
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ActivationScreen(
+              planId: widget.planId,
+              amount: widget.amount,
+              trxId: trxId,
+            ),
+          ),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      _showSnack("Error: $e", Colors.red);
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  void _showPendingDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Request Submitted"),
-        content: const Text("আপনার পেমেন্ট রিকোয়েস্টটি জমা হয়েছে। অ্যাডমিন ভেরিফাই করার পর (৩০-৬০ মিনিটের মধ্যে) আপনার প্ল্যানটি এক্টিভেট হয়ে যাবে।"),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx); // Close Dialog
-              Navigator.pop(context); // Back to Plans
-            },
-            child: const Text("OK"),
-          )
-        ],
-      ),
-    );
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return FloatingScaffold(
-      title: "MANUAL PAYMENT",
+      title: "PAYMENT INFO",
+      showBack: true,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
+        physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildInstructions(),
+            _buildSummaryBox(isDark),
             const SizedBox(height: 25),
-            _buildPaymentMethods(),
+            _buildInstructionBox(),
             const SizedBox(height: 25),
-            _buildInputFields(),
+            const Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _buildMethodSelector(isDark),
+            const SizedBox(height: 25),
+            _buildInputFields(isDark),
             const SizedBox(height: 30),
             _buildSubmitButton(),
+            const SizedBox(height: 50),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInstructions() {
+  Widget _buildSummaryBox(bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.amber.shade200)),
-      child: Column(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text("পেমেন্ট করার নিয়ম:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
-          const SizedBox(height: 10),
-          Text("নিচের যেকোনো একটি নম্বরে ৳${widget.amount} সেন্ডমানি (Send Money) করুন এবং ট্রানজ্যাকশন আইডি ও আপনার নম্বরটি নিচে ইনপুট দিন।", textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.planId.replaceAll('_', ' '), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(widget.description, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+            ],
+          ),
+          Text("৳${widget.amount}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
         ],
       ),
     );
   }
 
-  Widget _buildPaymentMethods() {
+  Widget _buildInstructionBox() {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.amber.withOpacity(0.3))),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
+              const SizedBox(width: 10),
+              const Text("How to pay?", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text("নিচের যেকোনো একটি নম্বরে ৳${widget.amount} সেন্ডমানি (Send Money) করে ট্রানজ্যাকশন আইডি ও আপনার নম্বরটি দিন।", style: const TextStyle(fontSize: 12, height: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodSelector(bool isDark) {
     return Column(
       children: _adminNumbers.keys.map((method) {
         bool isSelected = _selectedMethod == method;
-        return ListTile(
+        return GestureDetector(
           onTap: () => setState(() => _selectedMethod = method),
-          leading: Radio(value: method, groupValue: _selectedMethod, onChanged: (v) => setState(() => _selectedMethod = v!)),
-          title: Text(method, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(_adminNumbers[method]!),
-          trailing: IconButton(
-            icon: const Icon(Icons.copy, size: 18),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _adminNumbers[method]!.split(' ')[0]));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Number Copied!")));
-            },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.brandMain.withOpacity(0.1) : (isDark ? Colors.white10 : Colors.white),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.1)),
+            ),
+            child: Row(
+              children: [
+                Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_off, color: isSelected ? AppColors.brandMain : Colors.grey),
+                const SizedBox(width: 15),
+                Text(method, style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Text(_adminNumbers[method]!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 16, color: AppColors.brandMain),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _adminNumbers[method]!));
+                    _showSnack("$method Number Copied!", Colors.green);
+                  },
+                )
+              ],
+            ),
           ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildInputFields() {
+  Widget _buildInputFields(bool isDark) {
     return Column(
       children: [
         TextField(
           controller: _senderController,
           keyboardType: TextInputType.phone,
-          decoration: InputDecoration(labelText: "Your $_selectedMethod Number", border: const OutlineInputBorder()),
+          decoration: InputDecoration(
+            labelText: "Sender $_selectedMethod Number",
+            hintText: "01XXXXXXXXX",
+            filled: true,
+            fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+          ),
         ),
         const SizedBox(height: 15),
         TextField(
           controller: _trxIdController,
-          decoration: const InputDecoration(labelText: "Transaction ID (TrxID)", border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            labelText: "Transaction ID (TrxID)",
+            hintText: "8N7X6W5V...",
+            filled: true,
+            fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildSubmitButton() {
-    return ElevatedButton(
-      onPressed: _isSubmitting ? null : _submitRequest,
-      style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, minimumSize: const Size(double.infinity, 55)),
-      child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text("SUBMIT PAYMENT INFO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitRequest,
+        style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+        child: _isSubmitting
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Text("SUBMIT PAYMENT INFO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
     );
   }
 }

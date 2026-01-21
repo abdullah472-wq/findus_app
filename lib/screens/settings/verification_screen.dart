@@ -231,7 +231,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  subtitle ?? '',
+                  subtitle,
                   style: TextStyle(
                     color: textColor.withOpacity(0.8),
                     fontSize: 12,

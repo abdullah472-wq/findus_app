@@ -57,7 +57,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
     _hasRedirected = true;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (context) => UnifiedProfileScreen(uid: _uid, isOwner: true)),
+      MaterialPageRoute(builder: (context) => UnifiedProfileScreen(uid: _uid, isOwner: true, showBack: true,)),
           (route) => false,
     );
   }

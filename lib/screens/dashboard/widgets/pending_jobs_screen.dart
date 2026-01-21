@@ -9,7 +9,6 @@ import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
 
 import '../utils/dashboard_constants.dart';
-import '../utils/dashboard_constants.dart';
 
 class PendingJobsScreen extends StatelessWidget {
   final String? userId; // optional (but we will prefer auth uid)

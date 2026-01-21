@@ -19,7 +19,7 @@ import 'package:findus_app/screens/explore/refer_earn_screen.dart';
 import 'package:findus_app/screens/settings/subscription_screen.dart';
 import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/screens/settings/language_settings_screen.dart';
-import 'package:findus_app/screens/profile/unified_profile_screen.dart'; // ✅ প্রোফাইল স্ক্রিন ইম্পোর্ট
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 
 class ProfileSideBar extends StatefulWidget {
   const ProfileSideBar({super.key});
@@ -85,7 +85,16 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                 _buildMenuSection("ACCOUNT"),
                 _buildModernMenuItem(Icons.person_outline_rounded, "My Profile", () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: true)));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UnifiedProfileScreen(
+                        uid: uid,
+                        isOwner: true,
+                        showBack: true, // ✅ ফিক্স: showBack প্যারামিটার যোগ করা হয়েছে
+                      ),
+                    ),
+                  );
                 }, isDark),
                 _buildModernMenuItem(Icons.workspace_premium_rounded, "Subscription", () {
                   Navigator.pop(context);
@@ -281,15 +290,20 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
   }
 
   Widget _buildDarkModeToggle(bool isDark) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: ThemeService.isDarkMode,
-      builder: (context, dark, _) {
+    // ✅ ফিক্স: ThemeService.themeSettings ব্যবহার করা হয়েছে
+    return ValueListenableBuilder<ThemeSettings>(
+      valueListenable: ThemeService.themeSettings,
+      builder: (context, settings, _) {
+        final dark = settings.isDarkMode;
         return SwitchListTile(
           secondary: Icon(dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, color: dark ? Colors.amber : Colors.blueGrey),
           title: const Text("Dark Mode", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           value: dark,
           activeColor: AppColors.brandMain,
-          onChanged: (val) => ThemeService.updateTheme(val),
+          onChanged: (val) {
+            // ✅ ফিক্স: updateThemeSetting ব্যবহার করা হয়েছে
+            ThemeService.updateThemeSetting(isDarkMode: val);
+          },
         );
       },
     );

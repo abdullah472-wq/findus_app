@@ -20,7 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    // isDark ভেরিয়েবলটি এখানে দরকার নেই কারণ PerformanceCard নিজেই থিম চেক করবে
     final double appBarHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
 
     return Scaffold(
@@ -36,8 +36,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(15),
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  // ১. পারফরম্যান্স কার্ড
-                  PerformanceCard(isDark: isDark, userId: '',),
+                  // ১. পারফরম্যান্স কার্ড (FIXED: isDark removed)
+                  PerformanceCard(userId: _uid),
 
                   const SizedBox(height: 25),
 
@@ -80,12 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     offset: const Offset(0, 2),
                   ),
                 ],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
+                borderRadius: const BorderRadius.all(Radius.circular(20)),
               ),
               child: Column(
                 children: [
@@ -197,10 +192,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               child: Stack(
                                 children: [
-                                  const Icon(
-                                    Icons.notifications_none_rounded,
-                                    size: 20,
-                                    color: Colors.black,
+                                  const Center(
+                                    child: Icon(
+                                      Icons.notifications_none_rounded,
+                                      size: 20,
+                                      color: Colors.black,
+                                    ),
                                   ),
                                   Positioned(
                                     top: 8,

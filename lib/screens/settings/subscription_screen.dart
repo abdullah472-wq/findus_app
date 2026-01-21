@@ -1,12 +1,9 @@
 // lib/screens/settings/subscription_screen.dart
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/wallet/payment_screen.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 enum PlanType { free, pro, business }
@@ -283,14 +280,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> with SingleTick
 
   void _handlePurchase(PlanType plan, int amount) {
     HapticFeedback.lightImpact();
-    Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(
-      planId: plan.name.toUpperCase(),
-      amount: amount,
-      duration: _tabController.index + 1,
-      purpose: PaymentPurpose.subscription,
-      description: "Upgrade to ${plan.name} plan",
-      onPaymentSuccess: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ActivationScreen(planType: plan, durationInMonths: 1, amount: amount))),
-    )));
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ManualPaymentScreen(
+          planId: 'PRO_MONTHLY',
+          amount: 199,
+          duration: 1,
+          purpose: PaymentPurpose.subscription,
+          description: 'Upgrade to FINDUS Pro (1 Month)',
+        ),
+      ),
+    );
   }
 
   // --- Placeholder Sections ---
@@ -314,7 +315,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> with SingleTick
     );
   }
 
-  Widget _testiBubble(String msg, String user, bool isDark) => Container(width: 200, margin: const EdgeInsets.only(right: 15), padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: isDark ? Colors.white05 : Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.withOpacity(0.1))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(msg, style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)), const Spacer(), Text(user, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.brandMain))]));
+  Widget _testiBubble(String msg, String user, bool isDark) => Container(width: 200, margin: const EdgeInsets.only(right: 15), padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.withOpacity(0.1))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(msg, style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)), const Spacer(), Text(user, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.brandMain))]));
 
   Widget _buildFAQ(bool isDark) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("FAQ", style: TextStyle(fontWeight: FontWeight.bold)), ExpansionTile(title: const Text("Can I cancel anytime?", style: TextStyle(fontSize: 13)), children: [Padding(padding: const EdgeInsets.all(12), child: Text("Yes, you can cancel your subscription from settings at any time.", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)))])]);
 }

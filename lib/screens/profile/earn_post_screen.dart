@@ -21,7 +21,6 @@ import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
-import 'location_picker_screen.dart';
 
 class EarnPostScreen extends StatefulWidget {
   const EarnPostScreen({super.key});

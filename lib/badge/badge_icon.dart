@@ -1,14 +1,11 @@
+// lib/badge/badge_icon.dart
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/badge/badge_service.dart';
 
-import 'badge_model.dart';
-
 class BadgeIcon extends StatelessWidget {
   final double size;
-
-  /// যদি অন্য কারও ব্যাজ দেখাতে চান (worker card এর জন্য) তাহলে এগুলো দিতে পারেন
   final BadgeLevel? overrideLevel;
   final double? overridePercentToNext;
 
@@ -21,21 +18,27 @@ class BadgeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // যদি overrideLevel দেওয়া থাকে → static badge দেখাব
+    // ১. ওভাররাইড লেভেল চেক (Newbie হলে কিছুই দেখাবে না)
     if (overrideLevel != null) {
+      if (overrideLevel == BadgeLevel.newbie) return const SizedBox.shrink();
       return _buildBadge(
         level: overrideLevel!,
         percentToNext: overridePercentToNext ?? 1.0,
       );
     }
 
-    // নাহলে global user badge ব্যবহার করব
-    return ValueListenableBuilder(
+    // ২. গ্লোবাল ইউজার ব্যাজ লিসেনার
+    return ValueListenableBuilder<BadgeProgress>(
       valueListenable: BadgeService.badgeNotifier,
-      builder: (context, BadgeProgress progress, _) {
+      builder: (context, progress, _) {
+        // ✅ Newbie হলে কোনো উইজেট রেন্ডার হবে না
+        if (progress.level == BadgeLevel.newbie) {
+          return const SizedBox.shrink();
+        }
+
         return _buildBadge(
           level: progress.level,
-          percentToNext: progress.percentToNext,
+          percentToNext: progress.progressPercentage,
         );
       },
     );
@@ -49,7 +52,12 @@ class BadgeIcon extends StatelessWidget {
     Color color;
     String label;
 
+    // Exhaustive switch (সব লেভেল হ্যান্ডেল করা হয়েছে)
     switch (level) {
+      case BadgeLevel.newbie:
+      // এটি প্র্যাকটিক্যালি কল হবে না উপরের চেকের কারণে, তাও সেফটির জন্য রাখা
+        return const SizedBox.shrink();
+
       case BadgeLevel.bronze:
         icon = Icons.military_tech;
         color = const Color(0xFFCD7F32);
@@ -70,7 +78,7 @@ class BadgeIcon extends StatelessWidget {
 
       case BadgeLevel.platinum:
         icon = Icons.military_tech;
-        color = Colors.blueGrey.shade100; // নিজের মতো রাখো
+        color = const Color(0xFFE5E4E2);
         label = "Platinum";
         break;
 
@@ -86,14 +94,16 @@ class BadgeIcon extends StatelessWidget {
       children: [
         Stack(
           alignment: Alignment.bottomCenter,
+          clipBehavior: Clip.none,
           children: [
             Icon(icon, size: size, color: color),
             Positioned(
-              bottom: -2,
+              bottom: -4,
               left: 0,
               right: 0,
               child: SizedBox(
                 height: 4,
+                width: size,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(2),
                   child: LinearProgressIndicator(
@@ -108,12 +118,13 @@ class BadgeIcon extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 6),
         Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
             color: AppColors.brandDark,
           ),
         ),

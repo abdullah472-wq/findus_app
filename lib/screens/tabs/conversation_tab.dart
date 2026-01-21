@@ -1,13 +1,11 @@
 // lib/screens/tabs/conversation_tab.dart
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart'; // Unified profile use করা হয়েছে
-import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/services/conversation_storage.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
 

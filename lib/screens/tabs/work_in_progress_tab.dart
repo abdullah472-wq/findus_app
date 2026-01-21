@@ -197,6 +197,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                       builder: (_) => UnifiedProfileScreen(
                         uid: otherUserId,
                         isOwner: false,
+                        showBack: true, // ✅ এই লাইনটি যোগ করা হয়েছে
                       ),
                     ),
                   );
