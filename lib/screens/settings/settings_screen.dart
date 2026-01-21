@@ -157,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       secondary: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-      activeColor: AppColors.brandMain,
+      activeThumbColor: AppColors.brandMain,
     );
   }
 

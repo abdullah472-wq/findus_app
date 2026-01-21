@@ -169,11 +169,11 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
       decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.amber.withOpacity(0.3))),
       child: Column(
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
-              const SizedBox(width: 10),
-              const Text("How to pay?", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
+              Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
+              SizedBox(width: 10),
+              Text("How to pay?", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.brown)),
             ],
           ),
           const SizedBox(height: 10),

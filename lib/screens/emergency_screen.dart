@@ -398,7 +398,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                   title: const Text("Request to add in Public Directory", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                   subtitle: const Text("If enabled, everyone can see this after admin verify", style: TextStyle(fontSize: 12)),
                   value: requestPublic,
-                  activeColor: Colors.redAccent,
+                  activeThumbColor: Colors.redAccent,
                   onChanged: (val) => setModalState(() => requestPublic = val),
                 ),
 

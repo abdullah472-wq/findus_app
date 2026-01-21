@@ -446,8 +446,9 @@ class _ExploreScreenState extends State<ExploreScreen>
       userRole = data['type'].toString();
     } else {
       final id = (data['id'] ?? '').toString();
-      if (id.contains('supporter')) userRole = 'maker';
-      else if (id.contains('worker')) userRole = 'finder';
+      if (id.contains('supporter')) {
+        userRole = 'maker';
+      } else if (id.contains('worker')) userRole = 'finder';
     }
 
     // 3. Price and PriceText logic
@@ -974,7 +975,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                               ),
                               trailing: Text(
                                 item['price']?.toString() ?? '',
-                                style: TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.w600),
+                                style: const TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.w600),
                               ),
                               onTap: () {
                                 final name = item['name']?.toString() ?? '';
@@ -987,7 +988,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                 _searchFocusNode.unfocus();
                               },
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
                     ),
@@ -1071,7 +1072,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                     decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(5)),
                     child: Text(
                       _getZoomScaleText(_currentZoom),
-                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark),
                     ),
                   ),
                 ],

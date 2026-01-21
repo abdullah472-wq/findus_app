@@ -186,7 +186,7 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                         Text(_userName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                         Text(
                             _userRole == 'finder' ? "Verified Worker" : "Top Supporter",
-                            style: TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.bold)
+                            style: const TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.bold)
                         ),
                         Text("$_followersCount Followers", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
                       ],
@@ -299,7 +299,7 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
           secondary: Icon(dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, color: dark ? Colors.amber : Colors.blueGrey),
           title: const Text("Dark Mode", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
           value: dark,
-          activeColor: AppColors.brandMain,
+          activeThumbColor: AppColors.brandMain,
           onChanged: (val) {
             // ✅ ফিক্স: updateThemeSetting ব্যবহার করা হয়েছে
             ThemeService.updateThemeSetting(isDarkMode: val);

@@ -63,12 +63,12 @@ class TermsAndConditionsScreen extends StatelessWidget {
                           ),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
                                   "Terms & Conditions",
                                   style: TextStyle(
                                     color: AppColors.brandDark,
@@ -110,10 +110,10 @@ class _TermsContent extends StatelessWidget {
       height: 2,
     );
 
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           "FINDUS Terms & Conditions",
           style: TextStyle(
             fontSize: 18,
@@ -121,12 +121,12 @@ class _TermsContent extends StatelessWidget {
             color: AppColors.brandDark,
           ),
         ),
-        const SizedBox(height: 4),
-        const Text(
+        SizedBox(height: 4),
+        Text(
           "Last updated: January 2025",
           style: TextStyle(color: Colors.grey, fontSize: 11),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // Intro
         Text(
@@ -135,8 +135,8 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("1. Eligibility", style: headingStyle),
+        SizedBox(height: 16),
+        Text("1. Eligibility", style: headingStyle),
         Text(
           "• You must be at least 18 years old to create an account or use FINDUS as a Job Maker (supporter) or Job Finder (worker/earner).\n"
               "• You agree to provide accurate and up-to-date information about yourself and your work.\n"
@@ -144,8 +144,8 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("2. Account & Profile", style: headingStyle),
+        SizedBox(height: 16),
+        Text("2. Account & Profile", style: headingStyle),
         Text(
           "• You are responsible for all activity that occurs under your FINDUS account.\n"
               "• You agree not to share your login OTP or any verification code with others.\n"
@@ -154,13 +154,13 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("3. Use of the Service", style: headingStyle),
+        SizedBox(height: 16),
+        Text("3. Use of the Service", style: headingStyle),
         Text(
           "You agree that you will:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Use FINDUS only for lawful purposes.\n"
               "• Respect other users, avoid harassment, threats, hate speech or abusive behaviour.\n"
@@ -169,13 +169,13 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("4. Jobs, Payments & Responsibilities", style: headingStyle),
+        SizedBox(height: 16),
+        Text("4. Jobs, Payments & Responsibilities", style: headingStyle),
         Text(
           "FINDUS is a platform that connects Job Makers and Job Finders. FINDUS itself is not a party to any contract between users.",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Job Makers (supporters) are solely responsible for clearly describing the work, time, place, payment amount and terms.\n"
               "• Job Finders (workers/earners) are responsible for performing the agreed work honestly, safely and with due care.\n"
@@ -184,8 +184,8 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("5. Ratings, Reviews & Badges", style: headingStyle),
+        SizedBox(height: 16),
+        Text("5. Ratings, Reviews & Badges", style: headingStyle),
         Text(
           "• Ratings and reviews should be honest and based on actual experience.\n"
               "• You agree not to post fake, defamatory or abusive reviews.\n"
@@ -194,8 +194,8 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("6. KYC & Verification", style: headingStyle),
+        SizedBox(height: 16),
+        Text("6. KYC & Verification", style: headingStyle),
         Text(
           "• For additional trust and safety, FINDUS may ask you to submit KYC documents (e.g. NID, driving license, photo).\n"
               "• KYC verification is optional for basic use but may be required for certain features or higher trust levels.\n"
@@ -203,13 +203,13 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("7. Prohibited Content & Activities", style: headingStyle),
+        SizedBox(height: 16),
+        Text("7. Prohibited Content & Activities", style: headingStyle),
         Text(
           "You must NOT use FINDUS to:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Offer or request illegal work or services.\n"
               "• Promote violence, self‑harm, hate, pornography or any content not suitable for a public marketplace.\n"
@@ -218,13 +218,13 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("8. Suspension & Termination", style: headingStyle),
+        SizedBox(height: 16),
+        Text("8. Suspension & Termination", style: headingStyle),
         Text(
           "FINDUS reserves the right to suspend, limit or terminate your access if:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• You violate these Terms or our Privacy Policy.\n"
               "• We detect fraudulent, abusive or dangerous behaviour.\n"
@@ -233,8 +233,8 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("9. Intellectual Property", style: headingStyle),
+        SizedBox(height: 16),
+        Text("9. Intellectual Property", style: headingStyle),
         Text(
           "• The FINDUS app, logo, design, texts and code are protected by copyright and intellectual property laws.\n"
               "• You may not copy, distribute or modify any part of the app without written permission.\n"
@@ -242,43 +242,43 @@ class _TermsContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("10. Limitation of Liability", style: headingStyle),
+        SizedBox(height: 16),
+        Text("10. Limitation of Liability", style: headingStyle),
         Text(
           "To the maximum extent permitted by law, FINDUS and its team shall not be liable for any indirect, incidental, special, consequential or punitive damages, "
               "including loss of money, data, reputation or other intangible losses resulting from your use of the app or any jobs arranged through it.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("11. Changes to These Terms", style: headingStyle),
+        SizedBox(height: 16),
+        Text("11. Changes to These Terms", style: headingStyle),
         Text(
           "We may update these Terms from time to time to reflect changes in law, features or policies. We will update the 'Last updated' date at the top and may notify you inside the app. "
               "By continuing to use FINDUS after changes, you agree to the updated Terms.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("12. Governing Law", style: headingStyle),
+        SizedBox(height: 16),
+        Text("12. Governing Law", style: headingStyle),
         Text(
           "These Terms are governed by the laws of Bangladesh. Any dispute arising from or relating to the use of FINDUS may be subject to the jurisdiction of courts in Bangladesh.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("13. Contact Us", style: headingStyle),
+        SizedBox(height: 16),
+        Text("13. Contact Us", style: headingStyle),
         Text(
           "If you have any questions or concerns about these Terms & Conditions, you can contact us at:",
           style: textStyle,
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           "Email: admin@findus.odditybd.shop\n"
               "Subject: Terms & Conditions – FINDUS",
           style: textStyle,
         ),
 
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
       ],
     );
   }

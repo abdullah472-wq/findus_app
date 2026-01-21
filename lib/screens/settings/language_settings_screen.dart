@@ -143,12 +143,12 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                           ),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
                                   "Language",
                                   style: TextStyle(
                                     color: AppColors.brandDark,

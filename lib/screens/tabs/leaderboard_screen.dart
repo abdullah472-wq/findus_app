@@ -142,7 +142,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
     // Reorder for UI: [2nd, 1st, 3rd]
     List<DocumentSnapshot?> podiumList = List.filled(3, null);
-    if (top3.length >= 1) podiumList[1] = top3[0]; // 1st -> Center
+    if (top3.isNotEmpty) podiumList[1] = top3[0]; // 1st -> Center
     if (top3.length >= 2) podiumList[0] = top3[1]; // 2nd -> Left
     if (top3.length >= 3) podiumList[2] = top3[2]; // 3rd -> Right
 

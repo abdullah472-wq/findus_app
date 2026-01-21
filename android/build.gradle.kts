@@ -1,13 +1,16 @@
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
+    // এই লাইনটি অত্যন্ত জরুরি, এটি ছাড়া Firebase কাজ করবে না
+    id("com.google.gms.google-services") version "4.4.2"
+    id("com.google.firebase.crashlytics") version "3.0.2"
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.findus.app"
-    compileSdk = 36
+    // 36 অনেক সময় স্টেবল না হতে পারে, তাই 34 বা 35 ব্যবহার করা নিরাপদ
+    compileSdk = 34
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -21,14 +24,13 @@ android {
     defaultConfig {
         applicationId = "com.findus.app"
         minSdk = 23
-        targetSdk = 36
+        targetSdk = 34 // compileSdk এর সাথে মিল রাখা ভালো
         versionCode = 1
         versionName = "1.0.0"
     }
 
     buildTypes {
         release {
-            // আপনার পিসিতে যেহেতু কি-স্টোর নেই, তাই ডিবাগ কি দিয়েই সাইন হবে
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false

@@ -283,7 +283,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> with SingleTick
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ManualPaymentScreen(
+        builder: (_) => const ManualPaymentScreen(
           planId: 'PRO_MONTHLY',
           amount: 199,
           duration: 1,

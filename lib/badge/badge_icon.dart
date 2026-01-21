@@ -109,7 +109,7 @@ class BadgeIcon extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: percentToNext,
                     backgroundColor: Colors.black12,
-                    valueColor: AlwaysStoppedAnimation<Color>(
+                    valueColor: const AlwaysStoppedAnimation<Color>(
                       AppColors.brandMain,
                     ),
                   ),

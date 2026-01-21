@@ -31,7 +31,7 @@ android {
 
     defaultConfig {
         applicationId = "com.findus.app"
-        minSdk = 23  // ✅ Android 6.0+ (API 23) সেট করুন
+        minSdk = flutter.minSdkVersion  // ✅ Android 6.0+ (API 23) সেট করুন
         targetSdk = 34  // ✅ সরাসরি 34 সেট করুন
         versionCode = 1  // ✅ সরাসরি 1 সেট করুন
         versionName = "1.0.0"  // ✅ সরাসরি 1.0.0 সেট করুন

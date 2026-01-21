@@ -765,7 +765,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.people_alt_outlined, size: 16, color: AppColors.brandMain),
+                  const Icon(Icons.people_alt_outlined, size: 16, color: AppColors.brandMain),
                   const SizedBox(width: 6),
                   Text(
                     _formatNumber(followers),
@@ -1246,16 +1246,16 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       const PopupMenuItem(value: ProfileMenuOwner.previewPublicCard, child: Text('Preview Public Card')),
       PopupMenuItem(
           value: ProfileMenuOwner.lockAccount,
-          child: Row(children: [Text('Lock Account'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+          child: Row(children: [const Text('Lock Account'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
       PopupMenuItem(
           value: ProfileMenuOwner.theme,
-          child: Row(children: [Text('Theme'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+          child: Row(children: [const Text('Theme'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
       PopupMenuItem(
           value: ProfileMenuOwner.hideProfile,
-          child: Row(children: [Text('Hide Profile'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+          child: Row(children: [const Text('Hide Profile'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
       PopupMenuItem(
           value: ProfileMenuOwner.pauseWork,
-          child: Row(children: [Text('Pause Work'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+          child: Row(children: [const Text('Pause Work'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
     ];
   }
 

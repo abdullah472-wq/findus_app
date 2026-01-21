@@ -48,7 +48,7 @@ class ReviewService {
       // (Supporter এর জন্যও লজিক চাইলে এখানে যোগ করা যাবে)
       final userSnap = await txn.get(userRef);
       if (userSnap.exists) {
-        final data = userSnap.data() as Map<String, dynamic>? ?? {};
+        final data = userSnap.data() ?? {};
 
         // মেইন রেটিং (সবার জন্য)
         final oldRating = (data['rating'] ?? 0.0) is int

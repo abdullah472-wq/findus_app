@@ -18,9 +18,9 @@ class AboutAppScreen extends StatelessWidget {
               right: 20,
               bottom: 20,
             ),
-            child: Column(
+            child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   "FINDUS",
                   style: TextStyle(
@@ -143,12 +143,12 @@ class AboutAppScreen extends StatelessWidget {
                           ),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
                                   "About App",
                                   style: TextStyle(
                                     color: AppColors.brandDark,

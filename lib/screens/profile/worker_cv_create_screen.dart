@@ -175,7 +175,7 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
               ],
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }

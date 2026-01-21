@@ -201,7 +201,7 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ManualPaymentScreen(
+                  builder: (_) => const ManualPaymentScreen(
                     planId: 'JOB_BOOST_3D',
                     amount: 240,
                     duration: 3,

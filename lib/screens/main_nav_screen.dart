@@ -115,7 +115,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
   Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon, String label) {
     final isSelected = _currentIndex == index;
-    final activeColor = const Color(0xFF00695C);
+    const activeColor = Color(0xFF00695C);
 
     return Expanded(
       child: InkWell(
@@ -135,7 +135,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
               margin: const EdgeInsets.only(top: 4),
               height: 4,
               width: isSelected ? 4 : 0,
-              decoration: BoxDecoration(color: activeColor, shape: BoxShape.circle),
+              decoration: const BoxDecoration(color: activeColor, shape: BoxShape.circle),
             ),
             const SizedBox(height: 2),
             Text(

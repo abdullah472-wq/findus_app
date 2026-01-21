@@ -37,15 +37,15 @@ class BadgeProgress {
       case BadgeLevel.newbie:
         return Colors.grey;
       case BadgeLevel.bronze:
-        return Color(0xFFCD7F32); // Bronze color
+        return const Color(0xFFCD7F32); // Bronze color
       case BadgeLevel.silver:
-        return Color(0xFFC0C0C0); // Silver color
+        return const Color(0xFFC0C0C0); // Silver color
       case BadgeLevel.gold:
-        return Color(0xFFFFD700); // Gold color
+        return const Color(0xFFFFD700); // Gold color
       case BadgeLevel.platinum:
-        return Color(0xFFE5E4E2); // Platinum color
+        return const Color(0xFFE5E4E2); // Platinum color
       case BadgeLevel.diamond:
-        return Color(0xFFB9F2FF); // Diamond color
+        return const Color(0xFFB9F2FF); // Diamond color
     }
   }
 

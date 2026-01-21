@@ -21,7 +21,7 @@ class FloatingDashboardAppBar extends StatefulWidget {
 }
 
 class _FloatingDashboardAppBarState extends State<FloatingDashboardAppBar> {
-  double _scrollOffset = 0.0;
+  final double _scrollOffset = 0.0;
   ScrollController? _scrollController;
 
   @override
@@ -33,7 +33,7 @@ class _FloatingDashboardAppBarState extends State<FloatingDashboardAppBar> {
   @override
   Widget build(BuildContext context) {
     final double appBarHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
-    final double maxOffset = 100; // কত স্ক্রল হলে full opacity হবে
+    const double maxOffset = 100; // কত স্ক্রল হলে full opacity হবে
     final double opacity = (_scrollOffset / maxOffset).clamp(0.0, 1.0);
 
     return Positioned(
@@ -139,7 +139,7 @@ class _FloatingDashboardAppBarState extends State<FloatingDashboardAppBar> {
       padding: const EdgeInsets.only(left: 12),
       child: Text(
         widget.title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.bold,
           color: AppColors.brandDark,

@@ -145,7 +145,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                   ),
                   value: _allEnabled,
                   onChanged: _updateAll,
-                  activeColor: AppColors.brandMain,
+                  activeThumbColor: AppColors.brandMain,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 0),
                 ),
               ),
@@ -257,12 +257,12 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                           ),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
                                   "Notifications",
                                   style: TextStyle(
                                     color: AppColors.brandDark,
@@ -318,7 +318,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
         ),
         value: value,
         onChanged: onChanged,
-        activeColor: AppColors.brandMain,
+        activeThumbColor: AppColors.brandMain,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       ),
     );

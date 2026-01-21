@@ -234,11 +234,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
-                    Align(
+                    const Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: null,
-                        child: const Text(
+                        child: Text(
                           "Forgot Password? (later)",
                           style: TextStyle(
                             color: Colors.black87,

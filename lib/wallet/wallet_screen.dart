@@ -250,9 +250,9 @@ class WalletScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // উপরে ওয়ালেট টাইটেল + আইকন
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text(
                 "Total Balance",
                 style: TextStyle(

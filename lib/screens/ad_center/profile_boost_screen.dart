@@ -87,9 +87,9 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -99,8 +99,8 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          const Icon(Icons.trending_up_rounded, color: Colors.white, size: 40),
+          SizedBox(width: 10),
+          Icon(Icons.trending_up_rounded, color: Colors.white, size: 40),
         ],
       ),
     );

@@ -143,7 +143,7 @@ class _ManagePaymentMethodsScreenState
           ),
           Switch(
             value: m.isLinked,
-            activeColor: AppColors.brandMain,
+            activeThumbColor: AppColors.brandMain,
             onChanged: (v) => _onTogglePressed(context, m, v),
           ),
           const SizedBox(width: 8),
@@ -177,7 +177,7 @@ class _ManagePaymentMethodsScreenState
   }
 
   Future<bool?> _showLinkDialog(BuildContext context, _Method method) {
-    final TextEditingController _controller = TextEditingController();
+    final TextEditingController controller = TextEditingController();
 
     String label;
     String hint;
@@ -227,7 +227,7 @@ class _ManagePaymentMethodsScreenState
               ),
               const SizedBox(height: 10),
               TextField(
-                controller: _controller,
+                controller: controller,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   labelText: label,
@@ -250,7 +250,7 @@ class _ManagePaymentMethodsScreenState
                   ElevatedButton(
                     onPressed: () {
                       // demo: শুধু খালি না কিনা দেখি
-                      if (_controller.text.trim().isEmpty) {
+                      if (controller.text.trim().isEmpty) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
                           const SnackBar(
                             content: Text('Please enter a valid value.'),

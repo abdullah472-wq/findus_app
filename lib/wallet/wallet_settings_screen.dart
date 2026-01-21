@@ -36,7 +36,7 @@ class _WalletSettingsScreenState extends State<WalletSettingsScreen> {
           _buildSectionTitle('Payment preferences'),
           SwitchListTile(
             value: _useWalletByDefault,
-            activeColor: AppColors.brandMain,
+            activeThumbColor: AppColors.brandMain,
             onChanged: (v) {
               setState(() => _useWalletByDefault = v);
             },
@@ -53,7 +53,7 @@ class _WalletSettingsScreenState extends State<WalletSettingsScreen> {
           _buildSectionTitle('Alerts & notifications'),
           SwitchListTile(
             value: _lowBalanceAlert,
-            activeColor: AppColors.brandMain,
+            activeThumbColor: AppColors.brandMain,
             onChanged: (v) {
               setState(() => _lowBalanceAlert = v);
             },
@@ -68,7 +68,7 @@ class _WalletSettingsScreenState extends State<WalletSettingsScreen> {
           ),
           SwitchListTile(
             value: _showMiniStatementOnHome,
-            activeColor: AppColors.brandMain,
+            activeThumbColor: AppColors.brandMain,
             onChanged: (v) {
               setState(() => _showMiniStatementOnHome = v);
             },

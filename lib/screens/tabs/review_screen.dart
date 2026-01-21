@@ -259,7 +259,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         value: _wouldHireAgain,
         onChanged: (v) => setState(() => _wouldHireAgain = v),
         title: const Text("Would hire again?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-        activeColor: AppColors.brandMain,
+        activeThumbColor: AppColors.brandMain,
       ),
     );
   }

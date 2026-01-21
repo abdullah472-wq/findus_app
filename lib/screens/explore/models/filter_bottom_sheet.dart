@@ -52,7 +52,7 @@ Future<FilterOptions?> showFilterBottomSheet({
   bool trustedOnly = initialTrustedOnly;
 
   // 🔹 Pro আপগ্রেড prompt
-  void _showUpgradeDialog() {
+  void showUpgradeDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -131,9 +131,9 @@ Future<FilterOptions?> showFilterBottomSheet({
                     ),
                     const SizedBox(height: 25),
 
-                    Text(
+                    const Text(
                       "Filter Search",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: AppColors.brandDark,
@@ -148,7 +148,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       controller: locationController,
                       readOnly: !isProUser,
                       onTap: () {
-                        if (!isProUser) _showUpgradeDialog();
+                        if (!isProUser) showUpgradeDialog();
                       },
                       decoration: InputDecoration(
                         hintText: "Thana/District...",
@@ -180,7 +180,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                             ),
                             onSelected: (selected) {
                               if (!isProUser) {
-                                _showUpgradeDialog();
+                                showUpgradeDialog();
                                 return;
                               }
                               if (selected) {
@@ -214,7 +214,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       label: minExperience == 0 ? 'New' : '${minExperience.toInt()} Yrs',
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => minExperience = v);
@@ -237,7 +237,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       ),
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => priceRange = v);
@@ -248,8 +248,8 @@ Future<FilterOptions?> showFilterBottomSheet({
 
                     // Verified Only (Pro)
                     CheckboxListTile(
-                      title: Row(
-                        children: const [
+                      title: const Row(
+                        children: [
                           Text("Verified Only", style: TextStyle(fontWeight: FontWeight.w500)),
                           SizedBox(width: 6),
                           Icon(Icons.workspace_premium, size: 16, color: Colors.deepPurple),
@@ -260,7 +260,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       activeColor: AppColors.brandMain,
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => verifiedOnly = v ?? false);
@@ -270,8 +270,8 @@ Future<FilterOptions?> showFilterBottomSheet({
 
                     // Top Rated Only (Pro)
                     CheckboxListTile(
-                      title: Row(
-                        children: const [
+                      title: const Row(
+                        children: [
                           Text("Top Rated Only (5★)", style: TextStyle(fontWeight: FontWeight.w500)),
                           SizedBox(width: 6),
                           Icon(Icons.workspace_premium, size: 16, color: Colors.deepPurple),
@@ -282,7 +282,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       activeColor: AppColors.brandMain,
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => topRatedOnly = v ?? false);
@@ -292,8 +292,8 @@ Future<FilterOptions?> showFilterBottomSheet({
 
                     // Trusted Only (Pro)
                     CheckboxListTile(
-                      title: Row(
-                        children: const [
+                      title: const Row(
+                        children: [
                           Text("Trusted Only", style: TextStyle(fontWeight: FontWeight.w500)),
                           SizedBox(width: 6),
                           Icon(Icons.workspace_premium, size: 16, color: Colors.deepPurple),
@@ -304,7 +304,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       activeColor: AppColors.brandMain,
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => trustedOnly = v ?? false);
@@ -314,8 +314,8 @@ Future<FilterOptions?> showFilterBottomSheet({
 
                     // Live Only (Pro)
                     CheckboxListTile(
-                      title: Row(
-                        children: const [
+                      title: const Row(
+                        children: [
                           Text("Live Only", style: TextStyle(fontWeight: FontWeight.w500)),
                           SizedBox(width: 6),
                           Icon(Icons.workspace_premium, size: 16, color: Colors.deepPurple),
@@ -326,7 +326,7 @@ Future<FilterOptions?> showFilterBottomSheet({
                       activeColor: AppColors.brandMain,
                       onChanged: (v) {
                         if (!isProUser) {
-                          _showUpgradeDialog();
+                          showUpgradeDialog();
                           return;
                         }
                         setModalState(() => liveOnly = v ?? false);

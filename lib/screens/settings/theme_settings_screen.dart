@@ -196,12 +196,12 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
                     ),
 
                     // Title
-                    Expanded(
+                    const Expanded(
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: const Text(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: Text(
                             "THEME SETTINGS",
                             style: TextStyle(
                               color: AppColors.brandDark,
@@ -271,7 +271,7 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
       ),
       child: SwitchListTile(
         value: value,
-        activeColor: widget.isfree ? Colors.grey : Colors.blue,
+        activeThumbColor: widget.isfree ? Colors.grey : Colors.blue,
         onChanged: disabled ? null : onChanged,
         contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
         secondary: Icon(icon, color: widget.isfree ? Colors.grey : Colors.blue),
@@ -618,7 +618,7 @@ class _ThemeSettingsScreenState extends State<ThemeSettingsScreen> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
                         ),

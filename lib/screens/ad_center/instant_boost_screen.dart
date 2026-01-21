@@ -184,7 +184,7 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ManualPaymentScreen(
+                  builder: (_) => const ManualPaymentScreen(
                     planId: 'INSTANT_BOOST_24H',
                     amount: 120,
                     duration: 0,

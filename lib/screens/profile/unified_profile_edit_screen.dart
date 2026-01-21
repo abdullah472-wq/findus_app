@@ -661,7 +661,7 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     }
 
     return DropdownButtonFormField<T>(
-      value: safeValue,
+      initialValue: safeValue,
       hint: Text(hint),
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: AppColors.brandMain),

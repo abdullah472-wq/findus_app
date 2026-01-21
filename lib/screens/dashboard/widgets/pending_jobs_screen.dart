@@ -22,14 +22,14 @@ class PendingJobsScreen extends StatelessWidget {
     final String? uid = authUid ?? userId;
 
     if (uid == null || uid.isEmpty) {
-      return FloatingScaffold(
+      return const FloatingScaffold(
         title: 'Pending Requests',
         backgroundColor: AppColors.brandLight,
         titleColor: AppColors.brandDark,
         iconColor: AppColors.brandDark,
         scrollable: false,
         bodyPadding: EdgeInsets.zero,
-        body: const Center(child: Text('Please login again')),
+        body: Center(child: Text('Please login again')),
       );
     }
 

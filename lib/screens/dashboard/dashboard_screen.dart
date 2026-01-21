@@ -68,7 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Container(
               height: kToolbarHeight + MediaQuery.of(context).padding.top,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [AppColors.brandLight, AppColors.brandLight],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -118,7 +118,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(width: 12),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text(

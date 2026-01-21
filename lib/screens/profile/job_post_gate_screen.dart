@@ -18,7 +18,7 @@ class JobPostGateScreen extends StatefulWidget {
 
 class _JobPostGateScreenState extends State<JobPostGateScreen> {
   // TODO: ভবিষ্যতে এখানে আসল subscription ডাটা থেকে মান আসবে
-  bool _isSubscriber = false;
+  final bool _isSubscriber = false;
   bool _isWatchingAd = false;
 
   Future<void> _goToSupportPost() async {

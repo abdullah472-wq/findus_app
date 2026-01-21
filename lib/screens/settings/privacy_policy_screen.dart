@@ -65,12 +65,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
                           ),
 
                           // Title
-                          Expanded(
+                          const Expanded(
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Padding(
-                                padding: const EdgeInsets.only(left: 8.0),
-                                child: const Text(
+                                padding: EdgeInsets.only(left: 8.0),
+                                child: Text(
                                   "Privacy Policy",
                                   style: TextStyle(
                                     color: AppColors.brandDark,
@@ -112,10 +112,10 @@ class _PrivacyContent extends StatelessWidget {
       height: 2,
     );
 
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           "FINDUS Privacy Policy",
           style: TextStyle(
             fontSize: 18,
@@ -123,12 +123,12 @@ class _PrivacyContent extends StatelessWidget {
             color: AppColors.brandDark,
           ),
         ),
-        const SizedBox(height: 4),
-        const Text(
+        SizedBox(height: 4),
+        Text(
           "Last updated: January 2025",
           style: TextStyle(color: Colors.grey, fontSize: 11),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
 
         // Intro
         Text(
@@ -137,13 +137,13 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("1. Information We Collect", style: headingStyle),
+        SizedBox(height: 16),
+        Text("1. Information We Collect", style: headingStyle),
         Text(
           "We collect the following types of information to operate and improve our service:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Account Information: Name, phone number, email (optional), profile photo, role (Job Maker / Job Finder), language preference.\n"
               "• Profile & Work Information: Skills, experience, price rate, location area, short bio, ratings, reviews and badges.\n"
@@ -154,13 +154,13 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("2. How We Use Your Information", style: headingStyle),
+        SizedBox(height: 16),
+        Text("2. How We Use Your Information", style: headingStyle),
         Text(
           "We use your information to:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Create and manage your FINDUS account and profile.\n"
               "• Match and suggest nearby jobs and workers using location and profile data.\n"
@@ -172,13 +172,13 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("3. Sharing of Information", style: headingStyle),
+        SizedBox(height: 16),
+        Text("3. Sharing of Information", style: headingStyle),
         Text(
           "We do not sell your personal information to third parties. We may share limited information in the following cases:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• With Other Users: When you apply for or post a job, basic profile information (name, photo, rating, location area, work details) is visible to relevant workers or supporters.\n"
               "• Service Providers: With secure third‑party services (e.g. payment gateways, analytics providers, cloud hosting) who help us run the app. They are required to protect your data and only use it for the agreed purpose.\n"
@@ -187,13 +187,13 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("4. Location Data", style: headingStyle),
+        SizedBox(height: 16),
+        Text("4. Location Data", style: headingStyle),
         Text(
           "Location services are used to show nearby jobs and workers, and to improve search relevance.",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• You can control location access from your device settings.\n"
               "• If you turn off location, some features (e.g. map view, nearby search) may not work correctly.\n"
@@ -201,16 +201,16 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("5. Cookies & Analytics", style: headingStyle),
+        SizedBox(height: 16),
+        Text("5. Cookies & Analytics", style: headingStyle),
         Text(
           "We may use in‑app analytics and similar technologies to understand how users interact with the app. This helps us improve features, fix bugs and optimize performance. "
               "We do not use these tools to personally identify you without your consent.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("6. Data Retention", style: headingStyle),
+        SizedBox(height: 16),
+        Text("6. Data Retention", style: headingStyle),
         Text(
           "• We keep your account and profile data as long as your account is active.\n"
               "• Transaction and legal records may be kept for a longer period as required by law or for dispute resolution.\n"
@@ -218,29 +218,29 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("7. Security", style: headingStyle),
+        SizedBox(height: 16),
+        Text("7. Security", style: headingStyle),
         Text(
           "We use reasonable technical and organizational measures to protect your information (encryption where possible, secure storage, access controls, etc.). "
               "However, no system is 100% secure, and we cannot guarantee absolute security of data transmitted over the internet.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("8. Children's Privacy", style: headingStyle),
+        SizedBox(height: 16),
+        Text("8. Children's Privacy", style: headingStyle),
         Text(
           "FINDUS is not intended for children under 13 years of age. We do not knowingly collect personal information from children under 13. "
               "If you believe a child has provided us data, please contact us so we can remove it.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("9. Your Rights & Controls", style: headingStyle),
+        SizedBox(height: 16),
+        Text("9. Your Rights & Controls", style: headingStyle),
         Text(
           "Depending on local law, you may have the right to:",
           style: textStyle,
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: 6),
         Text(
           "• Access the personal data we hold about you.\n"
               "• Correct or update incorrect or incomplete information.\n"
@@ -249,36 +249,36 @@ class _PrivacyContent extends StatelessWidget {
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("10. Third‑Party Links & Services", style: headingStyle),
+        SizedBox(height: 16),
+        Text("10. Third‑Party Links & Services", style: headingStyle),
         Text(
           "Our app may contain links or integrations to third‑party websites or services (e.g. payment providers, map services). "
               "We are not responsible for the privacy practices of those third parties. Please review their privacy policies separately.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("11. Changes to This Policy", style: headingStyle),
+        SizedBox(height: 16),
+        Text("11. Changes to This Policy", style: headingStyle),
         Text(
           "We may update this Privacy Policy from time to time. We will update the 'Last updated' date at the top and may notify you inside the app for major changes. "
               "By continuing to use FINDUS after changes, you agree to the updated Policy.",
           style: textStyle,
         ),
 
-        const SizedBox(height: 16),
-        const Text("12. Contact Us", style: headingStyle),
+        SizedBox(height: 16),
+        Text("12. Contact Us", style: headingStyle),
         Text(
           "If you have any questions or concerns about this Privacy Policy or how we handle your data, you can contact us at:",
           style: textStyle,
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: 4),
         Text(
           "Email: admin@findus.odditybd.shop\n"
               "Subject: Privacy Policy – FINDUS",
           style: textStyle,
         ),
 
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
       ],
     );
   }

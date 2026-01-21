@@ -34,7 +34,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
     final ratingText = worker.rating.toStringAsFixed(1);
 
     // ✅ role label fixed
-    final jobTitle = "${_roleLabel} service";
+    final jobTitle = "$_roleLabel service";
 
     // ✅ priceText fixed (string)
     final priceLabel = worker.priceText.trim().isNotEmpty

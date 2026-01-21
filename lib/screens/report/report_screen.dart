@@ -212,7 +212,7 @@ class _ReportScreenState extends State<ReportScreen> {
                       // Include contact টগল
                       SwitchListTile(
                         value: _includeContact,
-                        activeColor: AppColors.brandMain,
+                        activeThumbColor: AppColors.brandMain,
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
                           "Include my contact details",

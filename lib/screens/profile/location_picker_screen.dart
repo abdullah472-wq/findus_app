@@ -14,7 +14,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final MapController _mapController = MapController();
 
   // প্রথমে ঢাকার আশেপাশে দেখাবো
-  LatLng _initialCenter = const LatLng(23.8103, 90.4125);
+  final LatLng _initialCenter = const LatLng(23.8103, 90.4125);
   LatLng? _pickedLocation;
 
   @override
