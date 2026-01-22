@@ -1,13 +1,4 @@
 // lib/screens/profile/support_post_screen.dart
-//
-// ✅ Production-grade SupportPostScreen
-// ✅ Uses FloatingScaffold (floating app bar) + background AppColors.brandLight
-// ✅ Robust location permission handling + current/custom pin
-// ✅ Uploads images/videos correctly (Cloudinary resourceType auto)
-// ✅ Gets current user's role from Firestore (no hardcode) + enforces maker default
-// ✅ Uses PostService.createPost (updated optional fields)
-// ✅ Sends self notification after posting
-// ✅ Clean UI + validations
 
 import 'dart:io';
 
@@ -74,9 +65,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     super.dispose();
   }
 
-  // -----------------------------
-  // Location
-  // -----------------------------
+  // --- Location ---
 
   Future<void> _initLocation() async {
     if (!_useCurrentLocation) return;
@@ -133,14 +122,14 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
   }
 
   Future<void> _selectLocationOnMap() async {
-    final LatLng? picked = await Navigator.push(
+    final picked = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
     );
 
     if (!mounted) return;
 
-    if (picked != null) {
+    if (picked != null && picked is LatLng) {
       setState(() {
         _selectedLatLng = picked;
         _useCurrentLocation = false;
@@ -148,10 +137,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
       });
     }
   }
-
-  // -----------------------------
-  // Helpers
-  // -----------------------------
 
   void _showSnack(String msg, Color color) {
     if (!mounted) return;
@@ -213,10 +198,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     }
   }
 
-  // -----------------------------
-  // Upload media
-  // -----------------------------
-
   Future<List<String>> _uploadMedia() async {
     if (_mediaFiles.isEmpty) return const <String>[];
 
@@ -240,10 +221,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     }
     return urls;
   }
-
-  // -----------------------------
-  // Submit post
-  // -----------------------------
 
   Future<void> _handlePost() async {
     if (_isSaving) return;
@@ -342,10 +319,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     }
   }
 
-  // -----------------------------
-  // Media UI
-  // -----------------------------
-
   void _showMediaOptions() {
     showModalBottomSheet(
       context: context,
@@ -363,16 +336,10 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
             Container(
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(4)),
               margin: const EdgeInsets.only(bottom: 16),
             ),
-            const Text(
-              "Attach Photo / Video",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
-            ),
+            const Text("Attach Photo / Video", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -382,10 +349,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                   label: "Camera",
                   onTap: () async {
                     Navigator.pop(context);
-                    final XFile? file = await _picker.pickImage(
-                      source: ImageSource.camera,
-                      imageQuality: 80,
-                    );
+                    final XFile? file = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
                     if (!mounted) return;
                     if (file != null) setState(() => _mediaFiles.add(file));
                   },
@@ -418,30 +382,18 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     );
   }
 
-  Widget _mediaOption({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
+  Widget _mediaOption({required IconData icon, required String label, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.brandLight,
-            child: Icon(icon, color: AppColors.brandDark),
-          ),
+          CircleAvatar(radius: 24, backgroundColor: AppColors.brandLight, child: Icon(icon, color: AppColors.brandDark)),
           const SizedBox(height: 6),
           Text(label, style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
   }
-
-  // -----------------------------
-  // UI
-  // -----------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -458,15 +410,8 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
           child: TextButton(
             onPressed: _isSaving ? null : _handlePost,
             child: _isSaving
-                ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-                : const Text(
-              "POST",
-              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark),
-            ),
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text("POST", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
           ),
         ),
       ],
@@ -487,20 +432,15 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                   itemBuilder: (context, index) => _buildCategoryItem(_categories[index]),
                 ),
               ),
-
               const SizedBox(height: 18),
               const Text("Job Title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
               _cardField(
                 child: TextField(
                   controller: _titleController,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: "e.g. Need a full day cleaner, Driver for tomorrow...",
-                  ),
+                  decoration: const InputDecoration(border: InputBorder.none, hintText: "e.g. Need a full day cleaner, Driver for tomorrow..."),
                 ),
               ),
-
               const SizedBox(height: 18),
               const Text("Job Description", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
@@ -508,13 +448,9 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                 child: TextField(
                   controller: _descController,
                   maxLines: 4,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    hintText: "Describe the work, time, requirements, and any details...",
-                  ),
+                  decoration: const InputDecoration(border: InputBorder.none, hintText: "Describe the work, time, requirements, and any details..."),
                 ),
               ),
-
               const SizedBox(height: 18),
               _cardField(
                 child: Row(
@@ -545,7 +481,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                   Expanded(child: Text(_locationName, style: const TextStyle(fontSize: 12))),
                 ],
               ),
-
               const SizedBox(height: 18),
               OutlinedButton.icon(
                 onPressed: _showMediaOptions,
@@ -558,19 +493,14 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                   backgroundColor: Colors.white,
                 ),
               ),
-
               const SizedBox(height: 12),
               _buildAttachmentsSection(),
-
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("Budget (per job)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(
-                    "৳ ${_budget.toInt()}",
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange),
-                  ),
+                  Text("৳ ${_budget.toInt()}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
                 ],
               ),
               Slider(
@@ -582,7 +512,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                 inactiveColor: Colors.white,
                 onChanged: (val) => setState(() => _budget = val),
               ),
-
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -595,14 +524,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: _isSaving
-                      ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
                       : const Text("POST JOB REQUEST", style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -616,18 +538,13 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
   Widget _cardField({required Widget child}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
       child: child,
     );
   }
 
   Widget _buildAttachmentsSection() {
     if (_mediaFiles.isEmpty) return const SizedBox.shrink();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -640,34 +557,14 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
             itemCount: _mediaFiles.length,
             itemBuilder: (context, index) {
               final file = _mediaFiles[index];
-              final isVideo = _isVideoFile(file.path);
-
-              return Stack(
-                children: [
-                  Container(
-                    width: 80,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade300),
-                      image: !isVideo ? DecorationImage(image: FileImage(File(file.path)), fit: BoxFit.cover) : null,
-                      color: isVideo ? Colors.black12 : null,
-                    ),
-                    child: isVideo ? const Center(child: Icon(Icons.videocam, color: Colors.black54)) : null,
-                  ),
-                  Positioned(
-                    top: 2,
-                    right: 10,
-                    child: GestureDetector(
-                      onTap: () => setState(() => _mediaFiles.removeAt(index)),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                        child: const Icon(Icons.close, size: 14, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
+              return Container(
+                width: 80,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade300),
+                  image: DecorationImage(image: FileImage(File(file.path)), fit: BoxFit.cover),
+                ),
               );
             },
           ),
@@ -678,7 +575,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
 
   Widget _buildCategoryItem(Map<String, dynamic> item) {
     final bool isSelected = _selectedCategory == item['name'];
-
     return GestureDetector(
       onTap: () => setState(() => _selectedCategory = item['name'] as String),
       child: Container(
@@ -687,29 +583,14 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
         decoration: BoxDecoration(
           color: isSelected ? AppColors.brandMain.withOpacity(0.12) : Colors.white,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(
-            color: isSelected ? AppColors.brandMain : Colors.grey.shade200,
-            width: isSelected ? 2 : 1,
-          ),
+          border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.shade200, width: isSelected ? 2 : 1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              item['icon'] as IconData,
-              size: 30,
-              color: isSelected ? AppColors.brandMain : Colors.grey,
-            ),
+            Icon(item['icon'] as IconData, size: 30, color: isSelected ? AppColors.brandMain : Colors.grey),
             const SizedBox(height: 8),
-            Text(
-              item['name'].toString(),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? AppColors.brandDark : Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(item['name'].toString(), style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.brandDark : Colors.grey), textAlign: TextAlign.center),
           ],
         ),
       ),

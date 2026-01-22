@@ -1,398 +1,314 @@
+// lib/screens/job_post_gate_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
-import 'package:findus_app/screens/earner/worker_profile_screen.txt';
+// ✅ UnifiedProfileScreen ইম্পোর্ট করা হয়েছে
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/profile/support_post_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class JobPostGateScreen extends StatefulWidget {
   final Worker worker;
 
-  const JobPostGateScreen({
-    super.key,
-    required this.worker,
-  });
+  const JobPostGateScreen({super.key, required this.worker});
 
   @override
   State<JobPostGateScreen> createState() => _JobPostGateScreenState();
 }
 
 class _JobPostGateScreenState extends State<JobPostGateScreen> {
-  // TODO: ভবিষ্যতে এখানে আসল subscription ডাটা থেকে মান আসবে
+  // TODO: Replace with real subscription status
   final bool _isSubscriber = false;
   bool _isWatchingAd = false;
 
   Future<void> _goToSupportPost() async {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SupportPostScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const SupportPostScreen()),
     );
   }
 
   Future<void> _handleWatchAdAndPost() async {
     setState(() => _isWatchingAd = true);
-
-    // TODO: এখানে real rewarded ad ইন্টিগ্রেট করবে
+    // Simulate Ad watching
     await Future.delayed(const Duration(seconds: 2));
-
     if (!mounted) return;
     setState(() => _isWatchingAd = false);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Ad watched (demo). Now you can post a job."),
-        backgroundColor: AppColors.brandMain,
+      const SnackBar(content: Text("Ad watched successfully! Posting job...")),
+    );
+    await _goToSupportPost();
+  }
+
+  // ✅ Unified Profile ওপেন করার ফাংশন
+  void _openUserProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UnifiedProfileScreen(
+          uid: widget.worker.uid, // Worker এর UID
+          isOwner: false, // যেহেতু অন্য কেউ দেখছে
+          showBack: true, // ব্যাক বাটন অন
+        ),
       ),
     );
-
-    await _goToSupportPost();
   }
 
   @override
   Widget build(BuildContext context) {
-    final w = widget.worker;
+    return FloatingScaffold(
+      title: 'Post a Job',
+      backgroundColor: const Color(0xFFF8F9FD),
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFE0F7FA),
-      appBar: AppBar(
-        title: const Text(
-          "Job Request",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
       body: Column(
         children: [
-          // উপরের অংশ স্ক্রলেবল
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  _buildWorkerHeader(w),
-                  const SizedBox(height: 16),
-                  _buildInfoText(),
-                  const SizedBox(height: 16),
-                  _buildSubscriberSection(),
-                  const SizedBox(height: 12),
-                  _buildFreeUserSection(),
+                  // Worker Summary Card
+                  _buildWorkerHeader(widget.worker),
+
+                  const SizedBox(height: 25),
+
+                  if (_isSubscriber)
+                    _buildPremiumUserView()
+                  else
+                    _buildFreeUserView(),
                 ],
               ),
             ),
           ),
 
-          // নিচের ফিক্সড CTA
-          Container(
-            padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, -3),
-                )
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // View full profile
-                SizedBox(
-                  width: double.infinity,
-                  height: 42,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              WorkerProfileScreen(worker: w),
-                        ),
-                      );
-                    },
-                    style: OutlinedButton.styleFrom(
-                      side:
-                      const BorderSide(color: AppColors.brandMain),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text(
-                      "VIEW FULL PROFILE",
-                      style: TextStyle(
-                        color: AppColors.brandMain,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Main CTA
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _isSubscriber
-                        ? _goToSupportPost
-                        : _handleWatchAdAndPost,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandDark,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isWatchingAd
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor:
-                        AlwaysStoppedAnimation<Color>(
-                            Colors.white),
-                      ),
-                    )
-                        : Text(
-                      _isSubscriber
-                          ? "POST JOB NOW"
-                          : "WATCH AD & POST JOB",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildBottomAction(),
         ],
       ),
     );
   }
 
-  // -------- Worker summary card ----------
-  // ✅ JobPostGateScreen এর _buildWorkerHeader() আপডেট করো নতুন Worker model অনুযায়ী
-// Fixes:
-// 1) w.role নেই -> w.userRole ব্যবহার (finder/maker)
-// 2) w.price এখন num? (optional) আর w.priceText আছে (String display)
-//    UI তে string লাগলে priceText ব্যবহার করো
+  // --- Widgets ---
 
-  // ✅ JobPostGateScreen.dart
-// এই ফাংশনটা replace করে দাও (পুরাটাই)
-// কারণ নতুন Worker model এ:
-// - w.role নেই -> w.userRole আছে
-// - w.price (num?) নয়, display এর জন্য w.priceText (String) আছে
+  Widget _buildPremiumUserView() {
+    return Column(
+      children: [
+        Icon(Icons.workspace_premium, size: 80, color: Colors.amber.shade700),
+        const SizedBox(height: 15),
+        const Text(
+          "You are a Premium Member!",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.amber),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          "No ads, no waiting. Post your job instantly.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFreeUserView() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            children: [
+              _buildFeatureRow("Post Job Instantly", isPremium: true, isFree: false),
+              const Divider(height: 25),
+              _buildFeatureRow("Remove Ads", isPremium: true, isFree: false),
+              const Divider(height: 25),
+              _buildFeatureRow("Priority Support", isPremium: true, isFree: false),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 30),
+
+        GestureDetector(
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Go to Subscription Page")));
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFFFFA726), Color(0xFFFF5722)]),
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5)),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Go Premium", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text("Unlock instant posting", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                  child: const Icon(Icons.arrow_forward, color: Colors.white, size: 20),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureRow(String text, {required bool isPremium, required bool isFree}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(text, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black87)),
+        Row(
+          children: [
+            _statusIcon(isFree, isFree: true),
+            const SizedBox(width: 40),
+            _statusIcon(isPremium, isFree: false),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _statusIcon(bool active, {required bool isFree}) {
+    if (active) {
+      return Icon(Icons.check_circle, size: 22, color: Colors.green.shade600);
+    }
+    return Icon(Icons.cancel, size: 22, color: Colors.grey.shade300);
+  }
 
   Widget _buildWorkerHeader(Worker w) {
-    final String ratingText = w.rating.toStringAsFixed(1);
-    final bool hasImg = w.image.trim().isNotEmpty;
-
-    // ✅ userRole (finder/maker) -> UI label
-    final String roleLabel = (w.userRole.toLowerCase().trim() == 'finder')
-        ? 'WORKER'
-        : 'SUPPORTER';
-
-    // ✅ display price string
-    final String priceLabel = (w.priceText.trim().isNotEmpty)
-        ? w.priceText
-        : (w.price != null ? "৳ ${w.price!.toInt()}" : "Negotiable");
-
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           )
         ],
-        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppColors.brandLight,
-            backgroundImage: hasImg ? NetworkImage(w.image) : null,
-            child: hasImg ? null : const Icon(Icons.person, color: AppColors.brandDark),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(50),
+            child: CachedNetworkImage(
+              imageUrl: w.image,
+              width: 55,
+              height: 55,
+              fit: BoxFit.cover,
+              errorWidget: (_,__,___) => Container(color: Colors.grey.shade200, child: const Icon(Icons.person)),
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  w.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppColors.brandDark,
-                  ),
-                ),
+                Text("Hiring For", style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 2),
-                Text(
-                  roleLabel, // ✅ was w.role.toUpperCase()
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        w.location,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                      ),
-                    ),
-                  ],
-                ),
+                Text(w.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
+                Text(w.userRole.toUpperCase(), style: const TextStyle(fontSize: 10, color: AppColors.brandMain, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                priceLabel, // ✅ was w.price (num? -> String error)
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.orange,
-                ),
+          // ✅ Profile Button Updated
+          TextButton(
+            onPressed: _openUserProfile, // এখানে কল করা হয়েছে
+            style: TextButton.styleFrom(
+              backgroundColor: AppColors.brandLight.withOpacity(0.5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("Profile", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.brandMain)),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomAction() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!_isSubscriber)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text(
+                "Watch a short ad to continue for free",
+                style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
               ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
+            ),
+
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              onPressed: _isSubscriber ? _goToSupportPost : _handleWatchAdAndPost,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandDark,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                elevation: 5,
+                shadowColor: AppColors.brandDark.withOpacity(0.3),
+              ),
+              child: _isWatchingAd
+                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
+                  : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.star, size: 14, color: Colors.amber),
-                  const SizedBox(width: 3),
+                  if (!_isSubscriber) const Icon(Icons.play_circle_filled_rounded, color: Colors.white),
+                  if (!_isSubscriber) const SizedBox(width: 10),
                   Text(
-                    ratingText,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    _isSubscriber ? "POST JOB NOW" : "WATCH AD & POST",
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white, letterSpacing: 0.5),
                   ),
                 ],
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // -------- Info text ----------
-  Widget _buildInfoText() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.brandLight.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: const Text(
-        "You are about to post a job request for this worker.\n\n"
-            "• Subscribers can post jobs instantly, without any ads.\n"
-            "• Free users need to watch a short ad before posting a job.",
-        style: TextStyle(fontSize: 12, height: 1.5),
-      ),
-    );
-  }
-
-  // -------- Subscriber section ----------
-  Widget _buildSubscriberSection() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _isSubscriber
-            ? Colors.green.shade50
-            : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color:
-          _isSubscriber ? Colors.green : Colors.grey.shade300,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.workspace_premium,
-            color: _isSubscriber ? Colors.green : Colors.grey,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _isSubscriber
-                  ? "You are a FINDUS Subscriber.\nYou can post jobs instantly without ads."
-                  : "Subscribe to FINDUS Premium to post jobs instantly and remove ads.",
-              style: const TextStyle(fontSize: 12, height: 1.4),
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: () {
-              // TODO: Subscription screen এ নেবে
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content:
-                  Text("Subscription flow coming soon (demo)."),
-                ),
-              );
-            },
-            child: const Text(
-              "UPGRADE",
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandMain),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // -------- Free user (Ad) section ----------
-  Widget _buildFreeUserSection() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.ondemand_video, color: Colors.orange),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _isSubscriber
-                  ? "As a subscriber, you don’t need to watch ads to post jobs."
-                  : "Watch a 30 seconds rewarded ad to unlock this job post.",
-              style: const TextStyle(fontSize: 12, height: 1.4),
             ),
           ),
         ],

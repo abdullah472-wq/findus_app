@@ -1,5 +1,6 @@
-package com.example.findus_app
+package com.findus.app
 
 import io.flutter.embedding.android.FlutterActivity
 
-class MainActivity : FlutterActivity()
+class MainActivity: FlutterActivity() {
+}

@@ -1,5 +1,4 @@
-// lib/models/achievement_models.dart
-
+// lib/achievement/achievement_models.dart
 
 /// Achievement এর টাইপ
 enum AchievementType {
@@ -79,8 +78,7 @@ class AchievementState {
       'id': def.id,
       'progress': progress,
       'claimed': claimed,
-      'lastUpdated':
-      lastUpdated?.millisecondsSinceEpoch,
+      'lastUpdated': lastUpdated?.millisecondsSinceEpoch,
     };
   }
 

@@ -1,43 +1,32 @@
+// Root build.gradle.kts
 plugins {
-    id("com.android.application")
-    // এই লাইনটি অত্যন্ত জরুরি, এটি ছাড়া Firebase কাজ করবে না
-    id("com.google.gms.google-services") version "4.4.2"
-    id("com.google.firebase.crashlytics") version "3.0.2"
-    id("kotlin-android")
-    id("dev.flutter.flutter-gradle-plugin")
+    // এই প্লাগিনগুলো এখানে ডিফাইন করা হয় যাতে সাব-প্রজেক্টরা ব্যবহার করতে পারে
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0" apply false
+    id("com.android.application") version "8.6.0" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.0" apply false
+    id("com.google.gms.google-services") version "4.4.1" apply false
+    id("com.google.firebase.crashlytics") version "2.9.9" apply false
 }
 
-android {
-    namespace = "com.findus.app"
-    // 36 অনেক সময় স্টেবল না হতে পারে, তাই 34 বা 35 ব্যবহার করা নিরাপদ
-    compileSdk = 34
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
-    }
-
-    defaultConfig {
-        applicationId = "com.findus.app"
-        minSdk = 23
-        targetSdk = 34 // compileSdk এর সাথে মিল রাখা ভালো
-        versionCode = 1
-        versionName = "1.0.0"
-    }
-
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = false
-            isShrinkResources = false
-        }
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-flutter {
-    source = "../.."
+val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
+rootProject.layout.buildDirectory.value(newBuildDir)
+
+subprojects {
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register<Delete>("clean") {
+    delete(rootProject.layout.buildDirectory)
 }

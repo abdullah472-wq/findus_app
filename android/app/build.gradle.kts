@@ -1,122 +1,49 @@
-import java.util.Properties
-import java.io.FileInputStream
-
+// App module build.gradle.kts
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")  // ✅ যোগ করুন
     id("kotlin-android")
+    // Flutter Plugin (ভার্সন রুট থেকে আসবে)
     id("dev.flutter.flutter-gradle-plugin")
-}
 
-val keystoreProperties = Properties()
-val keystorePropertiesFile = rootProject.file("key.properties")
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+    // Firebase
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
     namespace = "com.findus.app"
-    compileSdk = 34  // ✅ সরাসরি 34 সেট করুন (সর্বশেষ)
-    ndkVersion = "26.1.10909125"  // ✅ সরাসরি NDK ভার্সন সেট করুন
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     defaultConfig {
         applicationId = "com.findus.app"
-        minSdk = flutter.minSdkVersion  // ✅ Android 6.0+ (API 23) সেট করুন
-        targetSdk = 34  // ✅ সরাসরি 34 সেট করুন
-        versionCode = 1  // ✅ সরাসরি 1 সেট করুন
-        versionName = "1.0.0"  // ✅ সরাসরি 1.0.0 সেট করুন
-
-        // ✅ MultiDex enable করুন
+        minSdk = flutter.minSdkVersion
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
         multiDexEnabled = true
-
-        // ✅ Test runner
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties.getProperty("keyAlias") ?: ""
-            keyPassword = keystoreProperties.getProperty("keyPassword") ?: ""
-            val storeFileProp = keystoreProperties.getProperty("storeFile")
-            if (storeFileProp != null) {
-                storeFile = rootProject.file(storeFileProp)
-            }
-            storePassword = keystoreProperties.getProperty("storePassword") ?: ""
-        }
-        // ✅ Debug signing config (optional)
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-        }
     }
 
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("debug")
-            // ✅ Debug features
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-DEBUG"
-            isDebuggable = true
-            isMinifyEnabled = false
-            isShrinkResources = false
-        }
-
         release {
-            // ✅ Signing config
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")  // Fallback
-            }
-
-            // ✅ Production optimization
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
-
-            // ✅ Proguard rules
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-
-            // ✅ Disable debug
-            isDebuggable = false
-            isJniDebuggable = false
-            isRenderscriptDebuggable = false
-
-            // ✅ Optimize PNG
-            crunchPngs = true
         }
-    }
-
-    // ✅ Build features
-    buildFeatures {
-        buildConfig = true
-    }
-
-    // ✅ Packaging options
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            excludes += "META-INF/LICENSE.md"
-            excludes += "META-INF/LICENSE-notice.md"
-        }
-    }
-
-    // ✅ Lint options (production এর জন্য)
-    lint {
-        abortOnError = true
-        warningsAsErrors = true
-        checkReleaseBuilds = true
     }
 }
 
@@ -125,11 +52,6 @@ flutter {
 }
 
 dependencies {
-    // ✅ MultiDex dependency (যদি app বড় হয়)
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("androidx.multidex:multidex:2.0.1")
-
-    // ✅ Test dependencies
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }

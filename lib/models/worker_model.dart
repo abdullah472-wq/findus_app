@@ -15,10 +15,8 @@ class Worker {
   final String priceText;
   final num? price;
 
-  // ✅ নতুন ফিল্ডসমূহ (এরর ফিক্সের জন্য)
-  final bool isVerified;        // এটি মিসিং ছিল
-  final List<String>? languages; // এটি মিসিং ছিল
-
+  final bool isVerified;
+  final List<String>? languages;
   final double? experience;
   final String? gender;
   final bool isLive;
@@ -26,8 +24,10 @@ class Worker {
   final bool isPromoted;
   final String? phone;
 
-  // Optional: Backward compatibility getters
+  // ✅ Backward Compatibility Getters (পুরানো কোড যাতে না ভাঙে)
   String get id => uid;
+  String get role => userRole;
+  String get message => about;
 
   const Worker({
     required this.uid,
@@ -43,11 +43,8 @@ class Worker {
     this.location = "Bangladesh",
     this.priceText = "Negotiable",
     this.price,
-
-    // ✅ নতুন ফিল্ডগুলো এখানে ইনিশিয়ালাইজ করা হলো
     this.isVerified = false,
     this.languages,
-
     this.experience,
     this.gender,
     this.isLive = false,
@@ -56,10 +53,8 @@ class Worker {
     this.phone,
   });
 
-  // Factory Constructor (Firestore থেকে ডাটা নেওয়ার জন্য)
   factory Worker.fromUserDoc(Map<String, dynamic> map, String uid) {
     final role = (map['userRole'] ?? 'finder').toString().toLowerCase().trim();
-
     return Worker(
       uid: uid,
       name: (map['name'] ?? 'Unknown').toString(),
@@ -67,18 +62,13 @@ class Worker {
       image: (map['image'] ?? '').toString(),
       about: (map['about'] ?? '').toString(),
       kycCompleted: map['kyc_completed'] == true,
-
-      // isVerified সাধারণত kycCompleted এর সমান হতে পারে বা আলাদা ফিল্ড হতে পারে
       isVerified: (map['isVerified'] == true) || (map['kyc_completed'] == true),
-
       rating: (map['rating'] is num) ? (map['rating'] as num).toDouble() : 0.0,
       completedCount: (map['completedCount'] ?? 0) as int,
       reviewsCount: (map['reviewsCount'] ?? 0) as int,
       location: (map['location'] ?? 'Bangladesh').toString(),
       priceText: (map['priceText'] ?? 'Negotiable').toString(),
       price: (map['price'] is num) ? map['price'] as num : null,
-
-      // ✅ নতুন ফিল্ড ম্যাপ করা
       experience: (map['experience'] is num) ? (map['experience'] as num).toDouble() : null,
       gender: map['gender']?.toString(),
       languages: (map['languages'] as List?)?.map((e) => e.toString()).toList(),
