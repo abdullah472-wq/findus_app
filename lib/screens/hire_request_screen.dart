@@ -1,4 +1,5 @@
 // lib/screens/hire_request_screen.dart
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -114,6 +115,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     final supporterRole = (u['userRole'] ?? 'supporter').toString();
     final supporterRating = (u['rating'] is num) ? (u['rating'] as num).toDouble() : 0.0;
 
+    // 🔥 NEW: ৪ সংখ্যার OTP জেনারেট করা
+    String generateOTP() {
+      return (1000 + Random().nextInt(9000)).toString();
+    }
+    final String secretOtp = generateOTP();
+
     // 1) Create Hire Request
     final reqRef = db.collection('hire_requests').doc();
     await reqRef.set({
@@ -128,6 +135,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
       'workType': workType,
       'offerPrice': offerPrice.toInt(),
       'details': details,
+
+      // 🔥 NEW: ভেরিফিকেশন ডাটা সেভ করা হচ্ছে
+      'secret_otp': secretOtp,       // এই কোডটি শুধু Hirer দেখবে
+      'verification_type': 'otp',    // ভেরিফিকেশন টাইপ সেট করা হলো
+      'is_verified': false,          // ডিফল্ট হিসেবে ভেরিফাইড না
+
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });

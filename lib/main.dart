@@ -9,11 +9,11 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:provider/provider.dart'; // 📦 Provider প্যাকেজ ইমপোর্ট করা হয়েছে
+import 'package:provider/provider.dart';
 
+import 'constants/card_themes.dart';
 import 'firebase_options.dart';
 import 'splash_screen.dart';
-import 'constants/card_themes.dart';
 import 'badge/badge_service.dart';
 import 'services/theme_service.dart';
 import 'services/profile_status_service.dart';
@@ -23,7 +23,6 @@ import 'services/blocked_user_service.dart';
 import 'services/push_notification_service.dart';
 import 'achievement/achievement_service.dart';
 
-// 🌍 Localization Imports
 import 'localization/localization_wrapper.dart';
 import 'localization/app_localizations_delegate.dart';
 
@@ -65,7 +64,6 @@ Future<void> main() async {
 
       await _initializeAllServices();
 
-      // 🔹 অ্যাপ র্যাপ করা হয়েছে Provider দিয়ে ভাষা পরিবর্তনের জন্য
       runApp(
         ChangeNotifierProvider(
           create: (_) => LocalizationWrapper(),
@@ -108,7 +106,6 @@ class FindUsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔹 কারেন্ট ভাষা পাওয়ার জন্য Provider লিসেনার
     final localizationWrapper = Provider.of<LocalizationWrapper>(context);
 
     return ValueListenableBuilder<ThemeSettings>(
@@ -120,19 +117,17 @@ class FindUsApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'FINDUS',
 
-          // Theme Settings
           theme: _getTheme(false),
           darkTheme: _getTheme(true),
           themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
 
-          // 🌍 Localization Setup
-          locale: localizationWrapper.locale, // ডাইনামিক লোকেল
+          locale: localizationWrapper.locale,
           supportedLocales: const [
-            Locale('en', 'US'), // English
-            Locale('bn', 'BD'), // Bangla
+            Locale('en', 'US'),
+            Locale('bn', 'BD'),
           ],
           localizationsDelegates: const [
-            AppLocalizationDelegate(), // আমাদের কাস্টম ডেলিগেট
+            AppLocalizationDelegate(),
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
@@ -153,6 +148,7 @@ class FindUsApp extends StatelessWidget {
     );
   }
 
+  // ✅ ফিক্সড থিম মেথড (as dynamic ব্যবহার করে বাইপাস করা হয়েছে)
   ThemeData _getTheme(bool isDark) {
     return ThemeData(
       useMaterial3: true,
@@ -167,10 +163,10 @@ class FindUsApp extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
       ),
 
-      // 👇 এখানে পরিবর্তন করা হয়েছে
-      cardTheme: (isDark
-          ? CardThemes.darkCardTheme
-          : CardThemes.lightCardTheme) as dynamic,
+      // ✅ সরাসরি cardTheme সেট করো, কোনো cast ছাড়াই
+      cardTheme: isDark
+          ? AppCardThemes.darkCardTheme
+          : AppCardThemes.lightCardTheme,
     );
   }
 }

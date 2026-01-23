@@ -265,6 +265,10 @@ class PendingJobsScreen extends StatelessWidget {
       String supporterImage = '';
       dynamic price;
 
+      // 🔥 NEW: ভেরিফিকেশন ডাটা ভেরিয়েবল
+      String secretOtp = '';
+      String verificationType = 'otp';
+
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(doc.reference);
         if (!snap.exists) throw Exception('Request not found');
@@ -275,6 +279,11 @@ class PendingJobsScreen extends StatelessWidget {
         supporterName = (data['senderName'] ?? '').toString();
         supporterImage = (data['senderImage'] ?? '').toString();
         price = data['price'] ?? data['offerPrice'];
+
+        // 🔥 NEW: রিকোয়েস্ট থেকে OTP এবং ভেরিফিকেশন টাইপ কপি করা হচ্ছে
+        secretOtp = (data['secret_otp'] ?? '').toString();
+        verificationType = (data['verification_type'] ?? 'otp').toString();
+
         final status = (data['status'] ?? '').toString();
 
         if (receiverId != finderId) throw Exception('Not allowed');
@@ -287,7 +296,7 @@ class PendingJobsScreen extends StatelessWidget {
         tx.update(doc.reference, {
           'status': DashboardConstants.ongoingStatus,
           'approvedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(), // ✅ rules-friendly
+          'updatedAt': FieldValue.serverTimestamp(),
         });
 
         // 2) ongoing_jobs create (doc id = request id prevents duplicates)
@@ -295,15 +304,21 @@ class PendingJobsScreen extends StatelessWidget {
         FirebaseFirestore.instance.collection('ongoing_jobs').doc(doc.id);
 
         tx.set(ongoingRef, {
-          'participants': [finderId, supporterId], // ✅ both can see
-          'receiverId': finderId,                  // finder(receiver)
-          'workerId': supporterId,                 // supporter(worker)
+          'participants': [finderId, supporterId],
+          'receiverId': finderId,   // Earner (Worker)
+          'workerId': supporterId,  // Hirer (Client) - *Note: Naming might be confusing based on your role logic, but keeping consistant with your code*
           'workerName': supporterName,
           'workerImage': supporterImage,
           'price': price,
-          'status': DashboardConstants.ongoingStatus, // "ongoing"
+          'status': DashboardConstants.ongoingStatus,
           'startTime': FieldValue.serverTimestamp(),
           'originalRequestId': doc.id,
+
+          // 🔥 NEW: Ongoing জবে OTP ডাটা সেভ করা হলো
+          'secret_otp': secretOtp,        // যাতে পরে ম্যাচ করা যায়
+          'verification_type': verificationType,
+          'is_verified': false,           // কাজ এখনো শেষ হয়নি
+
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       });
