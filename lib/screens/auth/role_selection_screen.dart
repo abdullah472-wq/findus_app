@@ -3,14 +3,13 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/screens/auth/signup_screen.dart'; // পাথ মিলিয়ে নিন
+import 'package:findus_app/screens/auth/signup_screen.dart';
 import 'package:findus_app/screens/main_nav_screen.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-/// এখানে তোমার নিজের Terms & Privacy এর ওয়েব URL বসাও
 const String _termsUrl = 'https://findus.odditybd.shop/#policies';
 const String _privacyUrl = 'https://findus.odditybd.shop/#policies';
 
@@ -32,8 +31,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   void initState() {
     super.initState();
     _termsRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(_termsUrl);
-    _privacyRecognizer =
-    TapGestureRecognizer()..onTap = () => _openUrl(_privacyUrl);
+    _privacyRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(_privacyUrl);
   }
 
   @override
@@ -61,20 +59,15 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   void _showError(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
     );
   }
 
   String _mapMakerFinderToCoreRole(String makerFinder) {
-    // maker/finder → supporter/worker
     return makerFinder == 'maker' ? 'supporter' : 'worker';
   }
 
   String _mapCoreRoleToMakerFinder(String coreRole) {
-    // supporter/worker → maker/finder
     return coreRole == 'supporter' ? 'maker' : 'finder';
   }
 
@@ -93,7 +86,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     }
 
     final googleAuth = await googleUser.authentication;
-
     final credential = GoogleAuthProvider.credential(
       accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
@@ -103,7 +95,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   Future<void> _handleSelection(String selectedRole) async {
-    // selectedRole: "maker" বা "finder"
     if (_isLoading) return;
 
     if (!_isAgreed) {
@@ -114,7 +105,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ১) Google সাইন-ইন
       final userCred = await _signInWithGoogle();
       final user = userCred.user;
 
@@ -127,14 +117,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       final uid = user.uid;
       final db = FirebaseFirestore.instance;
 
-      // ২) users ডক লোড
       final userRef = db.collection('users').doc(uid);
       final snap = await userRef.get();
 
-      String roleForUi = selectedRole; // শেষে SignUpScreen-এ পাঠানোর জন্য
+      String roleForUi = selectedRole;
 
       if (!snap.exists) {
-        // নতুন ইউজার → রোল সেট করে ডক তৈরি
         final coreRole = _mapMakerFinderToCoreRole(selectedRole);
 
         await userRef.set({
@@ -152,7 +140,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
         roleForUi = selectedRole;
       } else {
-        // পুরোনো ইউজার → রোল ওভাররাইট নয়
         final data = snap.data() ?? <String, dynamic>{};
 
         if (data['isBlocked'] == true) {
@@ -166,7 +153,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           roleForUi = _mapCoreRoleToMakerFinder(coreRole);
         }
 
-        // Terms সম্মতি অন্তত একবার সেট করা (থাকলে ওভাররাইট হবে না)
         if (data['termsAcceptedAt'] == null) {
           await userRef.set({
             'termsAcceptedAt': FieldValue.serverTimestamp(),
@@ -175,7 +161,6 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
         }
       }
 
-      // ৩) এবার কোথায় যাবে?
       final fresh = await userRef.get();
       final freshData = fresh.data() ?? <String, dynamic>{};
       final completed = freshData['profileCompleted'] == true;
@@ -183,28 +168,24 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       if (!mounted) return;
 
       if (completed) {
-        // প্রোফাইল কমপ্লিট → মেইন অ্যাপ
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const MainNavScreen()),
               (route) => false,
         );
       } else {
-        // প্রোফাইল কমপ্লিট না → Complete Profile স্ক্রিন
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => SignUpScreen(
-              phoneNumber: '', // OTP বাদ, তাই ফাঁকা
-              userRole: roleForUi, // maker/finder
+              phoneNumber: '',
+              userRole: roleForUi,
             ),
           ),
         );
       }
     } catch (e) {
-      if (e.toString().contains('CANCELLED')) {
-        // ইউজার বাতিল করলে এরর দেখানো জরুরি না
-      } else {
+      if (!e.toString().contains('CANCELLED')) {
         _showError("কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।");
       }
     } finally {
@@ -283,14 +264,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                           _buildRoleButton(
                             "I am a Job Maker",
                             "Hire skilled workers",
-                            Icons.work_outline,
+                            Icons.business_center, // ✅ Safe Icon
                             _isLoading ? null : () => _handleSelection("maker"),
                           ),
                           const SizedBox(height: 20),
                           _buildRoleButton(
                             "I am a Job Finder",
                             "Find work & earn money",
-                            Icons.person_search_outlined,
+                            Icons.handyman, // ✅ Safe Icon
                             _isLoading ? null : () => _handleSelection("finder"),
                           ),
                           const SizedBox(height: 30),
@@ -404,7 +385,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
               child: Icon(
                 icon,
                 color: AppColors.brandMain,
-                size: 24,
+                size: 28, // আইকন সাইজ
               ),
             ),
             const SizedBox(width: 15),

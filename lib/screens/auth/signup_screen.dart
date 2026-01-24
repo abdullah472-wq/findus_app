@@ -21,7 +21,7 @@ const String _termsUrl = 'https://findus.odditybd.shop/#policies';
 const String _privacyUrl = 'https://findus.odditybd.shop/#policies';
 
 class SignUpScreen extends StatefulWidget {
-  final String phoneNumber; // এখন ফাঁকা থাকলেও সমস্যা নেই
+  final String phoneNumber;
   final String userRole; // 'maker' or 'finder'
 
   const SignUpScreen({
@@ -38,7 +38,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _nameController = TextEditingController();
 
   bool _isLoading = false;
-  bool _agreed = true; // RoleSelectionScreen এ আগে থেকেই শর্ত নিলে true রাখুন
+  bool _agreed = true;
 
   late TapGestureRecognizer _termsRecognizer;
   late TapGestureRecognizer _privacyRecognizer;
@@ -129,7 +129,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     if (_pickedImage == null) return null;
 
     final res = await CloudinaryService.uploadFile(
-      _pickedImage!, // ✅ CloudinaryService.uploadFile XFile নেয়
+      _pickedImage!,
       folder: 'findus/profile_images/$uid',
       resourceType: 'image',
       publicId: '${uid}_${DateTime.now().millisecondsSinceEpoch}',
@@ -142,7 +142,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _continue() async {
-    if (_isLoading) return; // ✅ ডাবল-ক্লিক/ডাবল-ট্যাপ আটকায়
+    if (_isLoading) return;
 
     if (AppConfigService.isSignupDisabled) {
       _showError("এখন সাইন‑আপ বন্ধ আছে। পরে আবার চেষ্টা করুন।");
@@ -163,7 +163,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ ইউজার না থাকলে Google login করাই
       User? user = _auth.currentUser;
       if (user == null) {
         final cred = await _signInWithGoogle();
@@ -176,64 +175,66 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       final uid = user.uid;
 
+      // নাম আপডেট (Auth Profile)
       await user.updateDisplayName(name);
 
+      // ইমেজ আপলোড
       final imageUrl = await _uploadProfileImageIfAny(uid);
 
       final userRef = _db.collection('users').doc(uid);
-      final snap = await userRef.get();
 
+      final role = _coreRole();
+      final phone = widget.phoneNumber.trim();
+
+      // ✅ ফিক্স: ফোন এবং রোল ডাটা আপডেট করার জন্য Map তৈরি
       final data = <String, dynamic>{
         'name': name,
         'profileCompleted': true,
-        'termsAcceptedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+
+        // রোল পুনরায় নিশ্চিত করা হচ্ছে
+        'userRole': role,
+        'roles': FieldValue.arrayUnion([role]), // অ্যারেতে রোল যোগ করা (যাতে আগের রোল না মুছে যায় যদি থাকে)
+        'isSupporter': role == 'supporter',
+        'isWorker': role == 'worker',
       };
 
-      if (imageUrl != null) data['image'] = imageUrl;
-
-      // ডক না থাকলে প্রথমবার তৈরি
-      if (!snap.exists) {
-        final role = _coreRole();
-        data.addAll({
-          'userRole': role,
-          'roles': [role],
-          'isSupporter': role == 'supporter',
-          'isWorker': role == 'worker',
-          'isAdmin': false,
-          'isBlocked': false,
-          'kycStatus': 'none',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        final phone = widget.phoneNumber.trim();
-        if (phone.isNotEmpty) data['phone'] = phone;
+      // ✅ ফিক্স: ফোন নম্বর থাকলে ম্যাপে যোগ হবে
+      if (phone.isNotEmpty) {
+        data['phone'] = phone;
       }
 
+      // ইমেজ থাকলে ম্যাপে যোগ হবে
+      if (imageUrl != null) {
+        data['image'] = imageUrl;
+      }
+
+      // ✅ ফিক্স: merge: true দিয়ে ডাটা সেভ করা হচ্ছে (আগের ডাটা থাকবে, নতুনগুলো আপডেট হবে)
       await userRef.set(data, SetOptions(merge: true));
 
-      // prefs
+      // SharedPreferences আপডেট
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_role', widget.userRole);
       await prefs.setString('user_name', name);
-      await prefs.setString('user_phone', widget.phoneNumber);
+      if (phone.isNotEmpty) await prefs.setString('user_phone', phone);
       if (imageUrl != null) {
         await prefs.setString('user_profile_image', imageUrl);
       }
 
       if (!mounted) return;
+
+      // মেইন স্ক্রিনে নেভিগেশন
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainNavScreen()),
             (route) => false,
       );
-    } on FirebaseException catch (e, st) {
+
+    } on FirebaseException catch (e) {
       debugPrint('FirebaseException code=${e.code} message=${e.message}');
-      debugPrint(st.toString());
-      _showError("Firebase সমস্যা: ${e.code}\n${e.message ?? ''}");
-    } catch (e, st) {
+      _showError("Firebase সমস্যা: ${e.message}");
+    } catch (e) {
       debugPrint('Error: $e');
-      debugPrint(st.toString());
       if (!e.toString().contains('CANCELLED')) {
         _showError("ব্যর্থ হয়েছে: $e");
       }
@@ -257,7 +258,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       backgroundColor: AppColors.brandLight,
       body: SafeArea(
         child: AbsorbPointer(
-          absorbing: _isLoading, // ✅ লোডিং চলাকালীন সব ট্যাপ বন্ধ
+          absorbing: _isLoading,
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
@@ -277,6 +278,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 30),
 
+                // Image Picker Widget
                 GestureDetector(
                   onTap: _pickProfileImage,
                   child: Stack(
@@ -378,7 +380,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             ),
                           )
                               : const Text(
-                            "Continue",
+                            "Complete Profile",
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,

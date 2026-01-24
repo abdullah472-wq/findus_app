@@ -32,6 +32,8 @@ import 'package:findus_app/screens/profile/earn_post_screen.dart';
 import 'package:findus_app/screens/profile/support_post_screen.dart';
 import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
 import 'package:findus_app/screens/explore/notifications_page.dart';
+import '../auth/log_in_chacker_screen.dart';
+import '../auth/login_screen.dart';
 import '../emergency_screen.dart';
 import 'profile_sidebar_menu.dart';
 
@@ -415,8 +417,8 @@ class _ExploreScreenState extends State<ExploreScreen>
         return;
       }
 
-      final allItems = [..._allWorkers, ..._buildDemoPins()];
-      final suggestions = allItems
+      // 🔁 এখানে শুধু _allWorkers ইউজ করো, extra _buildDemoPins() না
+      final suggestions = _allWorkers
           .where((item) {
         final name = (item['name'] ?? '').toString().toLowerCase();
         final role = (item['role'] ?? '').toString().toLowerCase();
@@ -512,7 +514,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const NotificationsPage()),
+      MaterialPageRoute(builder: (_) => const NotificationScreen()),
     );
   }
 
@@ -1045,14 +1047,14 @@ class _ExploreScreenState extends State<ExploreScreen>
 
           if (!_isSearchingLocation)
             Positioned(
-              bottom: 110,
+              bottom: 180,
               right: 20,
               child: _mapBtn(Icons.medical_services_outlined, Colors.redAccent, _openEmergency),
             ),
 
           if (!_isSearchingLocation)
             Positioned(
-              bottom: 30,
+              bottom: 110,
               left: 20,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1081,22 +1083,84 @@ class _ExploreScreenState extends State<ExploreScreen>
 
           if (!_isSearchingLocation)
             Positioned(
-              bottom: 30,
+              bottom: 110,
               right: 20,
               child: FloatingActionButton.extended(
                 onPressed: () async {
+                  // 🔑 1) আগে লগইন আছে কিনা চেক করো
+                  final currentUser = FirebaseAuth.instance.currentUser;
+
+                  if (currentUser == null) {
+                    // ✅ লগইন না থাকলে পপ-আপ (Dialog) দেখাবে
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text(
+                          "Login Required",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        content: const Text(
+                          "You need to login to create a post or offer support.",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx); // ডায়ালগ বন্ধ
+                              // লগইন স্ক্রিনে নেভিগেট
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginScreen(),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.brandMain,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text("LOGIN NOW"),
+                          ),
+                        ],
+                      ),
+                    );
+                    return;
+                  }
+
+                  // 🔑 2) প্রোফাইল কমপ্লিশন চেক
                   final completed = await ProfileCompletionService.isCompleted();
                   if (!completed) {
                     final go = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
-                        title: const Text("Complete your profile", style: TextStyle(fontWeight: FontWeight.bold)),
-                        content: const Text("To post a job or earn post, please complete your main account profile."),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: const Text(
+                          "Complete your profile",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        content: const Text(
+                          "To post a job or earn post, please complete your main account profile.",
+                        ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("CANCEL")),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text("CANCEL"),
+                          ),
                           ElevatedButton(
                             onPressed: () => Navigator.pop(ctx, true),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.brandMain,
+                              foregroundColor: Colors.white,
+                            ),
                             child: const Text("GO TO PROFILE"),
                           ),
                         ],
@@ -1104,22 +1168,43 @@ class _ExploreScreenState extends State<ExploreScreen>
                     );
 
                     if (go == true) {
-                      final uid = FirebaseAuth.instance.currentUser?.uid;
-                      if (uid == null || uid.isEmpty) return;
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileEditScreen(uid: uid)));
+                      final uid = currentUser.uid;
+                      if (uid.isEmpty) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UnifiedProfileEditScreen(uid: uid),
+                        ),
+                      );
                     }
                     return;
                   }
 
+                  // 🔑 3) সব ঠিক থাকলে পোস্ট স্ক্রিনে নিয়ে যাও
                   if (_isWorker) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EarnPostScreen()),
+                    );
                   } else {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportPostScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SupportPostScreen()),
+                    );
                   }
                 },
                 backgroundColor: _isWorker ? Colors.green : const Color(0xFFFFF59D),
-                icon: Icon(_isWorker ? Icons.currency_exchange : Icons.handshake_outlined, color: _isWorker ? Colors.white : Colors.black),
-                label: Text(_isWorker ? "EARN" : "SUPPORT", style: TextStyle(color: _isWorker ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+                icon: Icon(
+                  _isWorker ? Icons.currency_exchange : Icons.handshake_outlined,
+                  color: _isWorker ? Colors.white : Colors.black,
+                ),
+                label: Text(
+                  _isWorker ? "EARN" : "SUPPORT",
+                  style: TextStyle(
+                    color: _isWorker ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
         ],

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart'; // ✅ Lottie ইমপোর্ট
+
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/main_nav_screen.dart';
 import 'package:findus_app/screens/auth/login_screen.dart';
-// PhoneVerificationScreen এর বদলে RoleSelectionScreen ইম্পোর্ট করুন
 import 'package:findus_app/screens/auth/role_selection_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -14,21 +15,31 @@ class WelcomeScreen extends StatelessWidget {
       backgroundColor: AppColors.brandLight,
       body: Column(
         children: [
-          // ১. উপরের লোগো সেকশন
+          // ১. উপরের অ্যানিমেশন ও লোগো সেকশন
           Expanded(
             flex: 5,
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    "assets/images/app_icon.png",
-                    height: 150,
-                    width: 150,
-                    errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.location_on, size: 100, color: AppColors.brandMain),
+                  // ✅ ইমেজের বদলে Lottie Animation বসানো হয়েছে
+                  Lottie.asset(
+                    "assets/animations/welcome.json",
+                    height: 250, // সাইজ প্রয়োজন অনুযায়ী ছোট/বড় করতে পারেন
+                    width: 250,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      // ফাইল না পেলে ডিফল্ট আইকন দেখাবে
+                      return const Icon(
+                          Icons.location_on,
+                          size: 100,
+                          color: AppColors.brandMain
+                      );
+                    },
                   ),
-                  const SizedBox(height: 20),
+
+                  const SizedBox(height: 10),
+
                   const Text(
                     "FINDUS",
                     style: TextStyle(
@@ -36,6 +47,7 @@ class WelcomeScreen extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                       color: AppColors.brandDark,
                       letterSpacing: 2,
+                      fontFamily: 'Poppins', // আপনার ফন্ট ফ্যামিলি
                     ),
                   ),
                   Text(
@@ -51,14 +63,14 @@ class WelcomeScreen extends StatelessWidget {
             ),
           ),
 
-          // ২. নিচের কার্ড সেকশন
+          // ২. নিচের কার্ড সেকশন (অপরিবর্তিত)
           Expanded(
             flex: 4,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
               decoration: const BoxDecoration(
-                color: Color(0xFFFCE4EC),
+                color: Color(0xFFFCE4EC), // অথবা AppColors.cardPink
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(40),
                   topRight: Radius.circular(40),
@@ -131,12 +143,10 @@ class WelcomeScreen extends StatelessWidget {
 
                       const SizedBox(width: 15),
 
-                      // --- ফিক্সড: Sign Up Button ---
+                      // Sign Up Button
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () {
-                            // এখন RoleSelectionScreen এ নিয়ে যাবে।
-                            // সেখান থেকে রোল সিলেক্ট করার পর PhoneVerificationScreen এ যাবে।
                             Navigator.push(
                                 context,
                                 MaterialPageRoute(builder: (_) => const RoleSelectionScreen())

@@ -1,4 +1,3 @@
-// lib/screens/tabs/dashboard/dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
@@ -16,12 +15,13 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final String _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  // MainNavScreen এ লগইন check হয়ে গেছে, তাই এখানে uid null হবে না ধরে নিচ্ছি
+  final String _uid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   Widget build(BuildContext context) {
-    // isDark ভেরিয়েবলটি এখানে দরকার নেই কারণ PerformanceCard নিজেই থিম চেক করবে
-    final double appBarHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
+    final double appBarHeight =
+        kToolbarHeight + MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: AppColors.bgBlue,
@@ -36,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(15),
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  // ১. পারফরম্যান্স কার্ড (FIXED: isDark removed)
+                  // ১. পারফরম্যান্স কার্ড
                   PerformanceCard(userId: _uid),
 
                   const SizedBox(height: 25),
@@ -48,8 +48,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                   // ৩. নিজের পোস্ট করা পিন লিস্ট
                   const Text(
-                      "Your Posted Pins",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                    "Your Posted Pins",
+                    style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   PostedPinsList(userId: _uid),
@@ -66,7 +67,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             left: 10,
             right: 10,
             child: Container(
-              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              height:
+              kToolbarHeight + MediaQuery.of(context).padding.top,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [AppColors.brandLight, AppColors.brandLight],
@@ -80,30 +82,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     offset: const Offset(0, 2),
                   ),
                 ],
-                borderRadius: const BorderRadius.all(Radius.circular(20)),
+                borderRadius:
+                const BorderRadius.all(Radius.circular(20)),
               ),
               child: Column(
                 children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  SizedBox(
+                      height:
+                      MediaQuery.of(context).padding.top),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      padding:
+                      const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Row(
                         children: [
                           // Back Button
                           GestureDetector(
-                            onTap: () => Navigator.pop(context),
+                            onTap: () => Navigator.maybePop(context),
                             child: Container(
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
+                                color:
+                                Colors.white.withOpacity(0.7),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black
+                                        .withOpacity(0.1),
                                     blurRadius: 5,
-                                    offset: const Offset(0, 2),
+                                    offset:
+                                    const Offset(0, 2),
                                   ),
                                 ],
                               ),
@@ -139,22 +148,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const AnalyticsScreen(),
+                                  builder: (_) =>
+                                  const AnalyticsScreen(),
                                 ),
                               );
                             },
                             child: Container(
                               width: 40,
                               height: 40,
-                              margin: const EdgeInsets.only(right: 8),
+                              margin:
+                              const EdgeInsets.only(right: 8),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
+                                color:
+                                Colors.white.withOpacity(0.7),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black
+                                        .withOpacity(0.1),
                                     blurRadius: 5,
-                                    offset: const Offset(0, 2),
+                                    offset:
+                                    const Offset(0, 2),
                                   ),
                                 ],
                               ),
@@ -172,7 +186,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => const NotificationsPage(),
+                                  builder: (_) =>
+                                  const NotificationScreen(),
                                 ),
                               );
                             },
@@ -180,13 +195,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
+                                color:
+                                Colors.white.withOpacity(0.7),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
+                                    color: Colors.black
+                                        .withOpacity(0.1),
                                     blurRadius: 5,
-                                    offset: const Offset(0, 2),
+                                    offset:
+                                    const Offset(0, 2),
                                   ),
                                 ],
                               ),
@@ -194,7 +212,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   const Center(
                                     child: Icon(
-                                      Icons.notifications_none_rounded,
+                                      Icons
+                                          .notifications_none_rounded,
                                       size: 20,
                                       color: Colors.black,
                                     ),
@@ -205,7 +224,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     child: Container(
                                       width: 8,
                                       height: 8,
-                                      decoration: const BoxDecoration(
+                                      decoration:
+                                      const BoxDecoration(
                                         color: Colors.red,
                                         shape: BoxShape.circle,
                                       ),

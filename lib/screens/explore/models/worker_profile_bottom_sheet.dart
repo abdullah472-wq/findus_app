@@ -1,16 +1,5 @@
-// lib/screens/explore/models/worker_profile_bottom_sheet.dart
-//
-// ✅ Fixed for new Worker model (uid/userRole/priceText/kycCompleted, no id/role/isVerified)
-// ✅ Also fixes profile open: uses workerModel.uid
-// ✅ Chat uses workerModel.uid
-// ✅ UniversalWorkerCard role label uses data['role'] (pin label), not Worker.userRole
-//
-// NOTE: This file assumes your updated Worker model is the "production-grade" one I gave:
-//   Worker(uid: ..., userRole: ..., priceText: ..., kycCompleted: ...)
-//   plus getter: String get id => uid
-// If you removed the id getter, replace workerModel.id with workerModel.uid below.
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
 import 'package:findus_app/services/saved_service.dart';
@@ -26,6 +15,9 @@ import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
 
+// ✅ লগইন স্ক্রিন ইম্পোর্ট
+import 'package:findus_app/screens/auth/login_screen.dart';
+
 Future<void> showWorkerProfileBottomSheet({
   required BuildContext context,
   required Map<String, dynamic> data,
@@ -38,45 +30,62 @@ Future<void> showWorkerProfileBottomSheet({
 
   final NavigatorState rootNav = Navigator.of(context, rootNavigator: true);
 
-  final suggestions = allWorkers.where((w) {
-    final wid = (w['id'] ?? '').toString();
-    final did = (data['id'] ?? '').toString();
-    final wname = (w['name'] ?? '').toString();
-    final dname = (data['name'] ?? '').toString();
-
-    if (wid.isNotEmpty && did.isNotEmpty && wid == did) return false;
-    if (wid.isEmpty && did.isEmpty && wname == dname) return false;
-
-    final isDemoWorker = wid.startsWith('demo_worker_');
-    final isDemoSupporter = wid.startsWith('demo_supporter_');
-
-    if (viewerIsWorker) {
-      if (isDemoWorker) return false;
-    } else {
-      if (isDemoSupporter) return false;
+  // ✅ হেল্পার ফাংশন: লগইন চেক করার জন্য
+  bool checkLogin(BuildContext ctx) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      showDialog(
+        context: ctx,
+        builder: (dialogCtx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Login Required"),
+          content: const Text("You need to login to access this feature."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx); // ডায়ালগ বন্ধ
+                Navigator.pop(ctx); // বটম শিট বন্ধ
+                // লগইন পেজে নেভিগেট
+                Navigator.push(
+                  ctx,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandMain,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text("LOGIN NOW"),
+            ),
+          ],
+        ),
+      );
+      return false;
     }
-    return w['verified'] == true;
+    return true;
+  }
+
+  final suggestions = allWorkers.where((w) {
+    final wid = (w['ownerId'] ?? w['id'] ?? '').toString();
+    final did = (data['ownerId'] ?? data['id'] ?? '').toString();
+    if (wid.isNotEmpty && did.isNotEmpty && wid == did) return false;
+    return w['verified'] == true || w['isVerified'] == true;
   }).take(5).toList();
 
   Future<void> openProfile() async {
-    Navigator.pop(context); // close sheet first
+    // ✅ লগইন চেক
+    if (!checkLogin(context)) return;
 
-    // ✅ Use user UID to check lock + open profile
+    Navigator.pop(context); // close sheet
+
     final uid = workerModel.uid.trim();
-    if (uid.isEmpty) {
-      ScaffoldMessenger.of(rootNav.context).showSnackBar(
-        const SnackBar(content: Text('Profile ID missing.')),
-      );
-      return;
-    }
+    if (uid.isEmpty) return;
 
-    final lockKey = uid.isNotEmpty
-        ? uid
-        : ((data['phone'] ?? '').toString().trim().isNotEmpty
-        ? (data['phone'] as String).trim()
-        : (data['name'] ?? '').toString());
-
-    final locked = await ProfileLockService.isLocked(lockKey);
+    final locked = await ProfileLockService.isLocked(uid);
     if (locked) {
       ScaffoldMessenger.of(rootNav.context).showSnackBar(
         const SnackBar(content: Text('This profile is locked by the owner.')),
@@ -96,11 +105,14 @@ Future<void> showWorkerProfileBottomSheet({
   }
 
   Future<void> openJobDetails() async {
-    await showDialog(
+    // ✅ লগইন চেক
+    if (!checkLogin(context)) return;
+
+    showDialog(
       context: rootNav.context,
       barrierDismissible: false,
       builder: (dialogCtx) {
-        Future.delayed(const Duration(seconds: 2), () {
+        Future.delayed(const Duration(seconds: 1), () {
           if (Navigator.of(dialogCtx).canPop()) Navigator.of(dialogCtx).pop();
         });
         return AlertDialog(
@@ -109,16 +121,15 @@ Future<void> showWorkerProfileBottomSheet({
             children: [
               CircularProgressIndicator(strokeWidth: 2),
               SizedBox(width: 12),
-              Expanded(
-                child: Text("Showing short ad to view details...", style: TextStyle(fontSize: 13)),
-              ),
+              Expanded(child: Text("Loading details...", style: TextStyle(fontSize: 14))),
             ],
           ),
         );
       },
     );
 
-    Navigator.pop(context); // close bottom sheet
+    await Future.delayed(const Duration(seconds: 1));
+    if (Navigator.canPop(context)) Navigator.pop(context);
 
     if (isWorker) {
       rootNav.push(MaterialPageRoute(builder: (_) => JobPostGateScreen(worker: workerModel)));
@@ -144,19 +155,18 @@ Future<void> showWorkerProfileBottomSheet({
           final isVerified = data['verified'] == true || data['isVerified'] == true;
           final isTrusted = ratingVal >= 4.2 && completedJobs >= 100;
           final isTopRated = ratingVal >= 4.8;
-
           final reviewsStr = (data['reviews'] ?? "0").toString();
           final priceStr = (data['price'] ?? data['priceLabel'] ?? "Negotiable").toString();
 
           return DraggableScrollableSheet(
-            initialChildSize: 0.6,
+            initialChildSize: 0.65,
             minChildSize: 0.4,
             maxChildSize: 0.95,
             expand: false,
             builder: (_, controller) {
               return Container(
                 decoration: const BoxDecoration(
-                  color: Colors.white,
+                  color: AppColors.bgBlue,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: ListView(
@@ -167,7 +177,7 @@ Future<void> showWorkerProfileBottomSheet({
                       child: Container(
                         width: 50,
                         height: 5,
-                        margin: const EdgeInsets.only(bottom: 10),
+                        margin: const EdgeInsets.only(bottom: 15),
                         decoration: BoxDecoration(
                           color: Colors.grey[400],
                           borderRadius: BorderRadius.circular(10),
@@ -178,7 +188,7 @@ Future<void> showWorkerProfileBottomSheet({
                     UniversalWorkerCard(
                       id: workerModel.uid,
                       name: (data['name'] ?? 'Unknown').toString(),
-                      role: (data['role'] ?? 'Worker').toString(), // label for UI
+                      role: (data['role'] ?? 'Worker').toString(),
                       imageUrl: (data['image'] ?? "https://i.pravatar.cc/150").toString(),
                       address: (data['address'] ?? 'Bangladesh').toString(),
                       rating: ratingVal.toStringAsFixed(1),
@@ -194,38 +204,38 @@ Future<void> showWorkerProfileBottomSheet({
                       isSaved: isSaved,
 
                       onSaveTap: () async {
+                        // ✅ লগইন চেক
+                        if (!checkLogin(context)) return;
+
                         await SavedService.toggleSave(data);
                         setSheetState(() => isSaved = SavedService.isSaved(data));
                       },
 
                       onChatTap: () async {
+                        // ✅ লগইন চেক
+                        if (!checkLogin(context)) return;
+
                         showDialog(
                           context: rootNav.context,
                           barrierDismissible: false,
-                          builder: (_) => const Center(child: CircularProgressIndicator()),
+                          builder: (_) => const Center(
+                            child: CircularProgressIndicator(color: AppColors.brandMain),
+                          ),
                         );
 
                         final otherUid = workerModel.uid.trim();
-                        if (otherUid.isEmpty) {
-                          if (rootNav.canPop()) rootNav.pop();
-                          ScaffoldMessenger.of(rootNav.context).showSnackBar(
-                            const SnackBar(content: Text("Chat user ID missing")),
-                          );
-                          return;
-                        }
-
                         final convId = await FirestoreChatService.getOrCreateConversation(
                           otherUserId: otherUid,
                         );
 
-                        if (rootNav.canPop()) rootNav.pop(); // close loading
+                        if (rootNav.canPop()) rootNav.pop();
 
                         rootNav.push(
                           MaterialPageRoute(
                             builder: (_) => ChatScreen(
                               conversationId: convId,
                               userName: workerModel.name,
-                              userRole: workerModel.userRole, // ✅ was workerModel.role
+                              userRole: workerModel.userRole,
                               userImage: workerModel.image,
                             ),
                           ),
@@ -235,13 +245,13 @@ Future<void> showWorkerProfileBottomSheet({
                       onTap: openProfile,
                     ),
 
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 15),
 
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: SizedBox(
                         width: double.infinity,
-                        height: 48,
+                        height: 50,
                         child: ElevatedButton(
                           onPressed: openJobDetails,
                           style: ElevatedButton.styleFrom(
@@ -249,34 +259,42 @@ Future<void> showWorkerProfileBottomSheet({
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
+                            elevation: 2,
                           ),
                           child: const Text(
                             'VIEW JOB DETAILS',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 20),
+                    // ... Suggestions Section (Same as before) ...
+                    const SizedBox(height: 25),
 
-                    if (suggestions.isNotEmpty)
+                    if (suggestions.isNotEmpty) ...[
                       const Padding(
-                        padding: EdgeInsets.only(left: 15, bottom: 8),
+                        padding: EdgeInsets.only(left: 15, bottom: 10),
                         child: Text(
                           "Nearby Verified Workers",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87
+                          ),
                         ),
                       ),
-
-                    if (suggestions.isNotEmpty)
                       Column(
                         children: suggestions.map((s) {
                           final sRating = AchievementService.getRating(s);
                           final sCompleted = AchievementService.getCompletedCount(s);
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                             child: UniversalWorkerCard(
                               id: (s['ownerId'] ?? s['id'] ?? '').toString(),
                               name: (s['name'] ?? 'Unknown').toString(),
@@ -313,7 +331,7 @@ Future<void> showWorkerProfileBottomSheet({
                           );
                         }).toList(),
                       ),
-
+                    ],
                     const SizedBox(height: 50),
                   ],
                 ),

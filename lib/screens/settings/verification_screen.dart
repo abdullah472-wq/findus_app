@@ -3,6 +3,7 @@ import 'package:findus_app/constants/app_colors.dart';
 
 import 'kyc_screen.dart';
 import 'driving_license_upload_screen.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 enum KycStatus { notSubmitted, pending, approved, rejected }
 
@@ -59,108 +60,99 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return FloatingScaffold(
+      title: 'Verification',
       backgroundColor: AppColors.bgBlue,
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: false, // নিজের ScrollView ব্যবহার করছি
+      bodyPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "KYC Verification",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandDark,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "KYC Verification",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Verify your identity to get a verified badge and build more trust.",
-                  style: TextStyle(
-                    color: Colors.black54,
-                    height: 1.4,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                _isLoadingStatus
-                    ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.brandMain,
-                    ),
-                  ),
-                )
-                    : _buildStatusCard(),
-
-                const SizedBox(height: 24),
-
-                ListTile(
-                  leading: const Icon(
-                    Icons.photo_camera_front,
-                    color: AppColors.brandMain,
-                  ),
-                  title: Text(
-                    _status == KycStatus.approved
-                        ? "You are already verified"
-                        : "Start KYC Verification",
-                  ),
-                  subtitle: Text(
-                    _status == KycStatus.approved
-                        ? "Your documents are verified"
-                        : "Capture and upload your KYC documents",
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  onTap: _status == KycStatus.approved ? null : _openKycUpload,
-                  tileColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey.shade200),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                ListTile(
-                  leading: const Icon(
-                    Icons.badge_outlined,
-                    color: AppColors.brandMain,
-                  ),
-                  title: const Text(
-                    "Upload Driving License",
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: const Text(
-                    "Add your driving license as extra proof.",
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  onTap: _openDrivingLicenseUpload,
-                  tileColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey.shade200),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 8),
+            const Text(
+              "Verify your identity to get a verified badge and build more trust.",
+              style: TextStyle(
+                color: Colors.black54,
+                height: 1.4,
+                fontSize: 13,
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
 
-          _FloatingTopBar(
-            title: "Verification",
-            onBack: () => Navigator.pop(context),
-          ),
-        ],
+            _isLoadingStatus
+                ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.brandMain,
+                ),
+              ),
+            )
+                : _buildStatusCard(),
+
+            const SizedBox(height: 24),
+
+            ListTile(
+              leading: const Icon(
+                Icons.photo_camera_front,
+                color: AppColors.brandMain,
+              ),
+              title: Text(
+                _status == KycStatus.approved
+                    ? "You are already verified"
+                    : "Start KYC Verification",
+              ),
+              subtitle: Text(
+                _status == KycStatus.approved
+                    ? "Your documents are verified"
+                    : "Capture and upload your KYC documents",
+                style: const TextStyle(fontSize: 12),
+              ),
+              onTap: _status == KycStatus.approved ? null : _openKycUpload,
+              tileColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            ListTile(
+              leading: const Icon(
+                Icons.badge_outlined,
+                color: AppColors.brandMain,
+              ),
+              title: const Text(
+                "Upload Driving License",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text(
+                "Add your driving license as extra proof.",
+                style: TextStyle(fontSize: 12),
+              ),
+              onTap: _openDrivingLicenseUpload,
+              tileColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -199,8 +191,8 @@ class _VerificationScreenState extends State<VerificationScreen> {
         textColor = Colors.red.shade800;
         icon = Icons.error_outline_rounded;
         title = "KYC rejected";
-        subtitle =
-            _rejectionReason ?? "Your documents were not accepted. Please resubmit.";
+        subtitle = _rejectionReason ??
+            "Your documents were not accepted. Please resubmit.";
         break;
     }
 
@@ -242,73 +234,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FloatingTopBar extends StatelessWidget {
-  const _FloatingTopBar({
-    required this.title,
-    required this.onBack,
-  });
-
-  final String title;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: 10,
-      left: 10,
-      right: 10,
-      child: Container(
-        height: kToolbarHeight + MediaQuery.of(context).padding.top,
-        decoration: BoxDecoration(
-          color: AppColors.brandLight,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          borderRadius: const BorderRadius.all(Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            SizedBox(height: MediaQuery.of(context).padding.top),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new,
-                          color: AppColors.brandDark),
-                      onPressed: onBack,
-                    ),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              color: AppColors.brandDark,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

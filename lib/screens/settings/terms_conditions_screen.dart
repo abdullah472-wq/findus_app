@@ -1,93 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class TermsAndConditionsScreen extends StatelessWidget {
   const TermsAndConditionsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const FloatingScaffold(
+      title: 'Terms & Conditions',
       backgroundColor: AppColors.bgBlue,
-      body: Stack(
-        children: [
-          // Main Content (সাদা কার্ড ছাড়া)
-          SingleChildScrollView(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
-            ),
-            child: const _TermsContent(), // সরাসরি _TermsContent ব্যবহার
-          ),
-
-          // Floating AppBar (KYC-style)
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Container(
-              height: kToolbarHeight + MediaQuery.of(context).padding.top,
-              decoration: BoxDecoration(
-                color: AppColors.brandLight,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  topLeft: Radius.circular(20),
-                ),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          // Back Button
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: AppColors.brandDark,
-                              size: 20,
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-
-                          // Title
-                          const Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Padding(
-                                padding: EdgeInsets.only(left: 8.0),
-                                child: Text(
-                                  "Terms & Conditions",
-                                  style: TextStyle(
-                                    color: AppColors.brandDark,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      // এখানে আমরা নিজেরাই ScrollView ব্যবহার করব, তাই scrollable=false
+      scrollable: false,
+      bodyPadding: EdgeInsets.fromLTRB(20, 16, 20, 20),
+      body: SingleChildScrollView(
+        child: _TermsContent(),
       ),
     );
   }

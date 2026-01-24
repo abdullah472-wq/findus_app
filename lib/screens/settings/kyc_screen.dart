@@ -62,8 +62,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
       final request = http.MultipartRequest('POST', uri);
 
       // TODO: ব্যাকএন্ড অনুযায়ী ফিল্ড কাস্টমাইজ করো
-      request.fields['user_id'] = '123';        // logged in user ID
-      request.fields['document_type'] = 'nid';  // nid / passport / license ইত্যাদি
+      request.fields['user_id'] = '123'; // logged in user ID
+      request.fields['document_type'] = 'nid'; // nid / passport / license ইত্যাদি
 
       request.files.add(
         await http.MultipartFile.fromPath(
@@ -99,7 +99,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Failed to submit KYC (${response.statusCode})."),
+            content:
+            Text("Failed to submit KYC (${response.statusCode})."),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -130,7 +131,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.bgBlue,
+        // 🔁 card color এখন সাদা
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey.shade300),
         boxShadow: [
@@ -203,7 +205,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      // 🔁 page background এখন AppColors.bgBlue
+      backgroundColor: AppColors.bgBlue,
       body: Stack(
         children: [
           // Main Content
@@ -213,7 +216,9 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+                    top: MediaQuery.of(context).padding.top +
+                        kToolbarHeight +
+                        20,
                     left: 16,
                     right: 16,
                     bottom: 16,
@@ -274,12 +279,14 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
 
               // নিচের অংশ: Submit বাটন
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding:
+                const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color:
+                      Colors.black.withOpacity(0.06),
                       blurRadius: 8,
                       offset: const Offset(0, -4),
                     ),
@@ -289,18 +296,21 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitKyc,
+                    onPressed:
+                    _isSubmitting ? null : _submitKyc,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.brandMain,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius:
+                        BorderRadius.circular(12),
                       ),
                     ),
                     child: _isSubmitting
                         ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
+                      child:
+                      CircularProgressIndicator(
                         strokeWidth: 2,
                         color: Colors.white,
                       ),
@@ -325,17 +335,20 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
             left: 10,
             right: 10,
             child: Container(
-              height: kToolbarHeight + MediaQuery.of(context).padding.top,
+              height: kToolbarHeight +
+                  MediaQuery.of(context).padding.top,
               decoration: BoxDecoration(
                 color: AppColors.brandLight,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color:
+                    Colors.black.withOpacity(0.1),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
                 ],
-                borderRadius: const BorderRadius.only(
+                borderRadius:
+                const BorderRadius.only(
                   bottomLeft: Radius.circular(20),
                   bottomRight: Radius.circular(20),
                   topRight: Radius.circular(20),
@@ -344,10 +357,16 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
               ),
               child: Column(
                 children: [
-                  SizedBox(height: MediaQuery.of(context).padding.top),
+                  SizedBox(
+                    height: MediaQuery.of(context)
+                        .padding
+                        .top,
+                  ),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      padding:
+                      const EdgeInsets.symmetric(
+                          horizontal: 16.0),
                       child: Row(
                         children: [
                           // Back Button
@@ -357,20 +376,26 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                               color: AppColors.brandDark,
                               size: 20,
                             ),
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () =>
+                                Navigator.pop(context),
                           ),
 
                           // Title
                           const Expanded(
                             child: Align(
-                              alignment: Alignment.centerLeft,
+                              alignment:
+                              Alignment.centerLeft,
                               child: Padding(
-                                padding: EdgeInsets.only(left: 8.0),
+                                padding:
+                                EdgeInsets.only(
+                                    left: 8.0),
                                 child: Text(
                                   "KYC Verification",
                                   style: TextStyle(
-                                    color: AppColors.brandDark,
-                                    fontWeight: FontWeight.bold,
+                                    color: AppColors
+                                        .brandDark,
+                                    fontWeight:
+                                    FontWeight.bold,
                                     fontSize: 18,
                                   ),
                                 ),

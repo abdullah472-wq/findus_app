@@ -363,7 +363,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 tooltip: 'Notifications',
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                  MaterialPageRoute(builder: (_) => const NotificationScreen()),
                 ),
               ),
               _buildFloatingActionButton(
@@ -1240,22 +1240,69 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   List<PopupMenuEntry<ProfileMenuOwner>> _buildOwnerMenuItems(String subscriptionType) {
     final bool isFreeUser = subscriptionType == 'free';
+
+    // হেল্পার উইজেট (আইকন + টেক্সট)
+    Widget _menuRow(IconData icon, String text, Color color, {bool showLock = false}) {
+      return Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))),
+          if (showLock) const Icon(Icons.lock_outline, size: 16, color: Colors.grey),
+        ],
+      );
+    }
+
     return [
-      const PopupMenuItem(value: ProfileMenuOwner.edit, child: Text('Edit')),
-      const PopupMenuItem(value: ProfileMenuOwner.shareProfile, child: Text('Share Profile')),
-      const PopupMenuItem(value: ProfileMenuOwner.previewPublicCard, child: Text('Preview Public Card')),
       PopupMenuItem(
-          value: ProfileMenuOwner.lockAccount,
-          child: Row(children: [const Text('Lock Account'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+        value: ProfileMenuOwner.edit,
+        child: _menuRow(Icons.edit_rounded, 'Edit Profile', Colors.blue),
+      ),
       PopupMenuItem(
-          value: ProfileMenuOwner.theme,
-          child: Row(children: [const Text('Theme'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+        value: ProfileMenuOwner.shareProfile,
+        child: _menuRow(Icons.share_rounded, 'Share Profile', Colors.green),
+      ),
       PopupMenuItem(
-          value: ProfileMenuOwner.hideProfile,
-          child: Row(children: [const Text('Hide Profile'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+        value: ProfileMenuOwner.previewPublicCard,
+        child: _menuRow(Icons.visibility_rounded, 'Preview Card', Colors.purple),
+      ),
+      const PopupMenuDivider(), // সেপারেটর
       PopupMenuItem(
-          value: ProfileMenuOwner.pauseWork,
-          child: Row(children: [const Text('Pause Work'), if (isFreeUser) const Icon(Icons.lock, size: 16, color: Colors.grey)])),
+        value: ProfileMenuOwner.lockAccount,
+        child: _menuRow(
+            Icons.privacy_tip_rounded,
+            'Lock Account',
+            Colors.redAccent,
+            showLock: isFreeUser
+        ),
+      ),
+      PopupMenuItem(
+        value: ProfileMenuOwner.theme,
+        child: _menuRow(
+            Icons.palette_rounded,
+            'Theme',
+            Colors.orange,
+            showLock: isFreeUser
+        ),
+      ),
+      PopupMenuItem(
+        value: ProfileMenuOwner.hideProfile,
+        child: _menuRow(
+            Icons.visibility_off_rounded,
+            'Hide Profile',
+            Colors.grey,
+            showLock: isFreeUser
+        ),
+      ),
+      PopupMenuItem(
+        value: ProfileMenuOwner.pauseWork,
+        child: _menuRow(
+            Icons.pause_circle_filled_rounded,
+            'Pause Work',
+            Colors.amber.shade800,
+            showLock: isFreeUser
+        ),
+      ),
     ];
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'faq_screen.dart';
 
 class HelpCenterScreen extends StatelessWidget {
@@ -7,102 +8,101 @@ class HelpCenterScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return FloatingScaffold(
+      title: 'Help Center',
       backgroundColor: AppColors.bgBlue,
-      body: Stack(
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: false,
+      bodyPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      body: ListView(
+        padding: EdgeInsets.zero,
         children: [
-          // Main Content
-          ListView(
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
-              left: 20,
-              right: 20,
-              bottom: 20,
+          const Text(
+            "How can we help you?",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandDark,
             ),
-            children: [
-              const Text(
-                "How can we help you?",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandDark,
-                ),
+          ),
+          const SizedBox(height: 10),
+
+          // FAQ
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: ListTile(
+              leading: const Icon(
+                Icons.question_answer_outlined,
+                color: AppColors.brandDark,
               ),
-              const SizedBox(height: 10),
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: ListTile(
-                  leading: const Icon(
-                    Icons.question_answer_outlined,
-                    color: AppColors.brandDark,
-                  ),
-                  title: const Text("FAQ"),
-                  subtitle: const Text("Common questions and answers"),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const FaqScreen()),
-                    );
-                  },
-                ),
-              ),
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.chat, color: AppColors.brandMain),
-                  title: const Text("Chat with Support"),
-                  subtitle: const Text("Get help from our team"),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SupportChatScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.email_outlined, color: AppColors.brandDark),
-                  title: const Text("Email Support"),
-                  subtitle: const Text("support@findus.app"),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const EmailSupportScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
+              title: const Text("FAQ"),
+              subtitle: const Text("Common questions and answers"),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FaqScreen()),
+                );
+              },
+            ),
           ),
 
-          // Floating AppBar
-          _FloatingTopBar(
-            title: "Help Center",
-            onBack: () => Navigator.pop(context),
+          // Chat with Support
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.chat, color: AppColors.brandMain),
+              title: const Text("Chat with Support"),
+              subtitle: const Text("Get help from our team"),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SupportChatScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Email Support
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: ListTile(
+              leading: const Icon(
+                Icons.email_outlined,
+                color: AppColors.brandDark,
+              ),
+              title: const Text("Email Support"),
+              subtitle: const Text("support@findus.app"),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const EmailSupportScreen(),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -155,7 +155,8 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
       setState(() {
         _messages.add({
           "isMe": false,
-          "text": "Thanks for your message. Our team will get back to you shortly.",
+          "text":
+          "Thanks for your message. Our team will get back to you shortly.",
           "time": "Just now",
         });
       });
@@ -166,7 +167,8 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
       child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+        isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe)
@@ -191,17 +193,24 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               ),
               constraints: const BoxConstraints(maxWidth: 280),
               child: Column(
-                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                crossAxisAlignment: isMe
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isMe ? AppColors.brandDark : Colors.white,
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(18),
                         topRight: const Radius.circular(18),
-                        bottomLeft: Radius.circular(isMe ? 18 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 18),
+                        bottomLeft:
+                        Radius.circular(isMe ? 18 : 4),
+                        bottomRight:
+                        Radius.circular(isMe ? 4 : 18),
                       ),
                       boxShadow: [
                         BoxShadow(
@@ -269,7 +278,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 child: ListView.builder(
                   reverse: false,
                   padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+                    top: MediaQuery.of(context).padding.top +
+                        kToolbarHeight +
+                        20,
                     bottom: 80,
                   ),
                   itemCount: _messages.length,
@@ -284,10 +295,13 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  border: Border(
+                    top: BorderSide(color: Colors.grey.shade200),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.05),
@@ -303,10 +317,14 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                       height: 40,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppColors.brandLight.withOpacity(0.2),
+                        color:
+                        AppColors.brandLight.withOpacity(0.2),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.emoji_emotions_outlined, size: 20),
+                        icon: const Icon(
+                          Icons.emoji_emotions_outlined,
+                          size: 20,
+                        ),
                         color: AppColors.brandDark,
                         onPressed: () {},
                       ),
@@ -314,18 +332,22 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding:
+                        const EdgeInsets.symmetric(horizontal: 16),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(25),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(
+                            color: Colors.grey.shade200,
+                          ),
                         ),
                         child: TextField(
                           controller: _msgController,
                           decoration: const InputDecoration(
                             hintText: "Type your message...",
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 12),
+                            contentPadding:
+                            EdgeInsets.symmetric(vertical: 12),
                           ),
                           maxLines: 1,
                           onSubmitted: (_) => _sendMessage(),
@@ -359,11 +381,19 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.phone_outlined, color: AppColors.brandDark, size: 20),
+                  icon: const Icon(
+                    Icons.phone_outlined,
+                    color: AppColors.brandDark,
+                    size: 20,
+                  ),
                   onPressed: () {},
                 ),
                 IconButton(
-                  icon: const Icon(Icons.more_vert, color: AppColors.brandDark, size: 20),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: AppColors.brandDark,
+                    size: 20,
+                  ),
                   onPressed: () => _showChatOptions(context),
                 ),
               ],
@@ -399,12 +429,18 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               ),
               const SizedBox(height: 20),
               ListTile(
-                leading: const Icon(Icons.email_outlined, color: AppColors.brandMain),
+                leading: const Icon(
+                  Icons.email_outlined,
+                  color: AppColors.brandMain,
+                ),
                 title: const Text("Email Conversation"),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.red,
+                ),
                 title: const Text("Clear Chat"),
                 onTap: () {
                   Navigator.pop(context);
@@ -412,7 +448,10 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.report_outlined, color: Colors.orange),
+                leading: const Icon(
+                  Icons.report_outlined,
+                  color: Colors.orange,
+                ),
                 title: const Text("Report Issue"),
                 onTap: () => Navigator.pop(context),
               ),
@@ -448,11 +487,19 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
               });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Chat cleared"), duration: Duration(seconds: 2)),
+                const SnackBar(
+                  content: Text("Chat cleared"),
+                  duration: Duration(seconds: 2),
+                ),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("Clear", style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text(
+              "Clear",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -473,7 +520,8 @@ class EmailSupportScreen extends StatefulWidget {
 
 class _EmailSupportScreenState extends State<EmailSupportScreen> {
   final TextEditingController _subjectController = TextEditingController();
-  final TextEditingController _messageController = TextEditingController();
+  final TextEditingController _messageController =
+  TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override
@@ -509,7 +557,9 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
             child: ListView(
               physics: const ClampingScrollPhysics(),
               padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+                top: MediaQuery.of(context).padding.top +
+                    kToolbarHeight +
+                    20,
                 left: 20,
                 right: 20,
                 bottom: 100,
@@ -520,11 +570,17 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.brandLight.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: AppColors.brandMain.withOpacity(0.3)),
+                    border: Border.all(
+                      color: AppColors.brandMain.withOpacity(0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: AppColors.brandMain, size: 20),
+                      const Icon(
+                        Icons.info_outline,
+                        color: AppColors.brandMain,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -545,18 +601,27 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                   controller: _subjectController,
                   decoration: InputDecoration(
                     labelText: "Subject",
-                    prefixIcon: const Icon(Icons.subject, color: AppColors.brandMain),
+                    prefixIcon: const Icon(
+                      Icons.subject,
+                      color: AppColors.brandMain,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide:
+                      BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.brandMain, width: 2),
+                      borderSide: const BorderSide(
+                        color: AppColors.brandMain,
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) =>
-                  (value == null || value.isEmpty) ? "Please enter a subject" : null,
+                  (value == null || value.isEmpty)
+                      ? "Please enter a subject"
+                      : null,
                 ),
 
                 const SizedBox(height: 20),
@@ -567,19 +632,30 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                   decoration: InputDecoration(
                     labelText: "Message",
                     alignLabelWithHint: true,
-                    prefixIcon: const Icon(Icons.message, color: AppColors.brandMain),
+                    prefixIcon: const Icon(
+                      Icons.message,
+                      color: AppColors.brandMain,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
+                      borderSide:
+                      BorderSide(color: Colors.grey.shade300),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.brandMain, width: 2),
+                      borderSide: const BorderSide(
+                        color: AppColors.brandMain,
+                        width: 2,
+                      ),
                     ),
                   ),
                   validator: (value) {
-                    if (value == null || value.isEmpty) return "Please enter your message";
-                    if (value.length < 10) return "Message should be at least 10 characters";
+                    if (value == null || value.isEmpty) {
+                      return "Please enter your message";
+                    }
+                    if (value.length < 10) {
+                      return "Message should be at least 10 characters";
+                    }
                     return null;
                   },
                 ),
@@ -591,10 +667,12 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border:
+                    Border.all(color: Colors.grey.shade200),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "Attachments (Optional)",
@@ -606,7 +684,10 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                       const SizedBox(height: 8),
                       Text(
                         "You can attach screenshots or files (max 5MB)",
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
@@ -614,7 +695,8 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
                           // TODO: File picker
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandLight.withOpacity(0.1),
+                          backgroundColor:
+                          AppColors.brandLight.withOpacity(0.1),
                           foregroundColor: AppColors.brandDark,
                         ),
                         icon: const Icon(Icons.attach_file, size: 18),
@@ -640,7 +722,9 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                border: Border(
+                  top: BorderSide(color: Colors.grey.shade200),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
@@ -714,18 +798,23 @@ class _FloatingTopBar extends StatelessWidget {
             SizedBox(height: MediaQuery.of(context).padding.top),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.brandDark),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: AppColors.brandDark,
+                      ),
                       onPressed: onBack,
                     ),
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
+                          padding:
+                          const EdgeInsets.only(left: 8.0),
                           child: Text(
                             title,
                             style: const TextStyle(

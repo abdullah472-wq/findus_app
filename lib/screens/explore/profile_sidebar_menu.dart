@@ -1,5 +1,3 @@
-// lib/screens/tabs/explore/profile_sidebar_menu.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +10,8 @@ import 'package:findus_app/services/theme_service.dart';
 import 'package:findus_app/badge/badge_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/badge/badge_theme.dart';
+
+// Screens
 import 'package:findus_app/screens/auth/login_screen.dart';
 import 'package:findus_app/screens/auth/role_selection_screen.dart';
 import 'package:findus_app/screens/settings/settings_screen.dart';
@@ -20,6 +20,7 @@ import 'package:findus_app/screens/settings/subscription_screen.dart';
 import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/screens/settings/language_settings_screen.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
+import '../auth/log_in_chacker_screen.dart';
 
 class ProfileSideBar extends StatefulWidget {
   const ProfileSideBar({super.key});
@@ -30,7 +31,7 @@ class ProfileSideBar extends StatefulWidget {
 
 class _ProfileSideBarState extends State<ProfileSideBar> {
   String _userName = 'FINDUS User';
-  String? _userRole; // 'finder' = Worker, 'maker' = Supporter
+  String? _userRole;
   String? _profileImage;
   int _followersCount = 0;
   String _subscriptionPlan = 'free';
@@ -44,103 +45,179 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
 
   Future<void> _loadUserInfo() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        if (userDoc.exists && mounted) {
-          final data = userDoc.data()!;
-          setState(() {
-            _userName = data['name'] ?? 'User';
-            _userRole = data['userRole'] ?? 'finder';
-            _profileImage = data['image'] ?? data['imageUrl'];
-            _followersCount = data['followersCount'] ?? 0;
-            _subscriptionPlan = (data['subscription'] ?? 'free').toLowerCase();
-            _isLoading = false;
-          });
-        }
-      } catch (e) {
-        if (mounted) setState(() => _isLoading = false);
+    if (uid == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (!mounted) return;
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        setState(() {
+          _userName = data['name'] ?? 'User';
+          _userRole = data['userRole'] ?? 'finder';
+          _profileImage = data['image'] ?? data['imageUrl'];
+          _followersCount = data['followersCount'] ?? 0;
+          _subscriptionPlan = (data['subscription'] ?? 'free').toLowerCase();
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
       }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ✅ লজিক চেকার ফাংশন (যেকোনো বাটন ট্যাপ করলে এটি কল হবে)
+  void _navigateProtected({required Widget targetScreen, required String featureName}) {
+    Navigator.pop(context); // ড্রয়ার বন্ধ করা
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+      // ইউজার লগইন আছে -> টার্গেট পেজে যাও
+      Navigator.push(context, MaterialPageRoute(builder: (_) => targetScreen));
+    } else {
+      // ইউজার লগইন নেই -> ProfileNotLoggedIn পেজে যাও
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfileNotLoggedIn(title: featureName, showBackButton: true),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final user = FirebaseAuth.instance.currentUser;
+    final isLoggedIn = user != null;
+    final uid = user?.uid ?? '';
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
 
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.85,
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF8F9FD),
+      backgroundColor: bgColor,
       child: Column(
         children: [
-          // ১. প্রিমিয়াম হেডার (ব্যাজ ও প্রোফাইল সামারি)
-          _buildHeader(isDark),
+          _buildHeader(isDark, isLoggedIn),
 
-          // ২. মেনু আইটেমস
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               children: [
                 _buildMenuSection("ACCOUNT"),
-                _buildModernMenuItem(Icons.person_outline_rounded, "My Profile", () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UnifiedProfileScreen(
-                        uid: uid,
-                        isOwner: true,
-                        showBack: true, // ✅ ফিক্স: showBack প্যারামিটার যোগ করা হয়েছে
-                      ),
+                _buildSettingsGroup([
+                  // ✅ ১. My Profile (লগইন চেক বসানো হয়েছে)
+                  _buildSettingsTile(
+                    Icons.person_outline_rounded,
+                    "My Profile",
+                    "View and edit profile",
+                        () => _navigateProtected(
+                      targetScreen: UnifiedProfileScreen(uid: uid, isOwner: true, showBack: true),
+                      featureName: "Profile",
                     ),
-                  );
-                }, isDark),
-                _buildModernMenuItem(Icons.workspace_premium_rounded, "Subscription", () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen()));
-                }, isDark, trailing: _getPlanBadge()),
+                    Colors.blueAccent,
+                  ),
 
-                const SizedBox(height: 10),
+                  // Subscription (সাধারণত লগইন ছাড়া সাবস্ক্রিপশন হয় না, তাই এখানেও চেক দিতে পারেন)
+                  _buildSettingsTile(
+                    Icons.workspace_premium_rounded,
+                    "Subscription",
+                    "Manage your plan",
+                        () => _navigateProtected(
+                      targetScreen: const SubscriptionScreen(),
+                      featureName: "Subscription",
+                    ),
+                    Colors.amber,
+                    trailing: _getPlanBadge(),
+                  ),
+                ], isDark),
+
                 _buildMenuSection("PREFERENCES"),
-                _buildModernMenuItem(Icons.settings_outlined, "Settings", () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                }, isDark),
+                _buildSettingsGroup([
+                  _buildSettingsTile(
+                    Icons.settings_outlined,
+                    "Settings",
+                    "Privacy, security & more",
+                        () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    },
+                    Colors.grey,
+                  ),
+                  _buildDarkModeTile(isDark),
+                  _buildSettingsTile(
+                    Icons.language_rounded,
+                    "App Language",
+                    "Change language",
+                        () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()));
+                    },
+                    Colors.purpleAccent,
+                  ),
+                ], isDark),
 
-                // ডার্ক মোড সুইচ
-                _buildDarkModeToggle(isDark),
+                _buildMenuSection("EXTRAS"),
+                _buildSettingsGroup([
+                  // ✅ ২. Refer & Earn (লগইন চেক বসানো হয়েছে)
+                  _buildSettingsTile(
+                    Icons.card_giftcard_rounded,
+                    "Refer & Earn",
+                    "Invite friends & earn",
+                        () => _navigateProtected(
+                      targetScreen: const ReferEarnScreen(),
+                      featureName: "Referral",
+                    ),
+                    Colors.green,
+                  ),
+                  // ✅ ৩. Report a Problem (লগইন চেক বসানো হয়েছে)
+                  _buildSettingsTile(
+                    Icons.bug_report_outlined,
+                    "Report a Problem",
+                    "Help us improve",
+                        () => _navigateProtected(
+                      targetScreen: const ReportScreen(),
+                      featureName: "Support",
+                    ),
+                    Colors.orangeAccent,
+                  ),
+                ], isDark),
 
-                _buildModernMenuItem(Icons.language_rounded, "App Language", () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()));
-                }, isDark),
-
-                const SizedBox(height: 10),
-                _buildMenuSection("OTHERS"),
-                _buildModernMenuItem(Icons.card_giftcard_rounded, "Refer & Earn", () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ReferEarnScreen()));
-                }, isDark),
-                _buildModernMenuItem(Icons.bug_report_outlined, "Report a Problem", () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportScreen()));
-                }, isDark),
+                if (isLoggedIn) ...[
+                  const SizedBox(height: 20),
+                  _buildSettingsGroup([
+                    _buildSettingsTile(
+                      Icons.logout_rounded,
+                      "Sign Out",
+                      "Log out from this device",
+                      _showLogoutDialog,
+                      Colors.redAccent,
+                    ),
+                  ], isDark),
+                ],
 
                 const SizedBox(height: 20),
-                _buildModernMenuItem(Icons.logout_rounded, "Sign Out", _showLogoutDialog, isDark, color: Colors.redAccent),
               ],
             ),
           ),
 
-          // ৩. রোল সুইচ এরিয়া
-          _buildRoleSwitchCard(isDark),
+          if (isLoggedIn) _buildRoleSwitchCard(isDark),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  // --- UI Helpers ---
+
+  Widget _buildHeader(bool isDark, bool isLoggedIn) {
     return ValueListenableBuilder<BadgeProgress>(
       valueListenable: BadgeService.badgeNotifier,
       builder: (context, progress, _) {
@@ -152,13 +229,20 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
             gradient: LinearGradient(
               colors: isDark
                   ? [const Color(0xFF2C2C2C), const Color(0xFF1A1A1A)]
-                  : [AppColors.brandLight, Colors.white],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  : [Colors.white, Colors.white],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
@@ -167,15 +251,16 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                     children: [
                       CircleAvatar(
                         radius: 35,
-                        backgroundColor: AppColors.brandMain.withOpacity(0.2),
+                        backgroundColor: AppColors.brandMain.withOpacity(0.1),
                         backgroundImage: _profileImage != null ? NetworkImage(_profileImage!) : null,
-                        child: _profileImage == null ? const Icon(Icons.person, size: 35) : null,
+                        child: _profileImage == null ? const Icon(Icons.person, size: 35, color: Colors.grey) : null,
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                        child: Icon(AppBadgeTheme.baseIcon, size: 16, color: badgeColor),
-                      ),
+                      if (isLoggedIn)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          child: Icon(AppBadgeTheme.baseIcon, size: 14, color: badgeColor),
+                        ),
                     ],
                   ),
                   const SizedBox(width: 15),
@@ -183,36 +268,70 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_userName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                         Text(
-                            _userRole == 'finder' ? "Verified Worker" : "Top Supporter",
-                            style: const TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.bold)
+                          isLoggedIn ? _userName : "Welcome Guest",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        Text("$_followersCount Followers", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        if (isLoggedIn)
+                          Text(
+                            _userRole == 'finder' ? "Verified Worker" : "Top Supporter",
+                            style: const TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.bold),
+                          ),
+                        if (isLoggedIn)
+                          Text(
+                            "$_followersCount Followers",
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              // XP Progress Bar
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("Level: ${BadgeService.getFormattedLevelName(progress.level)}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
-                  Text("${progress.totalPoints} XP", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeColor)),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: progress.progressPercentage,
-                  backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
-                  valueColor: AlwaysStoppedAnimation(badgeColor),
-                  minHeight: 6,
+              if (isLoggedIn) ...[
+                const SizedBox(height: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Level: ${BadgeService.getFormattedLevelName(progress.level)}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    Text("${progress.totalPoints} XP", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: badgeColor)),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: LinearProgressIndicator(
+                    value: progress.progressPercentage,
+                    backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
+                    valueColor: AlwaysStoppedAnimation(badgeColor),
+                    minHeight: 6,
+                  ),
+                ),
+              ],
+              if (!isLoggedIn) ...[
+                const SizedBox(height: 15),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandMain,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text("LOGIN / SIGNUP", style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ],
           ),
         );
@@ -220,92 +339,128 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
     );
   }
 
-  Widget _buildModernMenuItem(IconData icon, String title, VoidCallback onTap, bool isDark, {Color? color, Widget? trailing}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(15),
-        color: Colors.transparent,
-      ),
-      child: ListTile(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        leading: Icon(icon, color: color ?? (isDark ? Colors.white70 : AppColors.brandDark), size: 22),
-        title: Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color ?? (isDark ? Colors.white : Colors.black87))),
-        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        dense: true,
-      ),
-    );
-  }
-
-  Widget _buildRoleSwitchCard(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white10 : AppColors.brandMain.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              "You are currently in ${_userRole == 'finder' ? 'EARNING' : 'SUPPORT'} mode",
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: _switchRoleLogic,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandMain,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 0,
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.sync_rounded, size: 20),
-                  SizedBox(width: 10),
-                  Text("SWITCH MODE", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMenuSection(String title) {
     return Padding(
-      padding: const EdgeInsets.only(left: 16, top: 15, bottom: 8),
-      child: Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+      padding: const EdgeInsets.only(left: 8, top: 15, bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.2),
+      ),
     );
   }
 
-  Widget _buildDarkModeToggle(bool isDark) {
-    // ✅ ফিক্স: ThemeService.themeSettings ব্যবহার করা হয়েছে
+  Widget _buildSettingsGroup(List<Widget> tiles, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Column(children: tiles),
+    );
+  }
+
+  Widget _buildSettingsTile(IconData icon, String title, String sub, VoidCallback onTap, Color color, {Widget? trailing}) {
+    return ListTile(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle: Text(sub, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      trailing: trailing ?? const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+      dense: true,
+    );
+  }
+
+  Widget _buildDarkModeTile(bool isDark) {
     return ValueListenableBuilder<ThemeSettings>(
       valueListenable: ThemeService.themeSettings,
       builder: (context, settings, _) {
         final dark = settings.isDarkMode;
         return SwitchListTile(
-          secondary: Icon(dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, color: dark ? Colors.amber : Colors.blueGrey),
-          title: const Text("Dark Mode", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          secondary: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (dark ? Colors.amber : Colors.blueGrey).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              color: dark ? Colors.amber : Colors.blueGrey,
+              size: 20,
+            ),
+          ),
+          title: const Text("Dark Mode", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          subtitle: const Text("Switch app theme", style: TextStyle(fontSize: 10, color: Colors.grey)),
           value: dark,
-          activeThumbColor: AppColors.brandMain,
+          activeColor: AppColors.brandMain,
           onChanged: (val) {
-            // ✅ ফিক্স: updateThemeSetting ব্যবহার করা হয়েছে
             ThemeService.updateThemeSetting(isDarkMode: val);
           },
+          dense: true,
         );
       },
+    );
+  }
+
+  Widget _buildRoleSwitchCard(bool isDark) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: AppColors.brandMain.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.sync_alt_rounded, color: AppColors.brandMain, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _userRole == 'finder' ? "Worker Mode" : "Supporter Mode",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const Text(
+                      "Switch to other profile",
+                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _switchRoleLogic,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  elevation: 0,
+                  minimumSize: Size.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: const Text("SWITCH", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -317,29 +472,32 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
 
   Widget _chipBadge(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: color.withOpacity(0.2), borderRadius: BorderRadius.circular(8), border: Border.all(color: color, width: 1)),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.5), width: 1),
+      ),
       child: Text(text, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
     );
   }
 
-  // --- লজিক অংশ ---
+  // --- লজিক ---
   void _showLogoutDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Sign Out?"),
-        content: const Text("Do you really want to leave FINDUS?"),
+        content: const Text("Are you sure you want to sign out?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL")),
-          ElevatedButton(
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.grey))),
+          TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               _handleLogout();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text("LOGOUT", style: TextStyle(color: Colors.white)),
+            child: const Text("LOGOUT", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -368,16 +526,24 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
     if (hasTargetAccount) {
       await prefs.setString('user_role', targetRole);
       setState(() => _userRole = targetRole);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Switched to ${targetRole == 'finder' ? 'Worker' : 'Supporter'} Mode")));
+      Navigator.pop(context);
     } else {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text("Create ${targetRole == 'finder' ? 'Worker' : 'Supporter'} Profile?"),
-          content: const Text("You don't have this profile yet. Let's set it up!"),
+          content: const Text("You don't have this profile yet. Create one now to switch modes."),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("NOT NOW")),
-            ElevatedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen())), child: const Text("CREATE NOW")),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("LATER")),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen()));
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white),
+              child: const Text("CREATE"),
+            ),
           ],
         ),
       );

@@ -1,4 +1,3 @@
-// lib/screens/dashboard/widgets/work_summary_section.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:findus_app/screens/dashboard/utils/dashboard_constants.dart';
@@ -34,81 +33,98 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
     }
   }
 
-  // ✅ নিরাপদ কাউন্ট লজিক (ওয়েব এবং ইন্টারনাল এরর হ্যান্ডেল করবে)
+  // ✅ নিরাপদ কাউন্ট লজিক (count() + get() দুইটাই safe ভাবে handle করবে)
   Future<int> _fetchCountSafe(Query query) async {
     try {
-      // প্রথমে দ্রুত কাউন্ট করার চেষ্টা করবে
       final snapshot = await query.count().get();
       return snapshot.count ?? 0;
     } catch (e) {
-      // যদি count() এরর দেয় (ওয়েবে যেটা হচ্ছে), তবে সাধারণ get() করে দৈর্ঘ্য নিবে
       debugPrint("Count failed, using fallback get(): $e");
-      final snapshot = await query.get();
-      return snapshot.docs.length;
+      try {
+        final snapshot = await query.get();
+        return snapshot.docs.length;
+      } catch (e2) {
+        debugPrint("Fallback get() failed in WorkSummary: $e2");
+        // শেষ পর্যন্তও যদি ব্যর্থ হয়, তাহলে error ছুঁড়ে না দিয়ে 0 ফেরত দেই
+        return 0;
+      }
     }
   }
 
   Future<_WorkSummaryData> _load() async {
     final uid = widget.userId;
-    if (uid.isEmpty) throw Exception('User not found');
 
-    final doneQuery = FirebaseFirestore.instance
-        .collection('completed_jobs')
-        .where('participants', arrayContains: uid);
+    // userId খালি হলে exception না ছুঁড়ে safe data ফেরত দিই
+    if (uid.isEmpty) {
+      return _WorkSummaryData(
+        doneCount: 0,
+        pendingCount: 0,
+        avgRatingLabel: '4.8',
+        responseRateLabel: '95%',
+      );
+    }
 
-    final pendingQuery = FirebaseFirestore.instance
-        .collection('hire_requests')
-        .where('receiverId', isEqualTo: uid)
-        .where('status', isEqualTo: DashboardConstants.pendingStatus);
+    try {
+      final doneQuery = FirebaseFirestore.instance
+          .collection('completed_jobs')
+          .where('participants', arrayContains: uid);
 
-    // ✅ নিরাপদ ফাংশন কল
-    final int doneCount = await _fetchCountSafe(doneQuery);
-    final int pendingCount = await _fetchCountSafe(pendingQuery);
+      final pendingQuery = FirebaseFirestore.instance
+          .collection('hire_requests')
+          .where('receiverId', isEqualTo: uid)
+          .where('status', isEqualTo: DashboardConstants.pendingStatus);
 
-    return _WorkSummaryData(
-      doneCount: doneCount,
-      pendingCount: pendingCount,
-      avgRatingLabel: '4.8', // এখানে আপনার রেটিং লজিক বসাতে পারেন
-      responseRateLabel: '95%',
-    );
+      final int doneCount = await _fetchCountSafe(doneQuery);
+      final int pendingCount = await _fetchCountSafe(pendingQuery);
+
+      return _WorkSummaryData(
+        doneCount: doneCount,
+        pendingCount: pendingCount,
+        avgRatingLabel: '4.8',  // TODO: আসল রেটিং লজিক বসাতে পারো
+        responseRateLabel: '95%',
+      );
+    } catch (e, st) {
+      debugPrint('WorkSummary _load error: $e\n$st');
+
+      // যেকোনো অপ্রত্যাশিত error হলেও UI ভাঙবে না, default data দেখাবে
+      return _WorkSummaryData(
+        doneCount: 0,
+        pendingCount: 0,
+        avgRatingLabel: '4.8',
+        responseRateLabel: '95%',
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.userId.isEmpty) {
-      return const Text('User not found');
-    }
+    // এখন userId empty হলেও _load safe data রিটার্ন দেয়,
+    // তাই এখানে Text('User not found') দেখানোরও দরকার নেই, চাইলে রেখে দাও।
+    // if (widget.userId.isEmpty) {
+    //   return const Text('User not found');
+    // }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Work Summary",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text(
+          "Work Summary",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 12),
 
         FutureBuilder<_WorkSummaryData>(
           future: _future,
           builder: (context, snap) {
-            if (snap.hasError) {
-              final err = snap.error.toString();
-              final isIndexError = err.contains('FAILED_PRECONDITION') || err.contains('index');
-
-              return _ErrorBox(
-                message: isIndexError
-                    ? 'Firestore index required.\nConsole-এ গিয়ে index create করুন।'
-                    : 'Failed to load work summary.\nCheck your internet or Firebase rules.',
-                onRetry: () {
-                  setState(() {
-                    _future = _load();
-                  });
-                },
-              );
-            }
-
             if (!snap.hasData) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               );
             }
 
@@ -126,7 +142,9 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.blue,
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const CompletedWorkTab()),
+                          MaterialPageRoute(
+                            builder: (_) => const CompletedWorkTab(),
+                          ),
                         ),
                       ),
                     ),
@@ -140,7 +158,9 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => PendingJobsScreen(userId: widget.userId),
+                            builder: (_) => PendingJobsScreen(
+                              userId: widget.userId,
+                            ),
                           ),
                         ),
                       ),
@@ -159,7 +179,9 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => RatingHistoryScreen(targetUserId: widget.userId),
+                            builder: (_) => RatingHistoryScreen(
+                              targetUserId: widget.userId,
+                            ),
                           ),
                         ),
                       ),
@@ -173,7 +195,11 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.teal,
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Response rate details coming soon')),
+                            const SnackBar(
+                              content: Text(
+                                'Response rate details coming soon',
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -222,9 +248,21 @@ class _ErrorBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Notice', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+          const Text(
+            'Notice',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(message, style: const TextStyle(color: Colors.red, fontSize: 12)),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(height: 10),
           TextButton.icon(
             onPressed: onRetry,

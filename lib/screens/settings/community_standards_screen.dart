@@ -1,27 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class CommunityStandardsScreen extends StatelessWidget {
   const CommunityStandardsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFE0F7FA),
-      appBar: AppBar(
-        title: const Text(
-          "Community Standards",
-          style: TextStyle(
-            color: AppColors.brandDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: AppColors.brandLight,
-        iconTheme: const IconThemeData(color: AppColors.brandDark),
-        elevation: 0,
-      ),
-      body: const SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+    return const FloatingScaffold(
+      title: 'Community Standards',
+      backgroundColor: Color(0xFFE0F7FA),
+      titleColor: AppColors.brandDark,
+      iconColor: AppColors.brandDark,
+      showBack: true,
+      scrollable: false,
+      bodyPadding: EdgeInsets.all(20),
+      body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
