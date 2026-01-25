@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
+
+// Widgets
 import 'package:findus_app/screens/dashboard/widgets/performance_card.dart';
 import 'package:findus_app/screens/dashboard/widgets/work_summary_section.dart';
 import 'package:findus_app/screens/dashboard/widgets/posted_pins_list.dart';
+
+// Screens
 import 'package:findus_app/screens/explore/notifications_page.dart';
 import 'package:findus_app/screens/ad_center/analytics_screen.dart';
 
@@ -15,231 +19,92 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // MainNavScreen এ লগইন check হয়ে গেছে, তাই এখানে uid null হবে না ধরে নিচ্ছি
   final String _uid = FirebaseAuth.instance.currentUser!.uid;
+
+  Future<void> _refreshData() async {
+    setState(() {});
+    await Future.delayed(const Duration(seconds: 1));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final double appBarHeight =
-        kToolbarHeight + MediaQuery.of(context).padding.top;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     return Scaffold(
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
       body: Stack(
         children: [
-          // Main Content (with padding for floating app bar)
-          Padding(
-            padding: EdgeInsets.only(top: appBarHeight + 10),
-            child: RefreshIndicator(
-              onRefresh: _refreshData,
-              child: ListView(
-                padding: const EdgeInsets.all(15),
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  // ১. পারফরম্যান্স কার্ড
-                  PerformanceCard(userId: _uid),
+          // ✅ মেইন কন্টেন্ট
+          RefreshIndicator(
+            onRefresh: _refreshData,
+            child: ListView(
+              padding: const EdgeInsets.only(top: 80, left: 16, right: 16, bottom: 100), // উপরে বাটনের জন্য জায়গা রাখা হয়েছে
+              physics: const BouncingScrollPhysics(),
+              children: [
+                // ১. পারফরম্যান্স কার্ড
+                PerformanceCard(userId: _uid),
 
-                  const SizedBox(height: 25),
+                const SizedBox(height: 25),
 
-                  // ২. ওয়ার্ক সামারি
-                  WorkSummarySection(userId: _uid),
+                // ২. ওয়ার্ক সামারি
+                WorkSummarySection(userId: _uid),
 
-                  const SizedBox(height: 25),
+                const SizedBox(height: 25),
 
-                  // ৩. নিজের পোস্ট করা পিন লিস্ট
-                  const Text(
-                    "Your Posted Pins",
-                    style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                // ৩. পোস্ট করা পিন লিস্ট
+                Text(
+                  "Your Posted Pins",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
                   ),
-                  const SizedBox(height: 12),
-                  PostedPinsList(userId: _uid),
-
-                  const SizedBox(height: 80),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                PostedPinsList(userId: _uid),
+              ],
             ),
           ),
 
-          // Floating App Bar (Unified Profile Style)
+          // ✅ ফ্লোটিং বাটনস (উপরে ডান কোণায়)
           Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Container(
-              height:
-              kToolbarHeight + MediaQuery.of(context).padding.top,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.brandLight, AppColors.brandLight],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            top: MediaQuery.of(context).padding.top + 10,
+            right: 16,
+            child: Column(
+              children: [
+                // ১. নোটিফিকেশন বাটন
+                _buildFloatingButton(
+                  icon: Icons.notifications_none_rounded,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
+                  isDark: isDark,
+                  hasBadge: true, // লাল ডট দেখাবে
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                borderRadius:
-                const BorderRadius.all(Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(
-                      height:
-                      MediaQuery.of(context).padding.top),
-                  Expanded(
-                    child: Padding(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          // Back Button
-                          GestureDetector(
-                            onTap: () => Navigator.maybePop(context),
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color:
-                                Colors.white.withOpacity(0.7),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black
-                                        .withOpacity(0.1),
-                                    blurRadius: 5,
-                                    offset:
-                                    const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.arrow_back_rounded,
-                                size: 20,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
+                const SizedBox(height: 12),
 
-                          const SizedBox(width: 12),
+                // ২. অ্যানালিটিক্স বাটন
+                _buildFloatingButton(
+                  icon: Icons.analytics_outlined,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsScreen())),
+                  isDark: isDark,
+                  hasBadge: false,
+                ),
+              ],
+            ),
+          ),
 
-                          // Title
-                          const Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'DASHBOARD',
-                                style: TextStyle(
-                                  color: AppColors.brandDark,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          // Analytics Button
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                  const AnalyticsScreen(),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              margin:
-                              const EdgeInsets.only(right: 8),
-                              decoration: BoxDecoration(
-                                color:
-                                Colors.white.withOpacity(0.7),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black
-                                        .withOpacity(0.1),
-                                    blurRadius: 5,
-                                    offset:
-                                    const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.analytics_outlined,
-                                size: 20,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-
-                          // Notifications Button with Badge
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                  const NotificationScreen(),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color:
-                                Colors.white.withOpacity(0.7),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black
-                                        .withOpacity(0.1),
-                                    blurRadius: 5,
-                                    offset:
-                                    const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Stack(
-                                children: [
-                                  const Center(
-                                    child: Icon(
-                                      Icons
-                                          .notifications_none_rounded,
-                                      size: 20,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 8,
-                                    right: 8,
-                                    child: Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration:
-                                      const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+          // ✅ ফ্লোটিং টাইটেল (উপরে বাম কোণায়)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 20,
+            left: 20,
+            child: Text(
+              "DASHBOARD",
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: textColor,
+                letterSpacing: 1.2,
               ),
             ),
           ),
@@ -248,8 +113,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _refreshData() async {
-    setState(() {});
-    await Future.delayed(const Duration(seconds: 1));
+  // ✅ ফ্লোটিং বাটন উইজেট
+  Widget _buildFloatingButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required bool isDark,
+    bool hasBadge = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 45,
+        height: 45,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Center(
+              child: Icon(
+                icon,
+                size: 22,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            if (hasBadge)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

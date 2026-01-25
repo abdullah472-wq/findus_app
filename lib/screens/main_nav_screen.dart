@@ -1,5 +1,3 @@
-// lib/screens/tabs/main_nav_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
@@ -7,9 +5,9 @@ import 'package:findus_app/constants/app_colors.dart';
 // Screens
 import 'home_feed_screen.dart';
 import 'explore/explore_screen.dart';
-import 'package:findus_app/screens/tabs/conversation_tab.dart'; // ✅ মেসেজ ট্যাব ইম্পোর্ট
+import 'tabs/conversation_tab.dart'; // ✅ Conversation Tab ইম্পোর্ট
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
-import 'package:findus_app/screens/auth/log_in_chacker_screen.dart'; // ✅ লগইন চেক স্ক্রিন
+import 'package:findus_app/screens/auth/log_in_chacker_screen.dart';
 
 class MainNavScreen extends StatefulWidget {
   const MainNavScreen({super.key});
@@ -18,7 +16,7 @@ class MainNavScreen extends StatefulWidget {
 
   static void goToHomeTab() => navKey.currentState?._goToTab(0);
   static void goToExploreTab() => navKey.currentState?._goToTab(1);
-  static void goToMessagesTab() => navKey.currentState?._goToTab(2); // ✅ মেসেজ ট্যাব
+  static void goToMessagesTab() => navKey.currentState?._goToTab(2); // ✅ নাম পরিবর্তন
   static void goToProfileTab() => navKey.currentState?._goToTab(3);
 
   @override
@@ -32,7 +30,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
   void _goToTab(int index) {
     if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
-    _pageController.jumpToPage(index); // jumpToPage ব্যবহার করা ফাস্ট নেভিগেশনের জন্য ভালো
+    _pageController.jumpToPage(index);
   }
 
   @override
@@ -55,7 +53,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            // 0. HOME TAB (Login Required)
+            // 0. HOME TAB (Login Check)
             uid != null
                 ? HomeFeedScreen(key: HomeFeedScreen.feedKey)
                 : const ProfileNotLoggedIn(title: "Home Feed", showBackButton: false),
@@ -63,11 +61,10 @@ class _MainNavScreenState extends State<MainNavScreen> {
             // 1. EXPLORE TAB (Public)
             const ExploreScreen(),
 
-            // 2. MESSAGES TAB (Login Required - ConversationTab handles checking or pass check here)
-            // ConversationTab এর ভেতরেও চেক আছে, অথবা এখানেও দিতে পারেন
+            // 2. MESSAGES TAB (✅ Dashboard এর জায়গায় ConversationTab বসানো হলো)
             const ConversationTab(),
 
-            // 3. PROFILE TAB (Login Required)
+            // 3. PROFILE TAB (Login Check)
             uid != null
                 ? UnifiedProfileScreen(uid: uid, isOwner: true, showBack: false)
                 : const ProfileNotLoggedIn(title: "Your Profile", showBackButton: false),
@@ -116,10 +113,10 @@ class _MainNavScreenState extends State<MainNavScreen> {
             label: 'EXPLORE',
             onTap: _goToTab,
           ),
+          // ✅ ম্যাসেজ আইকন এবং লেবেল
           _NavItem(
             index: 2,
             currentIndex: _currentIndex,
-            // ✅ আইকন পরিবর্তন: ড্যাশবোর্ড -> মেসেজ
             activeIcon: Icons.chat_bubble_rounded,
             inactiveIcon: Icons.chat_bubble_outline,
             label: 'MESSAGES',
@@ -139,7 +136,6 @@ class _MainNavScreenState extends State<MainNavScreen> {
   }
 }
 
-// ✅ ছোট এবং রিইউজেবল উইজেট
 class _NavItem extends StatelessWidget {
   final int index;
   final int currentIndex;
@@ -160,7 +156,6 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    // ✅ ব্র্যান্ড কালার ব্যবহার করা হয়েছে
     final activeColor = AppColors.brandMain;
 
     return Expanded(
@@ -187,15 +182,14 @@ class _NavItem extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 2),
-            if (!isSelected) // সিলেক্টেড অবস্থায় টেক্সট হাইড করে আরও ক্লিন লুক দেওয়া যায় (অপশনাল)
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.grey.shade400,
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? activeColor : Colors.grey.shade400,
               ),
+            ),
           ],
         ),
       ),

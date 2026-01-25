@@ -1,3 +1,5 @@
+// lib/screens/dashboard/pending_jobs_screen.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,25 +13,29 @@ import 'package:findus_app/widgets/universal_worker_card.dart';
 import '../utils/dashboard_constants.dart';
 
 class PendingJobsScreen extends StatelessWidget {
-  final String? userId; // optional (but we will prefer auth uid)
+  final String? userId;
 
   const PendingJobsScreen({super.key, this.userId});
 
   @override
   Widget build(BuildContext context) {
-    // ✅ For security + rules consistency, always prefer current auth uid
     final String? authUid = FirebaseAuth.instance.currentUser?.uid;
     final String? uid = authUid ?? userId;
 
+    // ✅ ডার্ক মোড চেক
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+
     if (uid == null || uid.isEmpty) {
-      return const FloatingScaffold(
+      return FloatingScaffold(
         title: 'Pending Requests',
-        backgroundColor: AppColors.brandLight,
-        titleColor: AppColors.brandDark,
-        iconColor: AppColors.brandDark,
+        backgroundColor: bgColor,
+        titleColor: textColor,
+        iconColor: textColor,
         scrollable: false,
         bodyPadding: EdgeInsets.zero,
-        body: Center(child: Text('Please login again')),
+        body: Center(child: Text('Please login again', style: TextStyle(color: textColor))),
       );
     }
 
@@ -37,43 +43,30 @@ class PendingJobsScreen extends StatelessWidget {
         .collection('hire_requests')
         .where('receiverId', isEqualTo: uid)
         .where('status', isEqualTo: DashboardConstants.pendingStatus)
-    // .orderBy('createdAt', descending: true) // add if you have createdAt (may need index)
         .snapshots();
 
     return FloatingScaffold(
-      title: 'Pending Requests',
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      title: 'PENDING REQUESTS',
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: pendingStream,
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return _ErrorBox(message: 'Error: ${snapshot.error}');
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          if (snapshot.hasError) return _ErrorBox(message: 'Error: ${snapshot.error}', isDark: isDark);
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
 
           final docs = snapshot.data!.docs;
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Text(
-                'No pending requests',
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-              ),
-            );
-          }
+          if (docs.isEmpty) return _buildEmptyState(isDark);
 
           return ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            physics: const BouncingScrollPhysics(),
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              return _buildRequestItem(context, docs[index]);
+              return _buildRequestItem(context, docs[index], isDark);
             },
           );
         },
@@ -84,60 +77,75 @@ class PendingJobsScreen extends StatelessWidget {
   Widget _buildRequestItem(
       BuildContext context,
       QueryDocumentSnapshot<Map<String, dynamic>> doc,
+      bool isDark,
       ) {
     final data = doc.data();
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
-    return Column(
-      children: [
-        UniversalWorkerCard(
-          id: (data['senderId'] ?? '').toString(),
-          name: (data['senderName'] ?? 'Unknown').toString(),
-          role: (data['senderRole'] ?? 'User').toString(),
-          imageUrl: (data['senderImage'] ?? '').toString(),
-          address: (data['location'] ?? 'Not set').toString(),
-          rating: (data['rating'] ?? 0).toString(),
-          completed: "0",
-          reviews: "0",
-          price: (data['price'] ?? data['offerPrice'] ?? '').toString(),
-          time: "WAITING FOR APPROVAL",
-          onChatTap: () => _openChat(context, data),
-        ),
-        const SizedBox(height: 12),
-        _buildActionButtons(context, doc),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-
-  Widget _buildActionButtons(
-      BuildContext context,
-      QueryDocumentSnapshot<Map<String, dynamic>> doc,
-      ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _rejectRequest(context, doc),
-              icon: const Icon(Icons.close, size: 18),
-              label: const Text("REJECT"),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: const BorderSide(color: Colors.red),
-              ),
-            ),
+          UniversalWorkerCard(
+            id: (data['senderId'] ?? '').toString(),
+            name: (data['senderName'] ?? 'Unknown').toString(),
+            role: (data['senderRole'] ?? 'User').toString(),
+            imageUrl: (data['senderImage'] ?? '').toString(),
+            address: (data['location'] ?? 'Not set').toString(),
+            rating: (data['rating'] ?? 0).toString(),
+            completed: "0",
+            reviews: "0",
+            price: (data['price'] ?? data['offerPrice'] ?? '').toString(),
+            time: "WAITING FOR APPROVAL",
+            margin: EdgeInsets.zero,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            onChatTap: () => _openChat(context, data),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => _approveRequest(context, doc),
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text("APPROVE"),
+
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _rejectRequest(context, doc),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text("REJECT"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                    ),
+                    onPressed: () => _approveRequest(context, doc),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text("APPROVE"),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -150,10 +158,7 @@ class PendingJobsScreen extends StatelessWidget {
     if (otherUserId == null || otherUserId.isEmpty) return;
 
     try {
-      final convId = await FirestoreChatService.getOrCreateConversation(
-        otherUserId: otherUserId,
-      );
-
+      final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUserId);
       if (!context.mounted) return;
 
       Navigator.push(
@@ -168,92 +173,77 @@ class PendingJobsScreen extends StatelessWidget {
         ),
       );
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to open chat: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to open chat: $e')));
+      }
     }
   }
 
-  Future<void> _rejectRequest(
-      BuildContext context,
-      QueryDocumentSnapshot<Map<String, dynamic>> doc,
-      ) async {
+  Future<void> _rejectRequest(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final finderId = FirebaseAuth.instance.currentUser?.uid;
     if (finderId == null) return;
 
     final confirm = await _confirmDialog(
       context,
-      title: 'Reject request?',
-      message: 'Are you sure you want to reject this request?',
-      confirmText: 'Reject',
-      confirmColor: Colors.red,
+      title: 'Reject Request?',
+      message: 'Are you sure you want to reject this job request?',
+      confirmText: 'REJECT',
+      confirmColor: Colors.redAccent,
     );
 
     if (confirm != true) return;
 
     try {
       String supporterId = '';
-
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(doc.reference);
         if (!snap.exists) throw Exception('Request not found');
-
         final data = snap.data() as Map<String, dynamic>;
-        final receiverId = (data['receiverId'] ?? '').toString();
-        supporterId = (data['senderId'] ?? '').toString();
-        final status = (data['status'] ?? '').toString();
 
-        if (receiverId != finderId) throw Exception('Not allowed');
-        if (status != DashboardConstants.pendingStatus) {
-          throw Exception('Request is not pending anymore');
-        }
+        if (data['receiverId'] != finderId) throw Exception('Not allowed');
+        if (data['status'] != DashboardConstants.pendingStatus) throw Exception('Already processed');
+
+        supporterId = (data['senderId'] ?? '').toString();
 
         tx.update(doc.reference, {
           'status': DashboardConstants.rejectedStatus,
           'rejectedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(), // ✅ rules-friendly
+          'updatedAt': FieldValue.serverTimestamp(),
         });
       });
 
-      // notify supporter
       if (supporterId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': supporterId,
           'fromUserId': finderId,
           'type': 'hire_request_rejected',
-          'title': 'Request rejected',
-          'body': 'Your request was rejected',
+          'title': 'Request Rejected',
+          'body': 'Your job request was rejected.',
           'requestId': doc.id,
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
 
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request rejected')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request rejected'), backgroundColor: Colors.redAccent));
+      }
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error rejecting: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
-  Future<void> _approveRequest(
-      BuildContext context,
-      QueryDocumentSnapshot<Map<String, dynamic>> doc,
-      ) async {
+  Future<void> _approveRequest(BuildContext context, QueryDocumentSnapshot<Map<String, dynamic>> doc) async {
     final finderId = FirebaseAuth.instance.currentUser?.uid;
     if (finderId == null) return;
 
     final confirm = await _confirmDialog(
       context,
-      title: 'Approve request?',
-      message: 'Approve করলে job “Work in progress” এ চলে যাবে। Continue?',
-      confirmText: 'Approve',
+      title: 'Approve Request?',
+      message: 'Approve to start the job. It will move to "Work in Progress".',
+      confirmText: 'APPROVE',
       confirmColor: Colors.green,
     );
 
@@ -261,119 +251,87 @@ class PendingJobsScreen extends StatelessWidget {
 
     try {
       String supporterId = '';
-      String supporterName = '';
-      String supporterImage = '';
-      dynamic price;
-
-      // 🔥 NEW: ভেরিফিকেশন ডাটা ভেরিয়েবল
-      String secretOtp = '';
-      String verificationType = 'otp';
-
       await FirebaseFirestore.instance.runTransaction((tx) async {
         final snap = await tx.get(doc.reference);
         if (!snap.exists) throw Exception('Request not found');
-
         final data = snap.data() as Map<String, dynamic>;
-        final receiverId = (data['receiverId'] ?? '').toString();
+
+        if (data['receiverId'] != finderId) throw Exception('Not allowed');
+        if (data['status'] != DashboardConstants.pendingStatus) throw Exception('Already processed');
+
         supporterId = (data['senderId'] ?? '').toString();
-        supporterName = (data['senderName'] ?? '').toString();
-        supporterImage = (data['senderImage'] ?? '').toString();
-        price = data['price'] ?? data['offerPrice'];
 
-        // 🔥 NEW: রিকোয়েস্ট থেকে OTP এবং ভেরিফিকেশন টাইপ কপি করা হচ্ছে
-        secretOtp = (data['secret_otp'] ?? '').toString();
-        verificationType = (data['verification_type'] ?? 'otp').toString();
-
-        final status = (data['status'] ?? '').toString();
-
-        if (receiverId != finderId) throw Exception('Not allowed');
-        if (status != DashboardConstants.pendingStatus) {
-          throw Exception('Request is not pending anymore');
-        }
-        if (supporterId.isEmpty) throw Exception('Invalid senderId');
-
-        // 1) hire_requests: pending -> ongoing
         tx.update(doc.reference, {
           'status': DashboardConstants.ongoingStatus,
           'approvedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 2) ongoing_jobs create (doc id = request id prevents duplicates)
-        final ongoingRef =
-        FirebaseFirestore.instance.collection('ongoing_jobs').doc(doc.id);
-
+        final ongoingRef = FirebaseFirestore.instance.collection('ongoing_jobs').doc(doc.id);
         tx.set(ongoingRef, {
           'participants': [finderId, supporterId],
-          'receiverId': finderId,   // Earner (Worker)
-          'workerId': supporterId,  // Hirer (Client) - *Note: Naming might be confusing based on your role logic, but keeping consistant with your code*
-          'workerName': supporterName,
-          'workerImage': supporterImage,
-          'price': price,
+          'receiverId': finderId,
+          'workerId': supporterId,
+          'workerName': data['senderName'],
+          'workerImage': data['senderImage'],
+          'price': data['price'] ?? data['offerPrice'],
           'status': DashboardConstants.ongoingStatus,
           'startTime': FieldValue.serverTimestamp(),
           'originalRequestId': doc.id,
-
-          // 🔥 NEW: Ongoing জবে OTP ডাটা সেভ করা হলো
-          'secret_otp': secretOtp,        // যাতে পরে ম্যাচ করা যায়
-          'verification_type': verificationType,
-          'is_verified': false,           // কাজ এখনো শেষ হয়নি
-
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       });
 
-      // notify supporter
       if (supporterId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': supporterId,
           'fromUserId': finderId,
           'type': 'hire_request_approved',
-          'title': 'Request approved',
-          'body': 'Your request has been approved',
+          'title': 'Request Approved',
+          'body': 'Your job request has been approved!',
           'requestId': doc.id,
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
 
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Job approved successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job approved successfully'), backgroundColor: Colors.green));
+      }
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error approving: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 
-  Future<bool?> _confirmDialog(
-      BuildContext context, {
-        required String title,
-        required String message,
-        required String confirmText,
-        required Color confirmColor,
-      }) {
+  Future<bool?> _confirmDialog(BuildContext context, {required String title, required String message, required String confirmText, required Color confirmColor}) {
     return showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(title),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Text(message),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: confirmColor),
+            style: ElevatedButton.styleFrom(backgroundColor: confirmColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             onPressed: () => Navigator.pop(context, true),
             child: Text(confirmText, style: const TextStyle(color: Colors.white)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(bool isDark) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.assignment_late_outlined, size: 80, color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text("No pending requests", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white54 : Colors.grey)),
         ],
       ),
     );
@@ -382,18 +340,15 @@ class PendingJobsScreen extends StatelessWidget {
 
 class _ErrorBox extends StatelessWidget {
   final String message;
-  const _ErrorBox({required this.message});
+  final bool isDark;
+  const _ErrorBox({required this.message, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.red),
-        ),
+        child: Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
       ),
     );
   }

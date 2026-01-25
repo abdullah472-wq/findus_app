@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/dashboard/utils/dashboard_constants.dart';
 import 'package:findus_app/screens/dashboard/widgets/pending_jobs_screen.dart';
 import 'package:findus_app/screens/dashboard/widgets/stat_card.dart';
@@ -33,7 +34,6 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
     }
   }
 
-  // ✅ নিরাপদ কাউন্ট লজিক (count() + get() দুইটাই safe ভাবে handle করবে)
   Future<int> _fetchCountSafe(Query query) async {
     try {
       final snapshot = await query.count().get();
@@ -45,7 +45,6 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
         return snapshot.docs.length;
       } catch (e2) {
         debugPrint("Fallback get() failed in WorkSummary: $e2");
-        // শেষ পর্যন্তও যদি ব্যর্থ হয়, তাহলে error ছুঁড়ে না দিয়ে 0 ফেরত দেই
         return 0;
       }
     }
@@ -53,15 +52,8 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
 
   Future<_WorkSummaryData> _load() async {
     final uid = widget.userId;
-
-    // userId খালি হলে exception না ছুঁড়ে safe data ফেরত দিই
     if (uid.isEmpty) {
-      return _WorkSummaryData(
-        doneCount: 0,
-        pendingCount: 0,
-        avgRatingLabel: '4.8',
-        responseRateLabel: '95%',
-      );
+      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '4.8', responseRateLabel: '95%');
     }
 
     try {
@@ -80,38 +72,29 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
       return _WorkSummaryData(
         doneCount: doneCount,
         pendingCount: pendingCount,
-        avgRatingLabel: '4.8',  // TODO: আসল রেটিং লজিক বসাতে পারো
-        responseRateLabel: '95%',
-      );
-    } catch (e, st) {
-      debugPrint('WorkSummary _load error: $e\n$st');
-
-      // যেকোনো অপ্রত্যাশিত error হলেও UI ভাঙবে না, default data দেখাবে
-      return _WorkSummaryData(
-        doneCount: 0,
-        pendingCount: 0,
         avgRatingLabel: '4.8',
         responseRateLabel: '95%',
       );
+    } catch (e) {
+      debugPrint('WorkSummary _load error: $e');
+      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '4.8', responseRateLabel: '95%');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // এখন userId empty হলেও _load safe data রিটার্ন দেয়,
-    // তাই এখানে Text('User not found') দেখানোরও দরকার নেই, চাইলে রেখে দাও।
-    // if (widget.userId.isEmpty) {
-    //   return const Text('User not found');
-    // }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           "Work Summary",
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 12),
@@ -122,9 +105,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
             if (!snap.hasData) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               );
             }
 
@@ -142,9 +123,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.blue,
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const CompletedWorkTab(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const CompletedWorkTab()),
                         ),
                       ),
                     ),
@@ -158,9 +137,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => PendingJobsScreen(
-                              userId: widget.userId,
-                            ),
+                            builder: (_) => PendingJobsScreen(userId: widget.userId),
                           ),
                         ),
                       ),
@@ -179,9 +156,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => RatingHistoryScreen(
-                              targetUserId: widget.userId,
-                            ),
+                            builder: (_) => RatingHistoryScreen(targetUserId: widget.userId),
                           ),
                         ),
                       ),
@@ -195,11 +170,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.teal,
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Response rate details coming soon',
-                              ),
-                            ),
+                            const SnackBar(content: Text('Response rate details coming soon')),
                           );
                         },
                       ),
@@ -232,8 +203,9 @@ class _WorkSummaryData {
 class _ErrorBox extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
+  final bool isDark;
 
-  const _ErrorBox({required this.message, required this.onRetry});
+  const _ErrorBox({required this.message, required this.onRetry, this.isDark = false});
 
   @override
   Widget build(BuildContext context) {
@@ -241,33 +213,22 @@ class _ErrorBox extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: isDark ? Colors.red.withOpacity(0.1) : Colors.red.shade50,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.red.shade100),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Notice',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.red,
-            ),
-          ),
+          const Text('Notice', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
           const SizedBox(height: 6),
-          Text(
-            message,
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 12,
-            ),
-          ),
+          Text(message, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
           const SizedBox(height: 10),
           TextButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Retry'),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
           ),
         ],
       ),

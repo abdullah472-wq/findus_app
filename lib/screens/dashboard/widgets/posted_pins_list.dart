@@ -1,8 +1,8 @@
 // lib/screens/tabs/dashboard/widgets/posted_pins_list.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/constants/app_colors.dart';
-
 import '../../profile/earn_post_screen.dart';
 
 class PostedPinsList extends StatelessWidget {
@@ -12,6 +12,9 @@ class PostedPinsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (userId.isEmpty) {
       return const Text('User not found');
     }
@@ -22,12 +25,12 @@ class PostedPinsList extends StatelessWidget {
           .where('ownerId', isEqualTo: userId)
           .snapshots(),
       builder: (context, snapshot) {
-        return _buildContent(context, snapshot);
+        return _buildContent(context, snapshot, isDark);
       },
     );
   }
 
-  Widget _buildContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+  Widget _buildContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, bool isDark) {
     if (snapshot.hasError) {
       return _buildErrorWidget(snapshot.error.toString());
     }
@@ -38,10 +41,10 @@ class PostedPinsList extends StatelessWidget {
 
     final docs = snapshot.data!.docs;
     if (docs.isEmpty) {
-      return _buildEmptyWidget(context); // ✅ context pass
+      return _buildEmptyWidget(context, isDark);
     }
 
-    return _buildPinsList(context, docs);
+    return _buildPinsList(context, docs, isDark);
   }
 
   Widget _buildErrorWidget(String error) {
@@ -56,12 +59,7 @@ class PostedPinsList extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline, color: Colors.red),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Error loading pins: $error',
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
+          Expanded(child: Text('Error loading pins: $error', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -80,20 +78,10 @@ class PostedPinsList extends StatelessWidget {
   Widget _buildShimmerCard() {
     return Container(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: Colors.grey,
-              shape: BoxShape.circle,
-            ),
-          ),
+          Container(width: 40, height: 40, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
@@ -111,59 +99,56 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyWidget(BuildContext context) { // ✅ context added
+  Widget _buildEmptyWidget(BuildContext context, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
       ),
       child: Column(
         children: [
           Icon(Icons.pin_drop_outlined, size: 60, color: Colors.grey.shade400),
           const SizedBox(height: 12),
-          const Text(
-            'কোনো পিন পোস্ট করা হয়নি',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
+          Text(
+            'No pins posted yet',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.grey),
           ),
           const SizedBox(height: 8),
           Text(
-            'আপনার প্রথম পিন পোস্ট করুন এবং কাজ খুঁজুন',
+            'Post your first pin to start earning.',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const EarnPostScreen()),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandMain,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('নতুন পিন পোস্ট করুন', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('POST NEW PIN', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPinsList(BuildContext context, List<QueryDocumentSnapshot> docs) {
+  Widget _buildPinsList(BuildContext context, List<QueryDocumentSnapshot> docs, bool isDark) {
     return Column(
-      children: docs.map((doc) => _buildPinCard(context, doc)).toList(),
+      children: docs.map((doc) => _buildPinCard(context, doc, isDark)).toList(),
     );
   }
 
-  Widget _buildPinCard(BuildContext context, QueryDocumentSnapshot doc) {
+  Widget _buildPinCard(BuildContext context, QueryDocumentSnapshot doc, bool isDark) {
     final data = doc.data() as Map<String, dynamic>;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Card(
+        color: cardColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         elevation: 2,
         child: InkWell(
@@ -175,10 +160,13 @@ class PostedPinsList extends StatelessWidget {
               children: [
                 _buildPinIcon(data),
                 const SizedBox(width: 15),
-                _buildPinInfo(data),
-                const Spacer(),
+                Expanded(child: _buildPinInfo(data, textColor)),
                 _buildPriceTag(data),
-                _buildStatusIndicator(data),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  onPressed: () => _deletePin(context, doc.id),
+                ),
               ],
             ),
           ),
@@ -187,11 +175,67 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  // --- rest of your methods unchanged below (pin icon/info/meta/price/status/actions/delete etc.) ---
+  Widget _buildPinIcon(Map<String, dynamic> data) {
+    return CircleAvatar(
+      backgroundColor: AppColors.brandLight,
+      child: const Icon(Icons.push_pin, color: AppColors.brandDark),
+    );
+  }
 
-  Widget _buildPinIcon(Map<String, dynamic> data) { /* unchanged */ throw UnimplementedError(); }
-  Widget _buildPinInfo(Map<String, dynamic> data) { /* unchanged */ throw UnimplementedError(); }
-  Widget _buildPriceTag(Map<String, dynamic> data) { /* unchanged */ throw UnimplementedError(); }
-  Widget _buildStatusIndicator(Map<String, dynamic> data) { /* unchanged */ throw UnimplementedError(); }
-  void _handlePinTap(BuildContext context, String pinId, Map<String, dynamic> data) { /* unchanged */ }
+  Widget _buildPinInfo(Map<String, dynamic> data, Color textColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          data['title'] ?? 'No Title',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          data['address'] ?? 'No Location',
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceTag(Map<String, dynamic> data) {
+    return Text(
+      data['priceLabel'] ?? 'N/A',
+      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMain, fontSize: 14),
+    );
+  }
+
+  void _handlePinTap(BuildContext context, String pinId, Map<String, dynamic> data) {
+    // পিন ডিটেইলস পেজে যাওয়ার লজিক (ভবিষ্যতে অ্যাড করতে পারেন)
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Pin: ${data['title']}")));
+  }
+
+  Future<void> _deletePin(BuildContext context, String pinId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Pin?"),
+        content: const Text("Are you sure you want to delete this post?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance.collection('posts').doc(pinId).delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Pin deleted successfully")));
+      }
+    }
+  }
 }

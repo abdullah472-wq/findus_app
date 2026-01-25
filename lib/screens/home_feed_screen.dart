@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
 // ট্যাব পেজ ইম্পোর্ট
-import 'package:findus_app/screens/tabs/conversation_tab.dart';
 import 'package:findus_app/screens/tabs/work_in_progress_tab.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
-import 'package:findus_app/screens/tabs/leaderboard_screen.dart'; // ✅ নতুন ইম্পোর্ট
+import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
+
+import 'dashboard/dashboard_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -28,13 +29,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
 
-  // ✅ ৫টি ট্যাবের লিস্ট (Save সরিয়ে Leaderboard যুক্ত করা হয়েছে)
+  // ✅ ৫টি ট্যাবের লিস্ট (Message সরিয়ে Dashboard যুক্ত করা হয়েছে)
   final List<Widget> _tabViews = const [
-    ConversationTab(),
+    DashboardScreen(), // ✅ মেসেজের বদলে ড্যাশবোর্ড ট্যাব
     WorkInProgressTab(),
     CompletedWorkTab(),
     AchievementsTab(),
-    LeaderboardScreen(), // ✅ নতুন ট্যাব
+    LeaderboardScreen(),
   ];
 
   @override
@@ -87,21 +88,25 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final navBgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+
     return Scaffold(
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
       body: SafeArea(
         child: Column(
           children: [
             // --- উপরের মেনু বার ---
             Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: const BoxDecoration(
-                color: AppColors.bgBlue,
+              decoration: BoxDecoration(
+                color: navBgColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black12,
+                    color: Colors.black.withOpacity(0.05),
                     blurRadius: 8,
-                    offset: Offset(0, 3),
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -109,12 +114,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTopIcon(Icons.chat_bubble_outline, "Messages", 0), // ✅ Typo fixed
+                  // ✅ Dashboard বাটন (Messages এর বদলে)
+                  _buildTopIcon(Icons.dashboard_rounded, "Dashboard", 0, isDark),
 
                   _buildTopIcon(
                     Icons.settings_outlined,
                     "Working",
                     1,
+                    isDark,
                     isSpinning: true,
                   ),
 
@@ -122,12 +129,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     Icons.assignment_turned_in_outlined,
                     "Completed",
                     2,
+                    isDark,
                   ),
 
-                  _buildTopIcon(Icons.bar_chart_rounded, "Progress", 3),
+                  _buildTopIcon(Icons.bar_chart_rounded, "Progress", 3, isDark),
 
-                  // ✅ Leaderboard বাটন যুক্ত করা হলো
-                  _buildTopIcon(Icons.emoji_events_outlined, "Rank", 4),
+                  _buildTopIcon(Icons.emoji_events_outlined, "Rank", 4, isDark),
                 ],
               ),
             ),
@@ -154,18 +161,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   Widget _buildTopIcon(
       IconData icon,
       String label,
-      int index, {
+      int index,
+      bool isDark, {
         bool isSpinning = false,
       }) {
     final bool isActive = _selectedTopIndex == index;
+    final activeColor = AppColors.brandMain;
+    final inactiveColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
 
     Widget iconWidget = Icon(
       icon,
-      size: 24, // ✅ আইকন সাইজ একটু ছোট করা হয়েছে যাতে ৫টি ঠিকমতো ধরে
-      color: isActive ? Colors.cyan[800] : Colors.grey[600],
+      size: 24,
+      color: isActive ? activeColor : inactiveColor,
     );
 
-    if (isSpinning) {
+    if (isSpinning && isActive) {
       iconWidget = RotationTransition(
         turns: _spinController,
         child: iconWidget,
@@ -184,12 +194,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(8), // ✅ প্যাডিং ১০ থেকে ৮ করা হয়েছে
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isActive ? Colors.cyan.shade50 : Colors.transparent,
+              color: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isActive ? Colors.cyan : Colors.transparent,
+                color: isActive ? activeColor.withOpacity(0.3) : Colors.transparent,
                 width: 1.5,
               ),
             ),
@@ -202,8 +212,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 9, // ✅ ফন্ট সাইজ ১০ থেকে ৯ করা হয়েছে
-                color: isActive ? Colors.cyan[900] : Colors.grey[600],
+                fontSize: 9,
+                color: isActive ? activeColor : inactiveColor,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               ),
             ),
