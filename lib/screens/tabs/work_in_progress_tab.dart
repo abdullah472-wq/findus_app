@@ -19,15 +19,18 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
+  // ✅ সেইফ কনভার্সন ফাংশন
   double _asDouble(dynamic v, {double fallback = 0.0}) {
+    if (v == null) return fallback;
     if (v is num) return v.toDouble();
-    return double.tryParse(v?.toString() ?? '') ?? fallback;
+    return double.tryParse(v.toString()) ?? fallback;
   }
 
   int _asInt(dynamic v, {int fallback = 0}) {
+    if (v == null) return fallback;
     if (v is int) return v;
     if (v is num) return v.toInt();
-    return int.tryParse(v?.toString() ?? '') ?? fallback;
+    return int.tryParse(v.toString()) ?? fallback;
   }
 
   String _s(dynamic v, [String fallback = '']) => (v ?? fallback).toString();
@@ -54,18 +57,20 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           final err = snapshot.error.toString();
-          final isIndex = err.contains('FAILED_PRECONDITION') || err.contains('index');
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                isIndex
-                    ? "Firestore index required for this query.\nFirestore Console → Indexes এ গিয়ে index create করুন.\n\n$err"
-                    : "Something went wrong\n\n$err",
-                textAlign: TextAlign.center,
+          // ইনডেক্সিং এরর হ্যান্ডলিং
+          if (err.contains('FAILED_PRECONDITION') || err.contains('index')) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  "Firestore index required.\nPlease check console for link.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.red.shade300),
+                ),
               ),
-            ),
-          );
+            );
+          }
+          return Center(child: Text("Something went wrong"));
         }
 
         if (!snapshot.hasData) {
@@ -75,10 +80,17 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         final docs = snapshot.data!.docs;
 
         if (docs.isEmpty) {
-          return const Center(
-            child: Text(
-              "No jobs in progress.",
-              style: TextStyle(color: Colors.grey),
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.work_off_outlined, size: 60, color: Colors.grey.shade300),
+                const SizedBox(height: 10),
+                const Text(
+                  "No work in progress right now.",
+                  style: TextStyle(color: Colors.grey, fontSize: 16),
+                ),
+              ],
             ),
           );
         }
@@ -102,28 +114,19 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         required String docId,
         required String currentUid,
       }) {
-    final receiverId = _s(data['receiverId']).trim(); // finder
-    final workerId = _s(data['workerId']).trim();     // supporter
+    final receiverId = _s(data['receiverId']).trim();
+    final workerId = _s(data['workerId']).trim();
     final participants = (data['participants'] is List) ? List.from(data['participants']) : <dynamic>[];
 
-    // other participant for UI/chat/profile
     final otherUserId = (currentUid == workerId) ? receiverId : workerId;
+    final bool canComplete = currentUid == receiverId;
 
-    final bool canComplete = currentUid == receiverId; // ✅ only finder completes
+    // ডিফল্ট ভ্যালু হ্যান্ডলিং
+    final String otherNameFromDoc = (currentUid == workerId) ? _s(data['receiverName']) : _s(data['workerName']);
+    final String otherImageFromDoc = (currentUid == workerId) ? _s(data['receiverImage']) : _s(data['workerImage']);
+    final String otherRoleFromDoc = (currentUid == workerId) ? _s(data['receiverRole']) : _s(data['workerRole']);
 
-    // If you denormalize both sides in ongoing_jobs it's best.
-    // We'll try to show name/image from doc; if missing, fallback to user fetch.
-    final String otherNameFromDoc = (currentUid == workerId)
-        ? _s(data['receiverName'])
-        : _s(data['workerName']);
-    final String otherImageFromDoc = (currentUid == workerId)
-        ? _s(data['receiverImage'])
-        : _s(data['workerImage']);
-    final String otherRoleFromDoc = (currentUid == workerId)
-        ? _s(data['receiverRole'])
-        : _s(data['workerRole']); // if you store
-
-    final String location = _s(data['location'], 'Not provided');
+    final String location = _s(data['location'], 'Location not available');
     final String price = _s(data['price'], _s(data['offerPrice'], 'Negotiable'));
 
     final double ratingVal = _asDouble(data['rating']);
@@ -138,15 +141,16 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           ? _firestore.collection('users').doc(otherUserId).get()
           : Future.value(null),
       builder: (context, snap) {
-        String name = otherNameFromDoc.isNotEmpty ? otherNameFromDoc : 'Unknown';
+        String name = otherNameFromDoc.isNotEmpty ? otherNameFromDoc : 'Unknown User';
         String role = otherRoleFromDoc.isNotEmpty ? otherRoleFromDoc : 'User';
         String imageUrl = otherImageFromDoc;
 
+        // যদি ইউজারের আপডেট করা ডাটা পাওয়া যায়
         if (snap.data != null && snap.data!.exists) {
           final u = snap.data!.data() ?? {};
-          name = name == 'Unknown' ? _s(u['name'], _s(u['fullName'], 'Unknown')) : name;
-          role = role == 'User' ? _s(u['userRole'], _s(u['role'], 'User')) : role;
-          imageUrl = imageUrl.isEmpty ? _s(u['imageUrl'], _s(u['photoUrl'], '')) : imageUrl;
+          name = _s(u['name'], name);
+          role = _s(u['userRole'], role);
+          imageUrl = _s(u['image'], imageUrl); // 'image' or 'imageUrl'
         }
 
         return Container(
@@ -168,7 +172,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                 id: otherUserId,
                 name: name,
                 role: role,
-                imageUrl: imageUrl,
+                imageUrl: imageUrl.isNotEmpty ? imageUrl : 'https://i.pravatar.cc/150', // ডিফল্ট ইমেজ
                 address: location,
                 rating: ratingStr,
                 completed: completedCount.toString(),
@@ -185,31 +189,22 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                 ),
 
                 onTap: () {
-                  if (otherUserId.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("User id missing")),
-                    );
-                    return;
-                  }
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => UnifiedProfileScreen(
-                        uid: otherUserId,
-                        isOwner: false,
-                        showBack: true, // ✅ এই লাইনটি যোগ করা হয়েছে
+                  if (otherUserId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UnifiedProfileScreen(
+                          uid: otherUserId,
+                          isOwner: false,
+                          showBack: true,
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
 
                 onChatTap: () async {
-                  if (otherUserId.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("User id missing")),
-                    );
-                    return;
-                  }
+                  if (otherUserId.isEmpty) return;
 
                   showDialog(
                     context: context,
@@ -238,16 +233,10 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                     );
                   } catch (e) {
                     if (context.mounted) Navigator.pop(context);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Could not open chat: $e")),
-                      );
-                    }
                   }
                 },
               ),
 
-              // ✅ Complete button (only finder)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: ElevatedButton(
@@ -292,8 +281,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
 
   bool _needFetchOther(String name, String role, String image, String otherId) {
     if (otherId.isEmpty) return false;
-    // If any info missing, fetch user doc
-    return name.isEmpty || role.isEmpty || image.isEmpty;
+    return name.isEmpty || role.isEmpty || image.isEmpty || name == 'Unknown';
   }
 
   Future<void> _markJobAsCompleted(
@@ -307,7 +295,6 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
-    // only receiver can complete
     if (currentUser.uid != receiverId) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Only Finder can complete this job.")),
@@ -319,27 +306,19 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Complete Job"),
-        content: const Text(
-          "Are you sure you want to mark this job as completed?\n\nThis action cannot be undone.",
-        ),
+        content: const Text("Are you sure you want to mark this job as completed?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              "Complete",
-              style: TextStyle(color: AppColors.brandMain),
-            ),
+            child: const Text("Complete", style: TextStyle(color: AppColors.brandMain)),
           ),
         ],
       ),
-    ) ??
-        false;
+    ) ?? false;
 
     if (!confirm) return;
+
 
     showDialog(
       context: context,

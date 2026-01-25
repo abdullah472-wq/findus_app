@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:dash_chat_2/dash_chat_2.dart'; // এখন আর এরর দেখাবে না
+import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
@@ -24,28 +24,24 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final currentUser = FirebaseAuth.instance.currentUser!;
-
   late ChatUser _me;
   late ChatUser _otherUser;
 
   @override
   void initState() {
     super.initState();
-    // নিজের তথ্য
     _me = ChatUser(
       id: currentUser.uid,
       firstName: currentUser.displayName ?? "Me",
       profileImage: currentUser.photoURL,
     );
-    // অন্য ইউজারের তথ্য
     _otherUser = ChatUser(
-      id: "other_user_id", // এখানে আইডি না থাকলে widget.userName ইউজ করতে পারেন
+      id: "other", // আইডি এখানে গুরুত্বপূর্ণ নয়, শুধু ডিসপ্লের জন্য
       firstName: widget.userName,
       profileImage: widget.userImage,
     );
   }
 
-  // মেসেজ পাঠানোর ফাংশন
   void _sendMessage(ChatMessage message) {
     FirebaseFirestore.instance
         .collection('conversations')
@@ -57,31 +53,39 @@ class _ChatScreenState extends State<ChatScreen> {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // শেষ মেসেজ আপডেট করা (চ্যাট লিস্টের জন্য)
     FirebaseFirestore.instance
         .collection('conversations')
         .doc(widget.conversationId)
         .set({
       'lastMsg': message.text,
-      'time': "Just now", // আপনি চাইলেDateFormat ইউজ করতে পারেন
+      'time': "Just now",
       'unread': FieldValue.increment(1),
+      'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
+    final appBarColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).cardColor,
+        backgroundColor: appBarColor,
         elevation: 0.5,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
         titleSpacing: 0,
         title: Row(
           children: [
             CircleAvatar(
               radius: 18,
+              backgroundColor: AppColors.brandLight,
               backgroundImage: NetworkImage(widget.userImage.isNotEmpty
                   ? widget.userImage
                   : 'https://i.pravatar.cc/150'),
@@ -90,8 +94,8 @@ class _ChatScreenState extends State<ChatScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.userName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text(widget.userRole, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(widget.userName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+                Text(widget.userRole.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w600)),
               ],
             ),
           ],
@@ -106,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen> {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
           }
 
           List<ChatMessage> messages = [];
@@ -128,16 +132,19 @@ class _ChatScreenState extends State<ChatScreen> {
             messageOptions: MessageOptions(
               showOtherUsersAvatar: true,
               showTime: true,
-              containerColor: isDark ? const Color(0xFF2C2C2C) : Colors.blueGrey[50]!,
+              containerColor: isDark ? const Color(0xFF2C2C2C) : AppColors.brandMain.withOpacity(0.1),
               currentUserContainerColor: AppColors.brandMain,
               currentUserTextColor: Colors.white,
-              textColor: isDark ? Colors.white : Colors.black87,
+              textColor: textColor,
+              timeFontSize: 10,
             ),
             inputOptions: InputOptions(
+              inputTextStyle: TextStyle(color: textColor),
+              cursorStyle: CursorStyle(color: AppColors.brandMain),
               inputDecoration: InputDecoration(
                 hintText: "Type a message...",
-                hintStyle: const TextStyle(color: Colors.grey),
-                fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey[100],
+                hintStyle: TextStyle(color: Colors.grey.shade500),
+                fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
                 filled: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(25),
@@ -145,6 +152,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
+              sendButtonBuilder: (onSend) {
+                return IconButton(
+                  icon: const Icon(Icons.send_rounded, color: AppColors.brandMain),
+                  onPressed: onSend,
+                );
+              },
             ),
           );
         },

@@ -20,18 +20,26 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF4F6FA);
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF9F9FB),
+      backgroundColor: bgColor,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           "LEADERBOARD",
-          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5),
+          style: TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              color: textColor
+          ),
         ),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: Column(
         children: [
@@ -41,27 +49,28 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               stream: _getLeaderboardStream(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  // Index Error Handling
                   if (snapshot.error.toString().contains('index')) {
                     return const Center(child: Text("Firestore index required. Check console log."));
                   }
                   return Center(child: Text("Error: ${snapshot.error}"));
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
                 }
 
                 final users = snapshot.data?.docs ?? [];
-                if (users.isEmpty) return const Center(child: Text("No ranking data yet"));
+                if (users.isEmpty) return Center(child: Text("No ranking data yet", style: TextStyle(color: textColor)));
 
                 return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
+                  physics: const BouncingScrollPhysics(),
                   children: [
                     const SizedBox(height: 20),
-                    // Podium for Top 3
+                    // Top 3 Podium
                     if (users.isNotEmpty) _buildPodium(users.take(3).toList(), isDark),
                     const SizedBox(height: 30),
-                    // List for Rank 4+
+
+                    // Rank 4+ List
                     if (users.length > 3)
                       ...users.skip(3).map((doc) {
                         final index = users.indexOf(doc);
@@ -82,17 +91,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Stream<QuerySnapshot> _getLeaderboardStream() {
     Query query = FirebaseFirestore.instance.collection('users');
 
-    // Filter Logic
     if (_selectedFilter == 'Finder') {
       query = query.where('userRole', isEqualTo: 'finder');
     } else if (_selectedFilter == 'Supporter') {
-      query = query.where('userRole', isEqualTo: 'maker'); // 'maker' is usually supporter in your DB logic
+      query = query.where('userRole', isEqualTo: 'maker');
     }
 
-    // Default: Sort by XP Points (descending)
-    // IMPORTANT: 'xpPoints' field should exist on user docs, if not found use 'user_badge_points'
     return query
-        .orderBy('user_badge_points', descending: true) // Using 'user_badge_points' based on your profile screen logic
+        .orderBy('user_badge_points', descending: true)
         .limit(50)
         .snapshots();
   }
@@ -119,6 +125,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.brandMain : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: isSelected ? [
+                    BoxShadow(
+                        color: AppColors.brandMain.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4)
+                    )
+                  ] : [],
                 ),
                 child: Text(
                   filter.toUpperCase(),
@@ -126,7 +139,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : Colors.grey,
+                    color: isSelected ? Colors.white : (isDark ? Colors.grey : Colors.black54),
                   ),
                 ),
               ),
@@ -140,11 +153,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget _buildPodium(List<DocumentSnapshot> top3, bool isDark) {
     if (top3.isEmpty) return const SizedBox();
 
-    // Reorder for UI: [2nd, 1st, 3rd]
     List<DocumentSnapshot?> podiumList = List.filled(3, null);
-    if (top3.isNotEmpty) podiumList[1] = top3[0]; // 1st -> Center
-    if (top3.length >= 2) podiumList[0] = top3[1]; // 2nd -> Left
-    if (top3.length >= 3) podiumList[2] = top3[2]; // 3rd -> Right
+    if (top3.isNotEmpty) podiumList[1] = top3[0]; // 1st
+    if (top3.length >= 2) podiumList[0] = top3[1]; // 2nd
+    if (top3.length >= 3) podiumList[2] = top3[2]; // 3rd
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -163,7 +175,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final int xp = int.tryParse(data['user_badge_points']?.toString() ?? '0') ?? 0;
     final String image = data['image'] ?? '';
 
-    Color rankColor = rank == 1 ? Colors.amber : (rank == 2 ? Colors.grey : Colors.brown);
+    Color rankColor = rank == 1 ? const Color(0xFFFFD700) : (rank == 2 ? const Color(0xFFC0C0C0) : const Color(0xFFCD7F32));
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return Expanded(
       child: GestureDetector(
@@ -177,8 +190,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   margin: const EdgeInsets.only(top: 15),
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: rankColor, width: 3),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: rankColor, width: 3),
+                      boxShadow: [
+                        BoxShadow(color: rankColor.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)
+                      ]
                   ),
                   child: CircleAvatar(
                     radius: size / 2,
@@ -191,15 +207,20 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   top: 0,
                   child: Container(
                     padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(color: rankColor, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                        color: rankColor,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                    ),
                     child: Text("$rank", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text("${_formatPoints(xp)} XP", style: const TextStyle(color: AppColors.brandMain, fontWeight: FontWeight.w800, fontSize: 11)),
+            const SizedBox(height: 12),
+            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
+            const SizedBox(height: 2),
+            Text("${_formatPoints(xp)} XP", style: TextStyle(color: rankColor, fontWeight: FontWeight.w900, fontSize: 11)),
           ],
         ),
       ),
@@ -214,19 +235,22 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final String image = data['image'] ?? '';
     final BadgeLevel level = BadgeService.getLevelByPoints(xp);
 
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isMe ? AppColors.brandMain.withOpacity(0.1) : (isDark ? Colors.white10 : Colors.white),
+        color: isMe ? AppColors.brandMain.withOpacity(0.1) : cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: isMe ? Border.all(color: AppColors.brandMain, width: 1) : null,
+        border: isMe ? Border.all(color: AppColors.brandMain, width: 1.5) : null,
         boxShadow: [
           if (!isDark)
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 5,
-              offset: const Offset(0, 2),
+              color: Colors.grey.withOpacity(0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             )
         ],
       ),
@@ -234,21 +258,31 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         onTap: () => _openProfile(doc.id),
         child: Row(
           children: [
-            SizedBox(width: 30, child: Text("$rank", style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.grey))),
+            SizedBox(width: 30, child: Text("#$rank", style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.grey))),
             CircleAvatar(
-              radius: 20,
+              radius: 22,
               backgroundImage: image.isNotEmpty ? NetworkImage(image) : null,
-              backgroundColor: Colors.grey[200],
-              child: image.isEmpty ? Icon(Icons.person, color: Colors.grey[400]) : null,
+              backgroundColor: AppColors.brandLight,
+              child: image.isEmpty ? const Icon(Icons.person, color: Colors.grey) : null,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Text(BadgeService.getFormattedLevelName(level), style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                  Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: isDark ? Colors.white10 : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(4)
+                    ),
+                    child: Text(
+                        BadgeService.getFormattedLevelName(level),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[600])
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -257,9 +291,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               children: [
                 Text(
                   _formatPoints(xp),
-                  style: TextStyle(fontWeight: FontWeight.w900, color: isMe ? AppColors.brandMain : null),
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: isMe ? AppColors.brandMain : textColor),
                 ),
-                const Text("XP", style: TextStyle(fontSize: 8, color: Colors.grey)),
+                const Text("XP", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
               ],
             ),
           ],

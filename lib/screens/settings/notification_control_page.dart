@@ -89,9 +89,18 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড ডিটেকশন
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey;
+
     return FloatingScaffold(
       title: "NOTIFICATIONS",
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -105,7 +114,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
           // --- Master Switch ---
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: cardColor,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
@@ -116,21 +125,21 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
               ],
             ),
             child: SwitchListTile(
-              title: const Text(
+              title: Text(
                 "All Notifications",
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: AppColors.brandDark,
+                  color: textColor,
                   fontSize: 16,
                 ),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 "Turn all FINDUS notifications on or off.",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: subTextColor),
               ),
               value: _allEnabled,
               onChanged: _updateAll,
-              activeThumbColor: AppColors.brandMain,
+              activeColor: AppColors.brandMain,
               secondary: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -144,14 +153,14 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
           ),
 
           const SizedBox(height: 25),
-          const Padding(
-            padding: EdgeInsets.only(left: 8, bottom: 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 10),
             child: Text(
               "NOTIFICATION TYPES",
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w900,
-                color: Colors.grey,
+                color: subTextColor,
                 letterSpacing: 1.2,
               ),
             ),
@@ -160,7 +169,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
           // --- Category Switches ---
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: cardColor,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
@@ -179,8 +188,11 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                   value: _jobsEnabled && _allEnabled,
                   onChanged: _allEnabled ? (v) => _updateCategory(jobs: v) : null,
                   color: Colors.blue,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  isDark: isDark,
                 ),
-                _buildDivider(),
+                _buildDivider(isDark),
                 _buildSwitchTile(
                   icon: Icons.chat_bubble_outline_rounded,
                   title: "Chat Messages",
@@ -188,8 +200,11 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                   value: _chatEnabled && _allEnabled,
                   onChanged: _allEnabled ? (v) => _updateCategory(chat: v) : null,
                   color: Colors.green,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  isDark: isDark,
                 ),
-                _buildDivider(),
+                _buildDivider(isDark),
                 _buildSwitchTile(
                   icon: Icons.campaign_rounded,
                   title: "Updates & Promo",
@@ -197,8 +212,11 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                   value: _promoEnabled && _allEnabled,
                   onChanged: _allEnabled ? (v) => _updateCategory(promo: v) : null,
                   color: Colors.orange,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  isDark: isDark,
                 ),
-                _buildDivider(),
+                _buildDivider(isDark),
                 _buildSwitchTile(
                   icon: Icons.warning_amber_rounded,
                   title: "Emergency Alerts",
@@ -206,20 +224,23 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
                   value: _emergencyEnabled && _allEnabled,
                   onChanged: _allEnabled ? (v) => _updateCategory(emergency: v) : null,
                   color: Colors.redAccent,
+                  textColor: textColor,
+                  subTextColor: subTextColor,
+                  isDark: isDark,
                 ),
               ],
             ),
           ),
 
           const SizedBox(height: 15),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Text(
               "Note: You can also control app-level notification permissions directly from your device settings.",
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey,
+                color: subTextColor,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -237,21 +258,28 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
     required bool value,
     required ValueChanged<bool>? onChanged,
     required Color color,
+    required Color textColor,
+    required Color subTextColor,
+    required bool isDark,
   }) {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      activeThumbColor: AppColors.brandMain,
+      activeColor: AppColors.brandMain,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: onChanged == null ? Colors.grey.withOpacity(0.1) : color.withOpacity(0.1),
+          color: onChanged == null
+              ? (isDark ? Colors.white10 : Colors.grey.withOpacity(0.1))
+              : color.withOpacity(0.1),
           shape: BoxShape.circle,
         ),
         child: Icon(
           icon,
-          color: onChanged == null ? Colors.grey : color,
+          color: onChanged == null
+              ? (isDark ? Colors.grey : Colors.grey.shade400)
+              : color,
           size: 22,
         ),
       ),
@@ -260,21 +288,24 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 15,
-          color: onChanged == null ? Colors.grey : Colors.black87,
+          color: onChanged == null ? subTextColor.withOpacity(0.5) : textColor,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: const TextStyle(fontSize: 11, color: Colors.grey),
+        style: TextStyle(
+            fontSize: 11,
+            color: onChanged == null ? subTextColor.withOpacity(0.5) : subTextColor
+        ),
       ),
     );
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(bool isDark) {
     return Divider(
       height: 1,
       thickness: 0.5,
-      color: Colors.grey.shade200,
+      color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
       indent: 60,
       endIndent: 20,
     );

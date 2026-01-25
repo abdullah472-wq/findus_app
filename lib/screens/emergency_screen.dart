@@ -72,7 +72,6 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     _fetchContacts();
   }
 
-  // ১. লোকেশন বের করা
   Future<void> _determinePosition() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -86,7 +85,6 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
-  // ২. ডাটা ফেচ করা
   Future<void> _fetchContacts() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -120,27 +118,27 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     }
   }
 
-
-  // ৩. মেইন বিল্ড মেথড (Layout Fixed)
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     return FloatingScaffold(
       title: "EMERGENCY HELP",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
-      scrollable: false, // ✅ Expanded কাজ করার জন্য এটি false থাকবে
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
+      scrollable: false,
       bodyPadding: EdgeInsets.zero,
       actions: [
-        // ✅ আইকনের বদলে টেক্সট বাটন যোগ করা হয়েছে
         TextButton.icon(
           onPressed: _openAddContactSheet,
-          icon: const Icon(Icons.add_circle_outline, size: 20, color: AppColors.brandDark),
-          label: const Text(
+          icon: Icon(Icons.add_circle_outline, size: 20, color: textColor),
+          label: Text(
               "ADD NEW",
-              style: TextStyle(color: AppColors.brandDark, fontWeight: FontWeight.bold, fontSize: 12)
+              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 12)
           ),
         ),
         const SizedBox(width: 8),
@@ -155,8 +153,8 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
             child: RefreshIndicator(
               onRefresh: _fetchContacts,
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildContactListLogic(),
+                  ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
+                  : _buildContactListLogic(isDark),
             ),
           ),
         ],
@@ -164,13 +162,12 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ৪. টপ হেডার (Undefined Method Fix)
   Widget _buildTopHeader(bool isDark) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        color: Colors.redAccent.withOpacity(0.05),
+        color: isDark ? Colors.redAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.05),
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
       ),
       child: const Column(
@@ -182,19 +179,23 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ৫. সার্চ এবং ফিল্টার (Undefined Method Fix)
   Widget _buildSearchAndFilters(bool isDark) {
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: TextField(
+            style: TextStyle(color: textColor),
             onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
             decoration: InputDecoration(
               hintText: "Search name or location...",
-              prefixIcon: const Icon(Icons.search),
+              hintStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey.shade600),
+              prefixIcon: Icon(Icons.search, color: isDark ? Colors.grey : null),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: cardColor,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
             ),
           ),
@@ -212,14 +213,15 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 11, fontWeight: FontWeight.bold)),
+                  label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : textColor, fontSize: 11, fontWeight: FontWeight.bold)),
                   selected: isSelected,
                   onSelected: (val) {
                     setState(() => _selectedCategory = cat);
                     _fetchContacts();
                   },
                   selectedColor: Colors.redAccent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: cardColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide.none),
                 ),
               );
             },
@@ -229,29 +231,30 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-  // ৬. কন্টাক্ট লিস্ট লজিক
-  Widget _buildContactListLogic() {
+  Widget _buildContactListLogic(bool isDark) {
     var filtered = _combinedContacts.where((c) => c.name.toLowerCase().contains(_searchQuery) || c.address.toLowerCase().contains(_searchQuery)).toList();
 
     if (_currentPosition != null) {
       filtered.sort((a, b) => _calculateDistance(a.lat, a.lng).compareTo(_calculateDistance(b.lat, b.lng)));
     }
 
-    if (filtered.isEmpty) return const Center(child: Text("No contacts found."));
+    if (filtered.isEmpty) return Center(child: Text("No contacts found.", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)));
 
     return ListView.builder(
       padding: const EdgeInsets.all(15),
       itemCount: filtered.length,
-      itemBuilder: (context, index) => _buildContactCard(filtered[index]),
+      itemBuilder: (context, index) => _buildContactCard(filtered[index], isDark),
     );
   }
 
-  // ৭. কন্টাক্ট কার্ড
-  Widget _buildContactCard(EmergencyContact contact) {
+  Widget _buildContactCard(EmergencyContact contact, bool isDark) {
     double dist = _calculateDistance(contact.lat, contact.lng);
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)]),
       child: ListTile(
         contentPadding: const EdgeInsets.all(12),
         leading: Container(
@@ -261,7 +264,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         ),
         title: Row(
           children: [
-            Expanded(child: Text(contact.name, style: const TextStyle(fontWeight: FontWeight.bold))),
+            Expanded(child: Text(contact.name, style: TextStyle(fontWeight: FontWeight.bold, color: textColor))),
             if (contact.isVerified) const Icon(Icons.verified, color: Colors.blue, size: 16),
             if (contact.isPersonal) const Text(" (MY)", style: TextStyle(fontSize: 10, color: Colors.blue)),
           ],
@@ -290,8 +293,6 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
       ),
     );
   }
-
-  // --- বাকি হেল্পারস (SOS, Phone, Distance, etc.) ---
 
   Widget _buildSOSButton() {
     return Padding(
@@ -343,8 +344,13 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final addressController = TextEditingController();
-    String category = _selectedCategory; // ডিফল্ট বর্তমান ক্যাটাগরি
+    String category = _selectedCategory;
     bool requestPublic = false;
+
+    // ✅ ডার্ক মোড চেক
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     showModalBottomSheet(
       context: context,
@@ -356,9 +362,9 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               left: 20, right: 20, top: 20
           ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -366,24 +372,23 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
-                  child: Container(width: 40, height: 4, decoration: const BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.all(Radius.circular(10)))),
+                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey, borderRadius: const BorderRadius.all(Radius.circular(10)))),
                 ),
                 const SizedBox(height: 20),
                 const Text("Add Emergency Contact", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.redAccent)),
                 const SizedBox(height: 20),
 
-                // ইনপুট ফিল্ডস
-                _buildField(nameController, "Name (e.g. Apollo Hospital)", Icons.business),
-                _buildField(phoneController, "Phone Number", Icons.phone, isPhone: true),
-                _buildField(addressController, "Address/Location", Icons.location_on),
+                _buildField(nameController, "Name", Icons.business, isDark),
+                _buildField(phoneController, "Phone", Icons.phone, isDark, isPhone: true),
+                _buildField(addressController, "Address", Icons.location_on, isDark),
 
                 const SizedBox(height: 10),
-
-                // ক্যাটাগরি সিলেক্টর
-                const Text("Select Category", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                Text("Select Category", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
                 DropdownButton<String>(
                   value: category,
                   isExpanded: true,
+                  dropdownColor: bgColor,
+                  style: TextStyle(color: textColor),
                   items: _categories.map((String value) {
                     return DropdownMenuItem<String>(value: value, child: Text(value));
                   }).toList(),
@@ -391,27 +396,22 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                 ),
 
                 const SizedBox(height: 10),
-
-                // পাবলিক রিকোয়েস্ট সুইচ
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text("Request to add in Public Directory", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  subtitle: const Text("If enabled, everyone can see this after admin verify", style: TextStyle(fontSize: 12)),
+                  title: Text("Request Public Directory", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
+                  subtitle: const Text("Admin approval required", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   value: requestPublic,
-                  activeThumbColor: Colors.redAccent,
+                  activeColor: Colors.redAccent,
                   onChanged: (val) => setModalState(() => requestPublic = val),
                 ),
 
                 const SizedBox(height: 20),
-
-                // সেভ বাটন
                 ElevatedButton(
                   onPressed: () async {
                     if (nameController.text.isEmpty || phoneController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Name and Phone are required!")));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Name and Phone required!")));
                       return;
                     }
-
                     final uid = FirebaseAuth.instance.currentUser?.uid;
                     if (uid == null) return;
 
@@ -429,17 +429,14 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
 
                     try {
                       if (requestPublic) {
-                        // পাবলিক ডিরেক্টরির জন্য রিকোয়েস্ট হিসেবে জমা হবে
                         await FirebaseFirestore.instance.collection('emergency_requests').add({...data, 'status': 'pending'});
                       } else {
-                        // ইউজারের নিজস্ব প্রাইভেট লিস্টে সেভ হবে
                         await FirebaseFirestore.instance.collection('users').doc(uid).collection('personal_emergency').add(data);
                       }
-
                       if (!mounted) return;
                       Navigator.pop(ctx);
-                      _fetchContacts(); // লিস্ট রিফ্রেশ করা
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Contact Saved Successfully!"), backgroundColor: Colors.green));
+                      _fetchContacts();
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Saved Successfully!"), backgroundColor: Colors.green));
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
                     }
@@ -459,17 +456,19 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     );
   }
 
-// ইনপুট ফিল্ড হেল্পার
-  Widget _buildField(TextEditingController controller, String label, IconData icon, {bool isPhone = false}) {
+  Widget _buildField(TextEditingController controller, String label, IconData icon, bool isDark, {bool isPhone = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextField(
         controller: controller,
+        style: TextStyle(color: isDark ? Colors.white : Colors.black),
         keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon, size: 20),
+          labelStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey.shade700),
+          prefixIcon: Icon(icon, size: 20, color: isDark ? Colors.grey : null),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: isDark ? Colors.grey.shade700 : Colors.grey)),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),

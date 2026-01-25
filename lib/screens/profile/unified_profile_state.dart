@@ -342,7 +342,9 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     final subscriptionType = userData['subscription_type']?.toString() ?? 'free';
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+     ? const Color(0xFF121212)
+     : AppColors.bgBlue,
       bottomNavigationBar: (!widget.isOwner)
           ? SafeArea(top: false, child: _buildVisitorActionBar())
           : null,

@@ -17,7 +17,7 @@ class CloudinaryService {
   }
 
   static void _ensureConfigured() {
-    if (cloudName == 'YOUR_CLOUD_NAME' || uploadPreset == 'YOUR_UPLOAD_PRESET') {
+    if (cloudName == 'dlwkqyh1a' || uploadPreset == 'ml_default') {
       throw Exception('Cloudinary cloudName/uploadPreset সেট করা নেই');
     }
   }

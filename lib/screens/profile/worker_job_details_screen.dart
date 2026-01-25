@@ -1,11 +1,4 @@
 // lib/screens/profile/worker_job_details_screen.dart
-//
-// ✅ FIXED for new Worker model:
-// - worker.role  ❌  -> use worker.userRole (finder/maker) OR show a nicer label
-// - worker.price (num?) ❌ -> use worker.priceText (String) for display
-// - ChatScreen userRole -> worker.userRole
-// - Profile uid -> worker.uid (or worker.id getter if you kept it)
-// ✅ Uses FloatingScaffold + bg AppColors.brandLight
 
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
@@ -31,12 +24,15 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final subtitleColor = isDark ? Colors.grey.shade400 : Colors.black87;
+
     final ratingText = worker.rating.toStringAsFixed(1);
-
-    // ✅ role label fixed
     final jobTitle = "$_roleLabel service";
-
-    // ✅ priceText fixed (string)
     final priceLabel = worker.priceText.trim().isNotEmpty
         ? worker.priceText
         : (worker.price != null ? "৳ ${worker.price!.toInt()}" : "Negotiable");
@@ -48,16 +44,16 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
     return FloatingScaffold(
       title: "Job Details",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
       actions: [
         IconButton(
-          icon: const Icon(Icons.person_outline, color: AppColors.brandDark),
+          icon: Icon(Icons.person_outline, color: textColor),
           onPressed: () {
-            final uid = worker.uid.trim(); // ✅ was worker.id / ''
+            final uid = worker.uid.trim();
             if (uid.isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text("Profile ID missing")),
@@ -79,7 +75,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
         ),
       ],
       body: Container(
-        color: AppColors.brandLight,
+        color: bgColor,
         child: Column(
           children: [
             Expanded(
@@ -88,9 +84,9 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeaderCard(context, ratingText, priceLabel),
+                    _buildHeaderCard(context, ratingText, priceLabel, isDark, cardColor, textColor),
                     const SizedBox(height: 16),
-                    _buildJobInfoCard(jobTitle, jobDescription),
+                    _buildJobInfoCard(jobTitle, jobDescription, cardColor, textColor, subtitleColor),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -101,7 +97,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.08),
@@ -135,7 +131,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                             builder: (_) => ChatScreen(
                               conversationId: cid,
                               userName: worker.name,
-                              userRole: worker.userRole, // ✅ was worker.role
+                              userRole: worker.userRole,
                               userImage: worker.image,
                             ),
                           ),
@@ -147,19 +143,13 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         minimumSize: const Size.fromHeight(45),
-                        backgroundColor: Colors.white,
+                        backgroundColor: isDark ? Colors.transparent : Colors.white,
+                        foregroundColor: AppColors.brandMain,
                       ),
-                      icon: const Icon(
-                        Icons.chat_bubble_outline,
-                        color: AppColors.brandMain,
-                      ),
+                      icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text(
                         "CHAT",
-                        style: TextStyle(
-                          color: AppColors.brandMain,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                       ),
                     ),
                   ),
@@ -201,13 +191,20 @@ class WorkerJobDetailsScreen extends StatelessWidget {
   }
 
   // ---------- Header card ----------
-  Widget _buildHeaderCard(BuildContext context, String ratingText, String priceLabel) {
+  Widget _buildHeaderCard(
+      BuildContext context,
+      String ratingText,
+      String priceLabel,
+      bool isDark,
+      Color cardColor,
+      Color textColor,
+      ) {
     final hasImg = worker.image.trim().isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -216,7 +213,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
             offset: const Offset(0, 4),
           )
         ],
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade200),
       ),
       child: Row(
         children: [
@@ -224,7 +221,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
             radius: 30,
             backgroundColor: AppColors.brandLight,
             backgroundImage: hasImg ? NetworkImage(worker.image) : null,
-            child: hasImg ? null : const Icon(Icons.person, color: AppColors.brandDark),
+            child: hasImg ? null : Icon(Icons.person, color: AppColors.brandDark),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -235,15 +232,15 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                   worker.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: AppColors.brandDark,
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _roleLabel.toUpperCase(), // ✅ was worker.role.toUpperCase()
+                  _roleLabel.toUpperCase(),
                   style: const TextStyle(
                     fontSize: 11,
                     color: Colors.redAccent,
@@ -273,7 +270,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                priceLabel, // ✅ was worker.price (num? -> String error)
+                priceLabel,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
@@ -288,7 +285,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                   const SizedBox(width: 3),
                   Text(
                     ratingText,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
                   ),
                 ],
               ),
@@ -300,31 +297,37 @@ class WorkerJobDetailsScreen extends StatelessWidget {
   }
 
   // ---------- Job info card ----------
-  Widget _buildJobInfoCard(String title, String description) {
+  Widget _buildJobInfoCard(
+      String title,
+      String description,
+      Color cardColor,
+      Color textColor,
+      Color subtitleColor,
+      ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w900,
               fontSize: 16,
-              color: AppColors.brandDark,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             description,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: Colors.black87,
+              color: subtitleColor,
               height: 1.5,
             ),
           ),

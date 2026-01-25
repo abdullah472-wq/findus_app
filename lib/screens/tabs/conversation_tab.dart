@@ -2,12 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
-import 'package:findus_app/screens/profile/unified_profile_screen.dart'; // Unified profile use করা হয়েছে
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/services/conversation_storage.dart';
-import 'package:findus_app/widgets/universal_worker_card.dart';
+import 'package:findus_app/screens/auth/log_in_chacker_screen.dart'; // লগইন চেক স্ক্রিন
 
 class ConversationTab extends StatefulWidget {
   const ConversationTab({super.key});
@@ -21,11 +20,14 @@ class _ConversationTabState extends State<ConversationTab> {
   int _tabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  final String? _currentUid = FirebaseAuth.instance.currentUser?.uid;
 
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    if (_currentUid != null) {
+      _loadConversations();
+    }
   }
 
   Future<void> _loadConversations() async {
@@ -36,7 +38,6 @@ class _ConversationTabState extends State<ConversationTab> {
     });
   }
 
-  // ফিল্টার লজিক
   List<Map<String, dynamic>> get _filteredConversations {
     List<Map<String, dynamic>> base;
     if (_tabIndex == 1) {
@@ -57,55 +58,42 @@ class _ConversationTabState extends State<ConversationTab> {
     }).toList();
   }
 
-  // নিজের প্রোফাইল ওপেন করা (Unified Profile Screen)
-  Future<void> _openCurrentUserProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
+  void _openUserProfile() {
+    if (_currentUid == null) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(
-          uid: uid,
-          isOwner: true,
-          showBack: true,
-        ),
-      ),
-    );
-  }
-
-  // অন্যের প্রোফাইল ওপেন করা (Unified Profile Screen)
-  void _openOtherUserProfile(Map<String, dynamic> chat) {
-    final userId = chat['userId'] ?? chat['id'];
-    if (userId == null) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(
-          uid: userId,
-          isOwner: false,
-          showBack: true,
-        ),
+        builder: (_) => UnifiedProfileScreen(uid: _currentUid!, isOwner: true, showBack: true),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    // ✅ ১. লগইন চেক
+    if (_currentUid == null) {
+      return const ProfileNotLoggedIn(title: "Messages", showBackButton: false);
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     return DefaultTabController(
       length: 3,
       initialIndex: _tabIndex,
       child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: bgColor,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).cardColor,
+          backgroundColor: cardColor,
           elevation: 0.5,
-          title: const Text("Messages", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22)),
+          title: Text("Messages", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: textColor)),
           actions: [
-            IconButton(icon: const Icon(Icons.person_outline), onPressed: _openCurrentUserProfile),
+            IconButton(
+              icon: Icon(Icons.person_outline, color: textColor),
+              onPressed: _openUserProfile,
+            ),
             const SizedBox(width: 10),
           ],
           bottom: TabBar(
@@ -113,38 +101,46 @@ class _ConversationTabState extends State<ConversationTab> {
             indicatorColor: AppColors.brandMain,
             labelColor: AppColors.brandMain,
             unselectedLabelColor: Colors.grey,
-            tabs: const [Tab(text: "All"), Tab(text: "Supporter"), Tab(text: "Earner")],
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            tabs: const [
+              Tab(text: "All"),
+              Tab(text: "Supporters"),
+              Tab(text: "Earners"),
+            ],
           ),
         ),
         body: Column(
           children: [
             // সার্চ বার
             Container(
-              padding: const EdgeInsets.all(15),
-              color: Theme.of(context).cardColor,
+              padding: const EdgeInsets.all(12),
+              color: cardColor,
               child: TextField(
                 controller: _searchController,
+                style: TextStyle(color: textColor),
                 onChanged: (v) => setState(() => _query = v),
                 decoration: InputDecoration(
                   hintText: "Search messages...",
-                  prefixIcon: const Icon(Icons.search, size: 20),
+                  hintStyle: TextStyle(color: Colors.grey.shade500),
+                  prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
                   filled: true,
-                  fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.grey[100],
+                  fillColor: isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
 
-            // চ্যাট লিস্ট (কার্ড হিসেবে)
+            // চ্যাট লিস্ট
             Expanded(
               child: _filteredConversations.isEmpty
-                  ? const Center(child: Text("No conversations found", style: TextStyle(color: Colors.grey)))
+                  ? Center(child: Text("No conversations found", style: TextStyle(color: Colors.grey.shade500)))
                   : ListView.builder(
                 itemCount: _filteredConversations.length,
+                padding: const EdgeInsets.only(top: 8),
                 itemBuilder: (context, index) {
                   final chat = _filteredConversations[index];
-                  return _buildChatItem(chat, isDark);
+                  return _buildChatItem(chat, isDark, cardColor, textColor);
                 },
               ),
             ),
@@ -154,48 +150,133 @@ class _ConversationTabState extends State<ConversationTab> {
     );
   }
 
-  Widget _buildChatItem(Map<String, dynamic> chat, bool isDark) {
-    // UniversalWorkerCard এর onTap ইভেন্ট সরাসরি কার্ডের উপর কাজ করে না যদি না চাইল্ড হিসেবে InkWell ব্যবহার করা হয়।
-    // কিন্তু UniversalWorkerCard এ onTap প্যারামিটার নেই। তাই পুরো কার্ডকে GestureDetector দিয়ে র‍্যাপ করতে হবে।
-    // অথবা UniversalWorkerCard এর 'onChatTap' বা 'onTap' যদি থাকে তবে ব্যবহার করতে হবে।
+  // ✅ ২. কাস্টম চ্যাট আইটেম (কার্ডের বদলে লিস্ট টাইল)
+  Widget _buildChatItem(Map<String, dynamic> chat, bool isDark, Color cardColor, Color textColor) {
+    final lastMsg = chat['lastMessage'] ?? 'Start chatting...';
+    final time = chat['time'] ?? '';
+    final unread = (chat['unread'] ?? 0) > 0;
 
-    // আপনার UniversalWorkerCard এ onTap প্যারামিটার না থাকলে GestureDetector ব্যবহার করুন:
-    return GestureDetector(
+    return InkWell(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
-          conversationId: chat['id'],
-          userName: chat['name'],
-          userImage: chat['image'],
-          userRole: chat['role'],
-        )));
-      },
-      child: AbsorbPointer( // বাটনগুলো কাজ করার জন্য AbsorbPointer সরাতে হতে পারে যদি কার্ডের বাটন কাজ না করে
-        absorbing: false,
-        child: UniversalWorkerCard(
-          id: chat['userId'] ?? chat['id'],
-          name: chat['name'] ?? 'User',
-          role: chat['role'] ?? 'User',
-          imageUrl: chat['image'] ?? 'https://i.pravatar.cc/150',
-          address: chat['location'] ?? 'Bangladesh',
-          rating: (chat['rating'] ?? 0.0).toStringAsFixed(1),
-          completed: (chat['completed'] ?? 0).toString(),
-          reviews: (chat['reviews'] ?? 0).toString(),
-          price: chat['price'] ?? 'Negotiable',
-          isVerifiedWorker: chat['isVerified'] == true,
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-
-          // প্রোফাইল দেখার বাটন
-          onViewProfileTap: () => _openOtherUserProfile(chat),
-
-          // চ্যাট বাটন (কার্ডের ভেতরে থাকলে)
-          onChatTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
               conversationId: chat['id'],
               userName: chat['name'],
               userImage: chat['image'],
               userRole: chat['role'],
-            )));
-          },
+            ),
+          ),
+        ).then((_) => _loadConversations()); // ফিরে আসলে রিফ্রেশ হবে
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: cardColor,
+          border: Border(bottom: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200)),
+        ),
+        child: Row(
+          children: [
+            // প্রোফাইল ছবি
+            GestureDetector(
+              onTap: () {
+                final uid = chat['userId'] ?? chat['id'];
+                if (uid != null) {
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: false, showBack: true)
+                      )
+                  );
+                }
+              },
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppColors.brandLight,
+                    backgroundImage: (chat['image'] != null && chat['image'].isNotEmpty)
+                        ? NetworkImage(chat['image'])
+                        : null,
+                    child: (chat['image'] == null || chat['image'].isEmpty)
+                        ? const Icon(Icons.person, color: AppColors.brandDark)
+                        : null,
+                  ),
+                  if (chat['isVerified'] == true)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: const Icon(Icons.verified, size: 14, color: AppColors.brandMain),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // নাম ও মেসেজ
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        chat['name'] ?? 'User',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: unread ? FontWeight.w900 : FontWeight.w600,
+                          color: textColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: unread ? AppColors.brandMain : Colors.grey,
+                          fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          lastMsg,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: unread ? textColor : Colors.grey,
+                            fontWeight: unread ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (unread)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: AppColors.brandMain,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

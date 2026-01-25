@@ -32,15 +32,9 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
   final List<XFile> _mediaFiles = [];
 
   bool _isSaving = false;
-
   bool _useCurrentLocation = true;
   String _locationName = "Detecting location...";
   LatLng? _selectedLatLng;
-
-  final bool _isRecording = false;
-  DateTime? _recordStartTime;
-  final List<String> _voiceNotes = [];
-
   double _expectedCharge = 800.0;
 
   final List<Map<String, dynamic>> _categories = const [
@@ -67,8 +61,7 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     super.dispose();
   }
 
-  // --- Location ---
-
+  // --- Location Logic (Same as before) ---
   Future<void> _initLocation() async {
     if (!_useCurrentLocation) return;
     await _determineInitialPosition();
@@ -76,62 +69,33 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
 
   Future<bool> _ensureLocationReady() async {
     if (!_useCurrentLocation && _selectedLatLng != null) return true;
-
-    final enabled = await Geolocator.isLocationServiceEnabled();
-    if (!enabled) {
-      _showSnack("Please enable Location service to use current location.", Colors.redAccent);
-      return false;
-    }
-
+    bool enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) return false;
     LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied) {
-      _showSnack("Location permission denied. Please allow location.", Colors.redAccent);
-      return false;
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      _showSnack("Location permission permanently denied. Enable from Settings.", Colors.redAccent);
-      return false;
-    }
-
-    return true;
+    if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+    return permission != LocationPermission.denied && permission != LocationPermission.deniedForever;
   }
 
   Future<void> _determineInitialPosition() async {
     try {
       final ok = await _ensureLocationReady();
       if (!ok) {
-        if (!mounted) return;
-        setState(() => _locationName = "Location not available");
+        if (mounted) setState(() => _locationName = "Location not available");
         return;
       }
-
       final p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-
-      if (!mounted) return;
-      setState(() {
+      if (mounted) setState(() {
         _selectedLatLng = LatLng(p.latitude, p.longitude);
         _locationName = "Current Location Detected";
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() => _locationName = "Location not found");
+      if (mounted) setState(() => _locationName = "Location not found");
     }
   }
 
   Future<void> _selectLocationOnMap() async {
-    final picked = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
-    );
-
-    if (!mounted) return;
-
-    if (picked != null && picked is LatLng) {
+    final picked = await Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationPickerScreen()));
+    if (mounted && picked != null && picked is LatLng) {
       setState(() {
         _selectedLatLng = picked;
         _useCurrentLocation = false;
@@ -140,178 +104,104 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     }
   }
 
+  // --- Helpers ---
   void _showSnack(String msg, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
-    );
-  }
-
-  List<String> _generateLocationKeys(String input) {
-    return input
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((s) => s.isNotEmpty)
-        .toList();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
   }
 
   bool _isVideoFile(String path) {
     final p = path.toLowerCase();
-    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v') || p.endsWith('.webm');
-  }
-
-  Future<Map<String, dynamic>> _getCurrentUserProfileMeta(String uid) async {
-    try {
-      final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = snap.data() ?? <String, dynamic>{};
-
-      final role = (data['userRole'] ?? 'finder').toString().toLowerCase().trim();
-      final gender = (data['gender'] ?? 'Any').toString();
-
-      final exp = data['experienceYears'];
-      final expInt = exp is int ? exp : int.tryParse(exp?.toString() ?? '') ?? 0;
-
-      final rating = (data['rating'] is num)
-          ? (data['rating'] as num).toDouble()
-          : double.tryParse('${data['rating']}') ?? 0.0;
-
-      final verified = data['kyc_completed'] == true;
-
-      final completed = (data['completedCount'] is num)
-          ? (data['completedCount'] as num).toInt()
-          : int.tryParse('${data['completedCount']}') ?? 0;
-
-      final trusted = completed >= 50 && rating >= 4.5;
-
-      return {
-        'userRole': (role == 'maker') ? 'maker' : 'finder',
-        'gender': gender,
-        'experience': expInt,
-        'rating': rating,
-        'verified': verified,
-        'trusted': trusted,
-      };
-    } catch (_) {
-      return {
-        'userRole': 'finder',
-        'gender': 'Any',
-        'experience': 0,
-        'rating': 0.0,
-        'verified': false,
-        'trusted': false,
-      };
-    }
+    return p.endsWith('.mp4') || p.endsWith('.mov') || p.endsWith('.m4v');
   }
 
   Future<List<String>> _uploadMedia() async {
-    if (_mediaFiles.isEmpty) return const <String>[];
-
+    if (_mediaFiles.isEmpty) return const [];
     final urls = <String>[];
     for (final f in _mediaFiles) {
       try {
         final isVideo = _isVideoFile(f.path);
-
-        final res = await CloudinaryService.uploadXFile(
-          f,
-          folder: 'findus/posts/media',
-          resourceType: isVideo ? 'video' : 'image',
-          tags: const ['post', 'earn'],
-        );
-
+        final res = await CloudinaryService.uploadXFile(f, folder: 'findus/posts/media', resourceType: isVideo ? 'video' : 'image', tags: const ['post', 'earn']);
         final url = res['secure_url']?.toString();
-        if (url != null && url.isNotEmpty) urls.add(url);
+        if (url != null) urls.add(url);
       } catch (e) {
-        debugPrint("Media upload failed: $e");
+        debugPrint("Upload failed: $e");
       }
     }
     return urls;
   }
 
+  Future<Map<String, dynamic>> _getCurrentUserProfileMeta(String uid) async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = snap.data() ?? {};
+      return {
+        'userRole': (data['userRole'] == 'maker') ? 'maker' : 'finder',
+        'gender': (data['gender'] ?? 'Any').toString(),
+        'experience': int.tryParse('${data['experienceYears']}') ?? 0,
+        'rating': double.tryParse('${data['rating']}') ?? 0.0,
+        'verified': data['kyc_completed'] == true,
+        'trusted': (int.tryParse('${data['completedCount']}') ?? 0) >= 50 && (double.tryParse('${data['rating']}') ?? 0) >= 4.5,
+      };
+    } catch (_) {
+      return {'userRole': 'finder', 'gender': 'Any', 'experience': 0, 'rating': 0.0, 'verified': false, 'trusted': false};
+    }
+  }
+
   Future<void> _handleDropPin() async {
     if (_isSaving) return;
-
-    if (AppConfigService.isPostingDisabled) {
-      _showSnack("Posting is temporarily disabled. Please try again later.", Colors.redAccent);
-      return;
-    }
-
-    final title = _serviceTypeController.text.trim();
-    if (title.isEmpty) {
-      _showSnack("Please enter job title / service type.", Colors.redAccent);
-      return;
-    }
-
-    if (_useCurrentLocation) {
-      final ok = await _ensureLocationReady();
-      if (!ok) return;
-
-      if (_selectedLatLng == null) {
-        await _determineInitialPosition();
-      }
-    }
-
-    if (_selectedLatLng == null) {
-      _showSnack("Location not available. Please pick a location on map.", Colors.redAccent);
-      return;
-    }
+    if (AppConfigService.isPostingDisabled) { _showSnack("Posting disabled", Colors.redAccent); return; }
+    if (_serviceTypeController.text.trim().isEmpty) { _showSnack("Enter title", Colors.redAccent); return; }
+    if (_selectedLatLng == null) { _showSnack("Pick location", Colors.redAccent); return; }
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showSnack("Not logged in.", Colors.redAccent);
-      return;
-    }
+    if (user == null) { _showSnack("Not logged in", Colors.redAccent); return; }
 
     setState(() => _isSaving = true);
 
     try {
       final meta = await _getCurrentUserProfileMeta(user.uid);
-      final ownerRole = (meta['userRole'] ?? 'finder').toString();
-
       final uploadedUrls = await _uploadMedia();
 
       await PostService.createPost(
         ownerId: user.uid,
-        ownerRole: ownerRole,
-        title: title,
+        ownerRole: meta['userRole'],
+        title: _serviceTypeController.text.trim(),
         description: _descController.text.trim(),
         roleLabel: _selectedCategory.toUpperCase(),
         roleKey: _selectedCategory.toLowerCase().replaceAll(' ', '_'),
         lat: _selectedLatLng!.latitude,
         lng: _selectedLatLng!.longitude,
         address: _locationName,
-        locationKeys: _generateLocationKeys(_locationName),
+        locationKeys: _locationName.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((s) => s.isNotEmpty).toList(),
         price: _expectedCharge,
         priceLabel: '৳ ${_expectedCharge.toInt()} / day',
         images: uploadedUrls,
         isLive: true,
         createdAt: FieldValue.serverTimestamp(),
-        gender: (meta['gender'] ?? 'Any').toString(),
-        experience: (meta['experience'] is int) ? meta['experience'] as int : 0,
-        rating: (meta['rating'] is num) ? (meta['rating'] as num).toDouble() : 0.0,
-        trusted: meta['trusted'] == true,
-        verified: meta['verified'] == true,
+        gender: meta['gender'],
+        experience: meta['experience'],
+        rating: meta['rating'],
+        trusted: meta['trusted'],
+        verified: meta['verified'],
         isPromoted: false,
         status: 'open',
       );
 
       await NotificationService.sendNotificationToUser(
         toUserId: user.uid,
-        title: "Your job offer has been posted",
-        body: "“$title” is now visible to nearby supporters.",
+        title: "Job posted",
+        body: "Your offer is now live.",
         type: "job_post",
-        data: {
-          'roleLabel': _selectedCategory,
-          'expectedCharge': _expectedCharge,
-          'useCurrentLocation': _useCurrentLocation,
-          'locationLabel': _locationName,
-        },
+        data: {'roleLabel': _selectedCategory},
       );
 
-      if (!mounted) return;
-      _showSnack("Pin dropped & your job offer posted successfully.", AppColors.brandMain);
-      Navigator.pop(context);
+      if (mounted) {
+        _showSnack("Posted successfully", AppColors.brandMain);
+        Navigator.pop(context);
+      }
     } catch (e) {
-      _showSnack("Failed to post: $e", Colors.redAccent);
+      _showSnack("Failed: $e", Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -320,58 +210,19 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
   void _showMediaOptions() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
       builder: (_) => Container(
-        margin: const EdgeInsets.all(20),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-        ),
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(4)),
-              margin: const EdgeInsets.only(bottom: 16),
-            ),
-            const Text("Attach Photo / Video", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
-            const SizedBox(height: 12),
+            const Text("Attach Media", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _mediaOption(
-                  icon: Icons.camera_alt,
-                  label: "Camera",
-                  onTap: () async {
-                    Navigator.pop(context);
-                    final XFile? file = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-                    if (!mounted) return;
-                    if (file != null) setState(() => _mediaFiles.add(file));
-                  },
-                ),
-                _mediaOption(
-                  icon: Icons.photo_library,
-                  label: "Gallery",
-                  onTap: () async {
-                    Navigator.pop(context);
-                    final files = await _picker.pickMultiImage(imageQuality: 80);
-                    if (!mounted) return;
-                    if (files.isNotEmpty) setState(() => _mediaFiles.addAll(files));
-                  },
-                ),
-                _mediaOption(
-                  icon: Icons.videocam,
-                  label: "Video",
-                  onTap: () async {
-                    Navigator.pop(context);
-                    final XFile? file = await _picker.pickVideo(source: ImageSource.camera);
-                    if (!mounted) return;
-                    if (file != null) setState(() => _mediaFiles.add(file));
-                  },
-                ),
+                _mediaOption(Icons.camera_alt, "Camera", () => _pickMedia(ImageSource.camera)),
+                _mediaOption(Icons.photo_library, "Gallery", () => _pickMedia(ImageSource.gallery, multi: true)),
+                _mediaOption(Icons.videocam, "Video", () => _pickMedia(ImageSource.camera, video: true)),
               ],
             ),
           ],
@@ -380,7 +231,21 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     );
   }
 
-  Widget _mediaOption({required IconData icon, required String label, required VoidCallback onTap}) {
+  Future<void> _pickMedia(ImageSource source, {bool multi = false, bool video = false}) async {
+    Navigator.pop(context);
+    if (video) {
+      final file = await _picker.pickVideo(source: source);
+      if (file != null) setState(() => _mediaFiles.add(file));
+    } else if (multi) {
+      final files = await _picker.pickMultiImage(imageQuality: 80);
+      if (files.isNotEmpty) setState(() => _mediaFiles.addAll(files));
+    } else {
+      final file = await _picker.pickImage(source: source, imageQuality: 80);
+      if (file != null) setState(() => _mediaFiles.add(file));
+    }
+  }
+
+  Widget _mediaOption(IconData icon, String label, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -395,11 +260,19 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড ভেরিয়েবলস
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final hintColor = isDark ? Colors.grey : Colors.grey.shade600;
+
     return FloatingScaffold(
-      title: "Post a Job Offer",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      title: "POST A JOB OFFER",
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
+      showBack: true,
       scrollable: true,
       bodyPadding: EdgeInsets.zero,
       actions: [
@@ -409,159 +282,155 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
             onPressed: _isSaving ? null : _handleDropPin,
             child: _isSaving
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("POST", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
+                : Text("POST", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
           ),
         ),
       ],
-      body: Container(
-        color: AppColors.brandLight,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Select Service Type", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 90,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _categories.length,
-                  itemBuilder: (context, index) => _buildCategoryItem(_categories[index]),
-                ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Select Service Type", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                itemBuilder: (context, index) => _buildCategoryItem(_categories[index], isDark),
               ),
-              const SizedBox(height: 18),
-              const Text("Job Title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              _cardField(
-                child: TextField(
-                  controller: _serviceTypeController,
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: "e.g. Full day driver, Part-time cleaner..."),
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text("Job Description", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 8),
-              _cardField(
-                child: TextField(
-                  controller: _descController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(border: InputBorder.none, hintText: "Describe your skills, experience, and what work you can do..."),
-                ),
-              ),
-              const SizedBox(height: 18),
-              _cardField(
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _useCurrentLocation,
-                      activeColor: AppColors.brandMain,
-                      onChanged: (v) async {
-                        final val = v ?? true;
-                        setState(() => _useCurrentLocation = val);
-                        if (val) await _determineInitialPosition();
-                      },
-                    ),
-                    const Expanded(child: Text("Drop pin in current location", style: TextStyle(fontSize: 12))),
-                    TextButton.icon(
-                      onPressed: _selectLocationOnMap,
-                      icon: const Icon(Icons.map, size: 18),
-                      label: const Text("Select on map"),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
+            ),
+            const SizedBox(height: 20),
+
+            Text("Job Title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            const SizedBox(height: 8),
+            _buildTextField(_serviceTypeController, "e.g. Full day driver...", isDark, cardColor, textColor, hintColor),
+
+            const SizedBox(height: 20),
+            Text("Description", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            const SizedBox(height: 8),
+            _buildTextField(_descController, "Describe your skills...", isDark, cardColor, textColor, hintColor, maxLines: 4),
+
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(12)),
+              child: Column(
                 children: [
-                  const Icon(Icons.location_on, size: 16, color: Colors.red),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text(_locationName, style: const TextStyle(fontSize: 12))),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _showMediaOptions,
-                      icon: const Icon(Icons.camera_alt, color: AppColors.brandMain),
-                      label: const Text("Add Photo / Video", style: TextStyle(color: AppColors.brandMain)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: const BorderSide(color: AppColors.brandMain),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: Colors.white,
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _useCurrentLocation,
+                        activeColor: AppColors.brandMain,
+                        onChanged: (v) async {
+                          setState(() => _useCurrentLocation = v ?? true);
+                          if (v == true) await _determineInitialPosition();
+                        },
                       ),
+                      Expanded(child: Text("Use current location", style: TextStyle(color: textColor))),
+                      TextButton.icon(
+                        onPressed: _selectLocationOnMap,
+                        icon: const Icon(Icons.map, size: 18),
+                        label: const Text("Pick on Map"),
+                      ),
+                    ],
+                  ),
+                  if (_locationName.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12, bottom: 8),
+                      child: Text(_locationName, style: TextStyle(fontSize: 12, color: hintColor)),
                     ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              _buildAttachmentsSection(),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("Expected Daily Charge", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text("৳ ${_expectedCharge.toInt()}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
-                ],
-              ),
-              Slider(
-                value: _expectedCharge,
-                min: 300,
-                max: 5000,
-                divisions: 47,
-                activeColor: AppColors.brandMain,
-                inactiveColor: Colors.white,
-                onChanged: (val) => setState(() => _expectedCharge = val),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _isSaving ? null : _handleDropPin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandMain,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  child: _isSaving
-                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
-                      : const Text("DROP PIN & POST JOB OFFER", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _showMediaOptions,
+                icon: const Icon(Icons.camera_alt, color: AppColors.brandMain),
+                label: const Text("Add Photo / Video", style: TextStyle(color: AppColors.brandMain)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: const BorderSide(color: AppColors.brandMain),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: cardColor,
                 ),
               ),
-            ],
-          ),
+            ),
+            _buildAttachmentsSection(),
+
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Expected Daily Charge", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                Text("৳ ${_expectedCharge.toInt()}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
+              ],
+            ),
+            Slider(
+              value: _expectedCharge,
+              min: 300, max: 5000, divisions: 47,
+              activeColor: AppColors.brandMain,
+              inactiveColor: isDark ? Colors.grey : Colors.grey.shade300,
+              onChanged: (val) => setState(() => _expectedCharge = val),
+            ),
+
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _handleDropPin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isSaving
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text("POST JOB OFFER", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 50),
+          ],
         ),
       ),
     );
   }
 
-  Widget _cardField({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
-      child: child,
+  Widget _buildTextField(TextEditingController controller, String hint, bool isDark, Color fillColor, Color textColor, Color hintColor, {int maxLines = 1}) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      style: TextStyle(color: textColor),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: hintColor),
+        filled: true,
+        fillColor: fillColor,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      ),
     );
   }
 
   Widget _buildAttachmentsSection() {
     if (_mediaFiles.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: 70,
+    return Container(
+      height: 80,
+      margin: const EdgeInsets.only(top: 12),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: _mediaFiles.length,
         itemBuilder: (context, index) {
-          final file = _mediaFiles[index];
           return Container(
             width: 80,
             margin: const EdgeInsets.only(right: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              image: DecorationImage(image: FileImage(File(file.path)), fit: BoxFit.cover),
+              image: DecorationImage(image: FileImage(File(_mediaFiles[index].path)), fit: BoxFit.cover),
             ),
           );
         },
@@ -569,24 +438,27 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     );
   }
 
-  Widget _buildCategoryItem(Map<String, dynamic> item) {
+  Widget _buildCategoryItem(Map<String, dynamic> item, bool isDark) {
     final bool isSelected = _selectedCategory == item['name'];
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+
     return GestureDetector(
-      onTap: () => setState(() => _selectedCategory = item['name'] as String),
+      onTap: () => setState(() => _selectedCategory = item['name']),
       child: Container(
-        width: 80,
-        margin: const EdgeInsets.only(right: 12),
+        width: 85,
+        margin: const EdgeInsets.only(right: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.brandMain.withOpacity(0.12) : Colors.white,
+          color: isSelected ? AppColors.brandMain.withOpacity(0.2) : cardColor,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.shade200, width: isSelected ? 2 : 1),
+          border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.3)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(item['icon'] as IconData, size: 30, color: isSelected ? AppColors.brandMain : Colors.grey),
-            const SizedBox(height: 8),
-            Text(item['name'].toString(), style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.brandDark : Colors.grey), textAlign: TextAlign.center),
+            Icon(item['icon'], size: 28, color: isSelected ? AppColors.brandMain : Colors.grey),
+            const SizedBox(height: 6),
+            Text(item['name'], textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.brandMain : textColor)),
           ],
         ),
       ),

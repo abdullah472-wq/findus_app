@@ -24,7 +24,6 @@ class _SaveScreenState extends State<SaveScreen> {
   }
 
   String _getUserId(Map<String, dynamic> data) {
-    // Robust ID extraction
     return (data['userId'] ?? data['id'] ?? '').toString().trim();
   }
 
@@ -42,16 +41,18 @@ class _SaveScreenState extends State<SaveScreen> {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     return FloatingScaffold(
       title: 'SAVED PROFILES',
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
       body: SavedService.savedWorkers.isEmpty
-          ? _buildEmptyState()
+          ? _buildEmptyState(isDark)
           : ListView(
         padding: const EdgeInsets.all(15),
         physics: const BouncingScrollPhysics(),
@@ -92,7 +93,7 @@ class _SaveScreenState extends State<SaveScreen> {
             isOther: true,
             isDark: isDark,
           ),
-          const SizedBox(height: 100), // Bottom padding for FAB
+          const SizedBox(height: 100),
         ],
       ),
     );
@@ -192,7 +193,7 @@ class _SaveScreenState extends State<SaveScreen> {
       followersCount: _asInt(data['followersCount']),
       margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
 
-      // ✅ কার্ডে ট্যাপ করলে প্রোফাইল ওপেন হবে (showBack: true যোগ করা হয়েছে)
+      // প্রোফাইল ওপেন লজিক
       onTap: () {
         if (workerId.isEmpty) return;
         Navigator.push(
@@ -201,13 +202,13 @@ class _SaveScreenState extends State<SaveScreen> {
             builder: (_) => UnifiedProfileScreen(
               uid: workerId,
               isOwner: false,
-              showBack: true, // ✅ এখন আর এরর আসবে না
+              showBack: true,
             ),
           ),
         );
       },
 
-      // ✅ ভিউ প্রোফাইল বাটনে ট্যাপ করলে (showBack: true যোগ করা হয়েছে)
+      // ভিউ প্রোফাইল বাটন লজিক
       onViewProfileTap: () {
         if (workerId.isEmpty) return;
         Navigator.push(
@@ -216,13 +217,13 @@ class _SaveScreenState extends State<SaveScreen> {
             builder: (_) => UnifiedProfileScreen(
               uid: workerId,
               isOwner: false,
-              showBack: true, // ✅ এখন আর এরর আসবে না
+              showBack: true,
             ),
           ),
         );
       },
 
-      // ✅ Chat Button -> Open Chat
+      // চ্যাট বাটন লজিক
       onChatTap: () async {
         if (workerId.isEmpty) return;
         _showLoading();
@@ -261,16 +262,20 @@ class _SaveScreenState extends State<SaveScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.bookmark_border_rounded, size: 80, color: Colors.grey.withOpacity(0.2)),
+          Icon(Icons.bookmark_border_rounded, size: 80, color: Colors.grey.withOpacity(0.3)),
           const SizedBox(height: 15),
           Text(
             "No saved profiles yet",
-            style: TextStyle(color: Colors.grey.withOpacity(0.5), fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: isDark ? Colors.white54 : Colors.grey,
+                fontSize: 16,
+                fontWeight: FontWeight.bold
+            ),
           ),
         ],
       ),

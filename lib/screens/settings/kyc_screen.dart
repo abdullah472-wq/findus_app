@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/services/cloudinary_service.dart'; // ← নিজের path অনুযায়ী ঠিক করো
 
 class KycUploadScreen extends StatefulWidget {
   const KycUploadScreen({super.key});
@@ -16,10 +19,26 @@ class KycUploadScreen extends StatefulWidget {
 class _KycUploadScreenState extends State<KycUploadScreen> {
   final ImagePicker _picker = ImagePicker();
 
+  final TextEditingController _fullNameController =
+  TextEditingController();
+  final TextEditingController _nidNumberController =
+  TextEditingController();
+
   File? _nidFront;
   File? _nidBack;
   File? _selfie;
+
   bool _isSubmitting = false;
+
+  // 👉 এখানে তোমার API base URL দাও (নিজের সার্ভারের ঠিকানা)
+  static const String _apiBaseUrl = 'https://your-server-domain.com';
+
+  @override
+  void dispose() {
+    _fullNameController.dispose();
+    _nidNumberController.dispose();
+    super.dispose();
+  }
 
   // ---------- Image Pick ----------
   Future<void> _pickImage(String which, ImageSource source) async {
@@ -41,12 +60,54 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
     });
   }
 
+  // ---------- Helper: Cloudinary upload ----------
+  Future<String> _uploadToCloudinary(File file, String tag) async {
+    // CloudinaryService.uploadFile(Object file, ... ) → file.path ব্যবহার করে upload
+    final res = await CloudinaryService.uploadFile(
+      file,
+      folder: 'kyc',          // চাইলে 'kyc/$uid' করবে
+      resourceType: 'image',
+      tags: [tag],
+    );
+
+    final url = res['secure_url'] ?? res['url'];
+    if (url == null || url.toString().isEmpty) {
+      throw Exception('Cloudinary URL missing');
+    }
+    return url.toString();
+  }
+
   // ---------- Submit KYC ----------
   Future<void> _submitKyc() async {
-    if (_nidFront == null || _nidBack == null || _selfie == null) {
+    final fullName = _fullNameController.text.trim();
+    final nidNumber = _nidNumberController.text.trim();
+
+    if (fullName.isEmpty || nidNumber.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please upload all required photos first."),
+          content: Text("Full name এবং NID number দিন।"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_nidFront == null || _selfie == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+          Text("কমপক্ষে NID front এবং Selfie আপলোড করতে হবে।"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please login first."),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -56,51 +117,58 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      // TODO: এখানে তোমার আসল Backend API URL দিও
-      final uri = Uri.parse('https://your-api.com/kyc/submit');
+      final uid = user.uid;
+      final idToken = await user.getIdToken(); // Firebase ID token
 
-      final request = http.MultipartRequest('POST', uri);
+      // 1) Cloudinary তে upload
+      final frontUrl =
+      await _uploadToCloudinary(_nidFront!, 'nid_front_$uid');
 
-      // TODO: ব্যাকএন্ড অনুযায়ী ফিল্ড কাস্টমাইজ করো
-      request.fields['user_id'] = '123'; // logged in user ID
-      request.fields['document_type'] = 'nid'; // nid / passport / license ইত্যাদি
+      String? backUrl;
+      if (_nidBack != null) {
+        backUrl =
+        await _uploadToCloudinary(_nidBack!, 'nid_back_$uid');
+      }
 
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'nid_front',
-          _nidFront!.path,
-        ),
+      final selfieUrl =
+      await _uploadToCloudinary(_selfie!, 'selfie_$uid');
+
+      // 2) KYC API তে JSON পাঠাও
+      final uri = Uri.parse('$_apiBaseUrl/api/kyc-submit');
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
+        body: jsonEncode({
+          'kycFullName': fullName,
+          'kycNidNumber': nidNumber,
+          'kycFrontImageUrl': frontUrl,
+          'kycBackImageUrl': backUrl ?? '',
+          'kycSelfieImageUrl': selfieUrl,
+          'documentType': 'nid',
+        }),
       );
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'nid_back',
-          _nidBack!.path,
-        ),
-      );
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'selfie',
-          _selfie!.path,
-        ),
-      );
-
-      final response = await request.send();
 
       if (!mounted) return;
 
-      if (response.statusCode == 200) {
+      if (resp.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("KYC submitted successfully. Pending review."),
+            content:
+            Text("KYC submitted successfully. Pending review."),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context); // আগের স্ক্রিনে ফিরে যাবে (VerificationScreen)
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content:
-            Text("Failed to submit KYC (${response.statusCode})."),
+            content: Text(
+              "Failed to submit KYC (${resp.statusCode}).",
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -126,25 +194,29 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
     required File? file,
     required VoidCallback onCameraTap,
     required VoidCallback onGalleryTap,
+    required bool isDark,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        // 🔁 card color এখন সাদা
-        color: Colors.white,
+        color: isDark ? Colors.white10 : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.grey.shade300,
+        ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+        CrossAxisAlignment.start,
         children: [
           Text(
             label,
@@ -158,7 +230,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
             aspectRatio: 16 / 9,
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.brandLight.withOpacity(0.4),
+                color:
+                AppColors.brandLight.withOpacity(isDark ? 0.2 : 0.4),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: file == null
@@ -185,13 +258,15 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
             children: [
               TextButton.icon(
                 onPressed: onCameraTap,
-                icon: const Icon(Icons.photo_camera_outlined),
+                icon:
+                const Icon(Icons.photo_camera_outlined),
                 label: const Text("Camera"),
               ),
               const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: onGalleryTap,
-                icon: const Icon(Icons.photo_library_outlined),
+                icon: const Icon(
+                    Icons.photo_library_outlined),
                 label: const Text("Gallery"),
               ),
             ],
@@ -204,27 +279,29 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
   // ---------- BUILD ----------
   @override
   Widget build(BuildContext context) {
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+    final bgColor =
+    isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final appBarColor =
+    isDark ? const Color(0xFF2C2C2C) : AppColors.brandLight;
+    final appBarTextColor =
+    isDark ? Colors.white : AppColors.brandDark;
+
     return Scaffold(
-      // 🔁 page background এখন AppColors.bgBlue
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
       body: Stack(
         children: [
           // Main Content
           Column(
             children: [
-              // উপরের অংশ: ফর্ম (with adjusted padding for floating AppBar)
               Expanded(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top +
-                        kToolbarHeight +
-                        20,
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                  ),
+                  padding:
+                  const EdgeInsets.fromLTRB(16, 90, 16, 16),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "Upload your NID and a selfie",
@@ -246,6 +323,48 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                       ),
                       const SizedBox(height: 16),
 
+                      // Full name
+                      TextField(
+                        controller: _fullNameController,
+                        decoration: InputDecoration(
+                          labelText: "Full name (as per NID)",
+                          labelStyle: const TextStyle(
+                            fontSize: 13,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.person_outline,
+                            color: AppColors.brandMain,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius:
+                            BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // NID number
+                      TextField(
+                        controller: _nidNumberController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: "NID Number",
+                          labelStyle: const TextStyle(
+                            fontSize: 13,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.badge_outlined,
+                            color: AppColors.brandMain,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius:
+                            BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
                       _buildPhotoBox(
                         label: "NID Front Side",
                         file: _nidFront,
@@ -253,15 +372,17 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                             _pickImage('nidFront', ImageSource.camera),
                         onGalleryTap: () =>
                             _pickImage('nidFront', ImageSource.gallery),
+                        isDark: isDark,
                       ),
 
                       _buildPhotoBox(
-                        label: "NID Back Side",
+                        label: "NID Back Side (optional)",
                         file: _nidBack,
                         onCameraTap: () =>
                             _pickImage('nidBack', ImageSource.camera),
                         onGalleryTap: () =>
                             _pickImage('nidBack', ImageSource.gallery),
+                        isDark: isDark,
                       ),
 
                       _buildPhotoBox(
@@ -271,18 +392,21 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                             _pickImage('selfie', ImageSource.camera),
                         onGalleryTap: () =>
                             _pickImage('selfie', ImageSource.gallery),
+                        isDark: isDark,
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // নিচের অংশ: Submit বাটন
+              // Bottom submit bar
               Container(
                 padding:
                 const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark
+                      ? const Color(0xFF2C2C2C)
+                      : Colors.white,
                   boxShadow: [
                     BoxShadow(
                       color:
@@ -329,84 +453,53 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
             ],
           ),
 
-          // Floating AppBar (KYC-style)
+          // Floating AppBar (upper)
           Positioned(
             top: 10,
             left: 10,
             right: 10,
-            child: Container(
-              height: kToolbarHeight +
-                  MediaQuery.of(context).padding.top,
-              decoration: BoxDecoration(
-                color: AppColors.brandLight,
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                    Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                borderRadius:
-                const BorderRadius.only(
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  topLeft: Radius.circular(20),
+            child: SafeArea(
+              top: true,
+              bottom: false,
+              child: Container(
+                height: kToolbarHeight,
+                decoration: BoxDecoration(
+                  color: appBarColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                      Colors.black.withOpacity(0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: MediaQuery.of(context)
-                        .padding
-                        .top,
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding:
-                      const EdgeInsets.symmetric(
-                          horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          // Back Button
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: AppColors.brandDark,
-                              size: 20,
-                            ),
-                            onPressed: () =>
-                                Navigator.pop(context),
-                          ),
-
-                          // Title
-                          const Expanded(
-                            child: Align(
-                              alignment:
-                              Alignment.centerLeft,
-                              child: Padding(
-                                padding:
-                                EdgeInsets.only(
-                                    left: 8.0),
-                                child: Text(
-                                  "KYC Verification",
-                                  style: TextStyle(
-                                    color: AppColors
-                                        .brandDark,
-                                    fontWeight:
-                                    FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        Icons.arrow_back_ios_new,
+                        color: appBarTextColor,
+                        size: 20,
+                      ),
+                      onPressed: () =>
+                          Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        "KYC VERIFICATION",
+                        style: TextStyle(
+                          color: appBarTextColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          letterSpacing: 1.0,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

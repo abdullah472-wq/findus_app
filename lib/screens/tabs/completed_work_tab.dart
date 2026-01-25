@@ -70,11 +70,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
           if (snapshot.hasError) {
             final err = snapshot.error.toString();
             final isIndex = err.contains('FAILED_PRECONDITION') || err.contains('index');
-            return ListView(
-              children: [
-                _buildErrorState(isIndex ? "Index Building... Please wait 5 mins." : "Error: $err"),
-              ],
-            );
+            return Center(child: Text(isIndex ? "Index required (check console)" : "Error: $err"));
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -143,7 +139,13 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             color: Theme.of(context).cardColor,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
           ),
           child: Column(
             children: [
@@ -162,7 +164,24 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                 followersCount: _asInt(job['followersCount']),
                 margin: EdgeInsets.zero,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                onTap: () => _openProfile(otherUserId),
+
+                // ✅ প্রোফাইল ওপেন লজিক
+                onTap: () {
+                  if (otherUserId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UnifiedProfileScreen(
+                          uid: otherUserId,
+                          isOwner: false,
+                          showBack: true,
+                        ),
+                      ),
+                    );
+                  }
+                },
+
+                // ✅ চ্যাট ওপেন লজিক
                 onChatTap: () => _connectAgain(context, otherUserId, name, role, imageUrl),
               ),
 
@@ -205,21 +224,9 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     );
   }
 
-  void _openProfile(String uid) {
-    if (uid.isEmpty) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(
-          uid: uid,
-          isOwner: false,
-          showBack: true, // ✅ এই লাইনটি যোগ করুন
-        ),
-      ),
-    );
-  }
-
   Future<void> _connectAgain(BuildContext context, String otherId, String name, String role, String img) async {
+    if (otherId.isEmpty) return; // ✅ সেফটি চেক
+
     HapticFeedback.lightImpact();
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
@@ -242,7 +249,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
 
   Future<void> _showReviewDialog(BuildContext context, {required String jobId, required String targetId, required String targetName}) async {
     final myUid = _auth.currentUser?.uid;
-    if (myUid == null) return;
+    if (myUid == null || targetId.isEmpty) return; // ✅ সেফটি চেক
 
     final controller = TextEditingController();
     double rating = 5.0;
@@ -284,13 +291,13 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     if (confirm == true) {
       try {
         await _db.collection('reviews').add({
-          'fromUserId': myUid,        // ✅ Schema match
-          'targetUserId': targetId,   // ✅ Schema match
+          'fromUserId': myUid,
+          'targetUserId': targetId,
           'jobId': jobId,
           'rating': rating,
           'comment': controller.text.trim(),
           'createdAt': FieldValue.serverTimestamp(),
-          'isAnonymous': "false",
+          'isAnonymous': false, // ✅ স্ট্রিং 'false' নয়, বুলিয়ান
         });
         if (context.mounted) _showToast(context, "Review submitted!");
       } catch (e) {
@@ -299,7 +306,6 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     }
   }
 
-  // --- UI Static Helpers ---
   Widget _buildEmptyState() {
     return Center(
       child: Column(

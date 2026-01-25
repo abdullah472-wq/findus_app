@@ -51,12 +51,8 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
 
   Future<void> _saveThemeIndexToUserDoc(int index) async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid == null) {
-      throw Exception('Not logged in');
-    }
-    if (currentUid != widget.userId) {
-      throw Exception('Unauthorized');
-    }
+    if (currentUid == null) throw Exception('Not logged in');
+    if (currentUid != widget.userId) throw Exception('Unauthorized');
 
     await FirebaseFirestore.instance.collection('users').doc(widget.userId).set({
       'cardThemeIndex': index,
@@ -70,9 +66,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
       return;
     }
 
-    setState(() {
-      _selectedIndex = index;
-    });
+    setState(() => _selectedIndex = index);
 
     try {
       await _saveThemeIndexToUserDoc(index);
@@ -89,10 +83,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Theme change failed: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.redAccent),
         );
       }
     }
@@ -102,18 +93,12 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
             Icon(Icons.workspace_premium, color: Colors.amber, size: 30),
             SizedBox(width: 10),
-            Text(
-              'Upgrade to Premium',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.amber,
-              ),
-            ),
+            Text('Upgrade to Pro', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         content: Column(
@@ -122,18 +107,15 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
           children: [
             const Text('Premium Features:', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            _buildFeatureItem('Custom Card Themes (কার্ড থিম)'),
+            _buildFeatureItem('Custom Card Themes'),
             _buildFeatureItem('Advanced Theme Settings'),
             _buildFeatureItem('Dark Mode Control'),
-            _buildFeatureItem('Font Size Adjustment'),
-            const SizedBox(height: 15),
-            const Text('Unlock all premium features!', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Later'),
+            child: const Text('Later', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -144,10 +126,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                 MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.white),
             child: const Text('Upgrade Now'),
           ),
         ],
@@ -168,9 +147,10 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
     );
   }
 
-  Widget _buildColorCircle(int index, bool isSelected, bool canSelect) {
+  Widget _buildColorCircle(int index, bool isSelected, bool canSelect, bool isDark) {
     final colors = _gradients[index];
     final isLocked = !canSelect;
+    final textColor = isDark ? Colors.white70 : Colors.black87;
 
     return GestureDetector(
       onTap: () => _onSelect(index),
@@ -190,7 +170,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                   ),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected ? Colors.black : Colors.grey.shade300,
+                    color: isSelected ? (isDark ? Colors.white : Colors.black) : Colors.grey.shade300,
                     width: isSelected ? 3 : 1,
                   ),
                   boxShadow: [
@@ -220,11 +200,11 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                     width: 24,
                     height: 24,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: isDark ? Colors.white : Colors.black,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: isDark ? Colors.black : Colors.white, width: 2),
                     ),
-                    child: const Icon(Icons.check, size: 14, color: Colors.white),
+                    child: Icon(Icons.check, size: 14, color: isDark ? Colors.black : Colors.white),
                   ),
                 ),
             ],
@@ -234,7 +214,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
             _gradientNames[index],
             style: TextStyle(
               fontSize: 12,
-              color: isLocked ? Colors.grey : Colors.black,
+              color: isLocked ? Colors.grey : textColor,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -247,7 +227,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
-                'বর্তমান',
+                'Current',
                 style: TextStyle(
                   fontSize: 9,
                   color: AppColors.brandMain,
@@ -262,32 +242,41 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bool canSelectColors = !widget.isfree;
+    // ✅ ডার্ক মোড ভেরিয়েবলস
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.white; // শিটের ব্যাকগ্রাউন্ড
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade50;
+    final borderColor = isDark ? Colors.grey.shade800 : Colors.grey.shade200;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
       minChildSize: 0.4,
       maxChildSize: 0.7,
+      expand: false,
       builder: (context, scrollController) {
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(25),
               topRight: Radius.circular(25),
             ),
           ),
           child: Column(
             children: [
+              // হ্যান্ডেল বার
               Container(
                 margin: const EdgeInsets.only(top: 10),
                 width: 40,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: Colors.grey[400],
+                  color: isDark ? Colors.grey[700] : Colors.grey[400],
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
+
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -300,9 +289,9 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        "কার্ড থিম",
+                        "Card Theme",
                         style: TextStyle(
-                          color: widget.isfree ? Colors.grey : Colors.black87,
+                          color: widget.isfree ? Colors.grey : textColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
                         ),
@@ -319,14 +308,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                           children: [
                             Icon(Icons.lock, size: 12, color: Colors.white),
                             SizedBox(width: 4),
-                            Text(
-                              "PRO",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            Text("PRO", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
@@ -341,13 +323,14 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Text(
-                          'প্রোফাইল কার্ডের থিম সিলেক্ট করুন',
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                        Text(
+                          'Select your profile card theme',
+                          style: TextStyle(color: subTextColor, fontSize: 14),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 20),
 
+                        // Preview Section
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -361,26 +344,19 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.preview, color: Colors.white, size: 30),
+                              const Icon(Icons.preview, color: Colors.black54, size: 30),
                               const SizedBox(width: 15),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'বর্তমান থিম',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
+                                      'Current Theme',
+                                      style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
                                     Text(
                                       _gradientNames[_selectedIndex],
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.9),
-                                        fontSize: 12,
-                                      ),
+                                      style: const TextStyle(color: Colors.black54, fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -388,16 +364,12 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withOpacity(0.5),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Text(
-                                  'প্রিভিউ',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  'Preview',
+                                  style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ],
@@ -406,6 +378,7 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
 
                         const SizedBox(height: 25),
 
+                        // Grid of Themes
                         GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -413,47 +386,39 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                             crossAxisCount: 4,
                             crossAxisSpacing: 20,
                             mainAxisSpacing: 20,
-                            childAspectRatio: 1.0,
+                            childAspectRatio: 0.8, // Adjusted specifically for layout
                           ),
                           itemCount: _gradients.length,
                           itemBuilder: (context, index) {
-                            final isLocked = widget.isfree;
                             return _buildColorCircle(
                               index,
                               index == _selectedIndex,
-                              !isLocked,
+                              !widget.isfree,
+                              isDark,
                             );
                           },
                         ),
 
                         const SizedBox(height: 20),
 
+                        // More Settings Button
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
+                            color: cardColor,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade200),
+                            border: Border.all(color: borderColor),
                           ),
                           child: ListTile(
                             onTap: () {
                               Navigator.pop(context);
                               Navigator.push(
                                 context,
-                                PageRouteBuilder(
-                                  pageBuilder: (context, animation, secondaryAnimation) =>
-                                      ThemeSettingsScreen(
-                                        workerKey: widget.userId,
-                                        isfree: widget.isfree,
-                                        subscriptionType: widget.subscriptionType,
-                                      ),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                    const begin = Offset(1.0, 0.0);
-                                    const end = Offset.zero;
-                                    const curve = Curves.ease;
-                                    var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                                    var offsetAnimation = animation.drive(tween);
-                                    return SlideTransition(position: offsetAnimation, child: child);
-                                  },
+                                MaterialPageRoute(
+                                  builder: (_) => ThemeSettingsScreen(
+                                    workerKey: widget.userId,
+                                    isfree: widget.isfree,
+                                    subscriptionType: widget.subscriptionType,
+                                  ),
                                 ),
                               );
                             },
@@ -465,15 +430,15 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                               ),
                               child: const Icon(Icons.settings, color: AppColors.brandMain, size: 20),
                             ),
-                            title: const Text(
-                              'ফুল থিম সেটিংস',
-                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            title: Text(
+                              'Full Theme Settings',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textColor),
                             ),
-                            subtitle: const Text(
-                              'ডার্ক মোড, ফন্ট সাইজ এবং আরও সেটিংস',
-                              style: TextStyle(fontSize: 11),
+                            subtitle: Text(
+                              'Dark mode, fonts & more',
+                              style: TextStyle(fontSize: 11, color: subTextColor),
                             ),
-                            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade400),
+                            trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
                           ),
                         ),
 

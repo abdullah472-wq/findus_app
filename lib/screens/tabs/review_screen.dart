@@ -9,7 +9,7 @@ import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class ReviewScreen extends StatefulWidget {
-  final String workerId;     // যার উপর review দিচ্ছো (targetUserId)
+  final String workerId;
   final String postId;
   final String workerName;
   final String role;
@@ -61,26 +61,22 @@ class _ReviewScreenState extends State<ReviewScreen> {
     HapticFeedback.mediumImpact();
 
     try {
-      // ১. কমেন্টের সাথে ট্যাগগুলো যুক্ত করা
       final baseComment = _commentController.text.trim();
       String fullComment = baseComment;
       if (_selectedTags.isNotEmpty) {
         fullComment += "\n\nFeedback: ${_selectedTags.join(', ')}";
       }
 
-      // ২. Firestore এ রিভিউ সেভ (ReviewService অনুযায়ী ফিক্সড)
       await ReviewService.addReview(
         targetUserId: widget.workerId,
-        // ❌ 'fromUserId' রিমুভ করা হয়েছে (এটি সার্ভিস ক্লাসে অটোমেটিক হ্যান্ডেল হয়)
         postId: widget.postId,
         rating: _rating,
         comment: fullComment,
         targetRole: 'worker',
         fromRole: 'supporter',
-        isAnonymous: false, // ✅ কোটেশন ছাড়া শুধু false (Boolean type)
+        isAnonymous: false,
       );
 
-      // ৩. নোটিফিকেশন পাঠানো
       final myUid = FirebaseAuth.instance.currentUser?.uid;
       await NotificationService.sendNotification(
         toUserId: widget.workerId,
@@ -106,13 +102,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final hintColor = isDark ? Colors.grey : Colors.grey.shade600;
 
     return FloatingScaffold(
       title: "SUBMIT REVIEW",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       bodyPadding: EdgeInsets.zero,
       body: Column(
@@ -123,15 +124,15 @@ class _ReviewScreenState extends State<ReviewScreen> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  _buildHeader(isDark),
+                  _buildHeader(isDark, cardColor, textColor),
                   const SizedBox(height: 25),
-                  _buildStarPicker(isDark),
+                  _buildStarPicker(isDark, cardColor, textColor),
                   const SizedBox(height: 25),
-                  _buildTagSelection(isDark),
+                  _buildTagSelection(isDark, textColor),
                   const SizedBox(height: 25),
-                  _buildCommentInput(isDark),
+                  _buildCommentInput(isDark, cardColor, textColor, hintColor),
                   const SizedBox(height: 20),
-                  _buildHireAgainSwitch(isDark),
+                  _buildHireAgainSwitch(isDark, cardColor, textColor),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -143,11 +144,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  Widget _buildHeader(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
       ),
@@ -163,7 +164,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.workerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(widget.workerName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
                 Text(widget.role.toUpperCase(), style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -173,16 +174,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildStarPicker(bool isDark) {
+  Widget _buildStarPicker(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         children: [
-          Text(_ratingLabel, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(_ratingLabel, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
           const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -202,11 +203,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildTagSelection(bool isDark) {
+  Widget _buildTagSelection(bool isDark, Color textColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Quick Feedback", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text("Quick Feedback", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 10, runSpacing: 10,
@@ -220,7 +221,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 setState(() => v ? _selectedTags.add(tag) : _selectedTags.remove(tag));
               },
               selectedColor: AppColors.brandMain,
-              labelStyle: TextStyle(color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87), fontSize: 12),
+              backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+              labelStyle: TextStyle(color: isSelected ? Colors.white : textColor, fontSize: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             );
           }).toList(),
@@ -229,19 +231,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildCommentInput(bool isDark) {
+  Widget _buildCommentInput(bool isDark, Color cardColor, Color textColor, Color hintColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Write a Comment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text("Write a Comment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
         const SizedBox(height: 10),
         TextField(
           controller: _commentController,
           maxLines: 4,
+          style: TextStyle(color: textColor),
           decoration: InputDecoration(
             hintText: "Tell others about your experience...",
+            hintStyle: TextStyle(color: hintColor),
             filled: true,
-            fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+            fillColor: cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
           ),
         ),
@@ -249,17 +253,19 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _buildHireAgainSwitch(bool isDark) {
+  Widget _buildHireAgainSwitch(bool isDark, Color cardColor, Color textColor) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(20),
       ),
       child: SwitchListTile(
         value: _wouldHireAgain,
         onChanged: (v) => setState(() => _wouldHireAgain = v),
-        title: const Text("Would hire again?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        title: Text("Would hire again?", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
         activeThumbColor: AppColors.brandMain,
+        inactiveThumbColor: isDark ? Colors.grey : Colors.white,
+        inactiveTrackColor: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
       ),
     );
   }
