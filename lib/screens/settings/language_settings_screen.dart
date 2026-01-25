@@ -184,10 +184,10 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
         value: code,
         groupValue: _selectedCode,
         activeColor: AppColors.brandMain,
-        fillColor: MaterialStateProperty.resolveWith(
+        fillColor: WidgetStateProperty.resolveWith(
               (states) {
             if (!isActive) return Colors.grey.withOpacity(0.3); // ডিজেবল লুক
-            return states.contains(MaterialState.selected)
+            return states.contains(WidgetState.selected)
                 ? AppColors.brandMain
                 : (isDark ? Colors.grey : Colors.black54);
           },

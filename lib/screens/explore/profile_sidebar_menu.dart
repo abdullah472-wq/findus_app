@@ -23,7 +23,6 @@ import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/screens/settings/language_settings_screen.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/auth/log_in_chacker_screen.dart';
-// ✅ Dashboard Screen ইম্পোর্ট
 import 'package:findus_app/screens/dashboard/dashboard_screen.dart';
 
 class ProfileSideBar extends StatefulWidget {
@@ -113,7 +112,6 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
               children: [
                 _buildMenuSection("ACCOUNT"),
                 _buildSettingsGroup([
-                  // ১. My Profile (লগইন চেক আছে)
                   _buildSettingsTile(
                     Icons.person_outline_rounded,
                     "My Profile",
@@ -124,8 +122,6 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                     ),
                     Colors.blueAccent,
                   ),
-
-                  // ✅ ড্যাশবোর্ড বাটন (লগইন চেক আছে)
                   if (isLoggedIn)
                     _buildSettingsTile(
                       Icons.dashboard_rounded,
@@ -140,17 +136,15 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                       },
                       Colors.teal,
                     ),
-
-                  // ✅ Subscription (লগইন চেক বাদ দেওয়া হয়েছে)
                   _buildSettingsTile(
                     Icons.workspace_premium_rounded,
                     "Subscription",
                     "Manage your plan",
                         () {
-                      Navigator.pop(context); // ড্রয়ার বন্ধ
+                      Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const SubscriptionScreen()), // সরাসরি নেভিগেশন
+                        MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
                       );
                     },
                     Colors.amber,
@@ -224,15 +218,11 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
               ],
             ),
           ),
-
-          if (isLoggedIn) _buildRoleSwitchCard(isDark),
-          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  // --- হেল্পার মেথডগুলো অপরিবর্তিত ---
   Widget _buildHeader(bool isDark, bool isLoggedIn) {
     return ValueListenableBuilder<BadgeProgress>(
       valueListenable: BadgeService.badgeNotifier,
@@ -282,6 +272,27 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                       ],
                     ),
                   ),
+
+                  // ✅ Switch Role Button (হেডারের ডান পাশে)
+                  if (isLoggedIn)
+                    GestureDetector(
+                      onTap: _switchRoleLogic,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandMain.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.brandMain.withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.sync_alt_rounded, size: 14, color: AppColors.brandMain),
+                            SizedBox(width: 4),
+                            Text("Switch", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.brandMain)),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
               if (isLoggedIn) ...[
@@ -317,6 +328,7 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
     );
   }
 
+  // --- Helper Methods ---
   Widget _buildMenuSection(String title) {
     return Padding(padding: const EdgeInsets.only(left: 8, top: 15, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.2)));
   }
@@ -333,13 +345,11 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
     return ValueListenableBuilder<ThemeSettings>(valueListenable: ThemeService.themeSettings, builder: (context, settings, _) { final dark = settings.isDarkMode; return SwitchListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 16), secondary: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: (dark ? Colors.amber : Colors.blueGrey).withOpacity(0.1), shape: BoxShape.circle), child: Icon(dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, color: dark ? Colors.amber : Colors.blueGrey, size: 20)), title: const Text("Dark Mode", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), subtitle: const Text("Switch app theme", style: TextStyle(fontSize: 10, color: Colors.grey)), value: dark, activeColor: AppColors.brandMain, onChanged: (val) { ThemeService.updateThemeSetting(isDarkMode: val); }, dense: true); });
   }
 
-  Widget _buildRoleSwitchCard(bool isDark) {
-    return Container(margin: const EdgeInsets.symmetric(horizontal: 16), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))], border: Border.all(color: AppColors.brandMain.withOpacity(0.1))), child: Column(children: [Row(children: [Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.brandMain.withOpacity(0.1), shape: BoxShape.circle), child: const Icon(Icons.sync_alt_rounded, color: AppColors.brandMain, size: 20)), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_userRole == 'finder' ? "Worker Mode" : "Supporter Mode", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), const Text("Switch to other profile", style: TextStyle(fontSize: 10, color: Colors.grey))])), ElevatedButton(onPressed: _switchRoleLogic, style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), elevation: 0, minimumSize: Size.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text("SWITCH", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))])]));
-  }
-
   Widget _getPlanBadge() { if (_subscriptionPlan == 'pro') return _chipBadge("PRO", Colors.amber); if (_subscriptionPlan == 'business') return _chipBadge("BIZ", Colors.blue); return const SizedBox(); }
   Widget _chipBadge(String text, Color color) { return Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.5), width: 1)), child: Text(text, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold))); }
+
   void _showLogoutDialog() { showDialog(context: context, builder: (ctx) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), title: const Text("Sign Out?"), content: const Text("Are you sure you want to sign out?"), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.grey))), TextButton(onPressed: () { Navigator.pop(ctx); _handleLogout(); }, child: const Text("LOGOUT", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)))])); }
   Future<void> _handleLogout() async { await FirebaseAuth.instance.signOut(); final prefs = await SharedPreferences.getInstance(); await prefs.clear(); if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); }
+
   Future<void> _switchRoleLogic() async { HapticFeedback.mediumImpact(); final prefs = await SharedPreferences.getInstance(); String currentRole = _userRole ?? 'finder'; String targetRole = (currentRole == 'finder') ? 'maker' : 'finder'; bool hasTargetAccount = (targetRole == 'finder') ? (prefs.getBool('has_worker_account') ?? false) : (prefs.getBool('has_supporter_account') ?? false); if (hasTargetAccount) { await prefs.setString('user_role', targetRole); setState(() => _userRole = targetRole); Navigator.pop(context); } else { showDialog(context: context, builder: (ctx) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), title: Text("Create ${targetRole == 'finder' ? 'Worker' : 'Supporter'} Profile?"), content: const Text("You don't have this profile yet. Create one now to switch modes."), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("LATER")), ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen())); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white), child: const Text("CREATE"))])); } }
 }

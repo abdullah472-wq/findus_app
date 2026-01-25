@@ -210,7 +210,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     decoration: BoxDecoration(
                         color: rankColor,
                         shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)]
                     ),
                     child: Text("$rank", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),

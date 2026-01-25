@@ -84,10 +84,12 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         return;
       }
       final p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _selectedLatLng = LatLng(p.latitude, p.longitude);
         _locationName = "Current Location Detected";
       });
+      }
     } catch (_) {
       if (mounted) setState(() => _locationName = "Location not found");
     }

@@ -6,14 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/screens/settings/activation_screen.dart'; // ✅ সাকসেস হলে এখানে পাঠাবে
+import 'package:findus_app/screens/settings/activation_screen.dart';
 
-enum PaymentPurpose {
-  subscription,
-  profileBoost,
-  workerPayment,
-  supporterPayment,
-}
+enum PaymentPurpose { subscription, profileBoost, workerPayment, supporterPayment }
 
 class ManualPaymentScreen extends StatefulWidget {
   final String planId;
@@ -41,11 +36,10 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
   String _selectedMethod = 'bKash';
   bool _isSubmitting = false;
 
-  // ✅ আপনার পার্সোনাল নম্বরগুলো এখানে দিন
   final Map<String, String> _adminNumbers = {
-    'bKash': '017XXXXXXXX',
-    'Nagad': '018XXXXXXXX',
-    'Rocket': '019XXXXXXXX',
+    'bKash': '01581818368',
+    'Nagad': '01312200043',
+    'Rocket': '01312200043',
   };
 
   Future<void> _submitRequest() async {
@@ -63,7 +57,6 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
 
-      // ১. Firestore-এ রিকোয়েস্ট সেভ করা
       await FirebaseFirestore.instance.collection('payment_requests').add({
         'uid': uid,
         'planId': widget.planId,
@@ -77,7 +70,6 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ২. ইউজারের স্ট্যাটাস 'pending' করে রাখা (যাতে এক্টিভেশন স্ক্রিন লিসেন করতে পারে)
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'subStatus': 'pending',
         'lastPaymentMethod': _selectedMethod,
@@ -85,7 +77,6 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
       });
 
       if (mounted) {
-        // ৩. সাকসেস হলে এক্টিভেশন স্ক্রিনে পাঠানো
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -110,26 +101,35 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final hintColor = isDark ? Colors.grey : Colors.grey.shade600;
 
     return FloatingScaffold(
       title: "PAYMENT INFO",
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
+      bodyPadding: EdgeInsets.zero,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSummaryBox(isDark),
+            _buildSummaryBox(isDark, cardColor, textColor),
             const SizedBox(height: 25),
-            _buildInstructionBox(),
+            _buildInstructionBox(isDark),
             const SizedBox(height: 25),
-            const Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold)),
+            Text("Select Payment Method", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
             const SizedBox(height: 10),
-            _buildMethodSelector(isDark),
+            _buildMethodSelector(isDark, cardColor, textColor),
             const SizedBox(height: 25),
-            _buildInputFields(isDark),
+            _buildInputFields(isDark, cardColor, textColor, hintColor),
             const SizedBox(height: 30),
             _buildSubmitButton(),
             const SizedBox(height: 50),
@@ -139,11 +139,11 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
     );
   }
 
-  Widget _buildSummaryBox(bool isDark) {
+  Widget _buildSummaryBox(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
@@ -153,7 +153,7 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.planId.replaceAll('_', ' '), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(widget.planId.replaceAll('_', ' '), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
               Text(widget.description, style: const TextStyle(color: Colors.grey, fontSize: 11)),
             ],
           ),
@@ -163,10 +163,14 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
     );
   }
 
-  Widget _buildInstructionBox() {
+  Widget _buildInstructionBox(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.amber.withOpacity(0.1), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.amber.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.amber.withOpacity(0.1) : Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+      ),
       child: Column(
         children: [
           const Row(
@@ -177,13 +181,16 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          Text("নিচের যেকোনো একটি নম্বরে ৳${widget.amount} সেন্ডমানি (Send Money) করে ট্রানজ্যাকশন আইডি ও আপনার নম্বরটি দিন।", style: const TextStyle(fontSize: 12, height: 1.5)),
+          Text(
+            "Send Money ৳${widget.amount} to the number below, then enter your number & TrxID.",
+            style: TextStyle(fontSize: 12, height: 1.5, color: isDark ? Colors.white70 : Colors.black87),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMethodSelector(bool isDark) {
+  Widget _buildMethodSelector(bool isDark, Color cardColor, Color textColor) {
     return Column(
       children: _adminNumbers.keys.map((method) {
         bool isSelected = _selectedMethod == method;
@@ -193,7 +200,7 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.brandMain.withOpacity(0.1) : (isDark ? Colors.white10 : Colors.white),
+              color: isSelected ? AppColors.brandMain.withOpacity(0.1) : cardColor,
               borderRadius: BorderRadius.circular(15),
               border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.1)),
             ),
@@ -201,7 +208,7 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
               children: [
                 Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_off, color: isSelected ? AppColors.brandMain : Colors.grey),
                 const SizedBox(width: 15),
-                Text(method, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(method, style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                 const Spacer(),
                 Text(_adminNumbers[method]!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 IconButton(
@@ -219,28 +226,34 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
     );
   }
 
-  Widget _buildInputFields(bool isDark) {
+  Widget _buildInputFields(bool isDark, Color cardColor, Color textColor, Color hintColor) {
     return Column(
       children: [
         TextField(
           controller: _senderController,
           keyboardType: TextInputType.phone,
+          style: TextStyle(color: textColor),
           decoration: InputDecoration(
             labelText: "Sender $_selectedMethod Number",
             hintText: "01XXXXXXXXX",
+            labelStyle: TextStyle(color: hintColor),
+            hintStyle: TextStyle(color: hintColor),
             filled: true,
-            fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
+            fillColor: cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
           ),
         ),
         const SizedBox(height: 15),
         TextField(
           controller: _trxIdController,
+          style: TextStyle(color: textColor),
           decoration: InputDecoration(
             labelText: "Transaction ID (TrxID)",
             hintText: "8N7X6W5V...",
+            labelStyle: TextStyle(color: hintColor),
+            hintStyle: TextStyle(color: hintColor),
             filled: true,
-            fillColor: isDark ? Colors.white10 : Colors.grey.shade50,
+            fillColor: cardColor,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
           ),
         ),
@@ -254,10 +267,14 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
       height: 56,
       child: ElevatedButton(
         onPressed: _isSubmitting ? null : _submitRequest,
-        style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.brandDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          elevation: 2,
+        ),
         child: _isSubmitting
-            ? const CircularProgressIndicator(color: Colors.white)
-            : const Text("SUBMIT PAYMENT INFO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Text("SUBMIT PAYMENT INFO", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       ),
     );
   }

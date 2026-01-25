@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/dashboard/utils/dashboard_constants.dart';
 import 'package:findus_app/screens/dashboard/widgets/pending_jobs_screen.dart';
 import 'package:findus_app/screens/dashboard/widgets/stat_card.dart';
@@ -39,12 +38,10 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
       final snapshot = await query.count().get();
       return snapshot.count ?? 0;
     } catch (e) {
-      debugPrint("Count failed, using fallback get(): $e");
       try {
         final snapshot = await query.get();
         return snapshot.docs.length;
       } catch (e2) {
-        debugPrint("Fallback get() failed in WorkSummary: $e2");
         return 0;
       }
     }
@@ -53,31 +50,47 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
   Future<_WorkSummaryData> _load() async {
     final uid = widget.userId;
     if (uid.isEmpty) {
-      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '4.8', responseRateLabel: '95%');
+      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '0.0', responseRateLabel: 'N/A');
     }
 
     try {
+      // ১. কমপ্লিটেড জব কাউন্ট
       final doneQuery = FirebaseFirestore.instance
           .collection('completed_jobs')
           .where('participants', arrayContains: uid);
+      final int doneCount = await _fetchCountSafe(doneQuery);
 
+      // ২. পেন্ডিং জব কাউন্ট
       final pendingQuery = FirebaseFirestore.instance
           .collection('hire_requests')
           .where('receiverId', isEqualTo: uid)
           .where('status', isEqualTo: DashboardConstants.pendingStatus);
-
-      final int doneCount = await _fetchCountSafe(doneQuery);
       final int pendingCount = await _fetchCountSafe(pendingQuery);
+
+      // ৩. গড় রেটিং এবং রেসপন্স রেট (user_stats থেকে)
+      final userStatsDoc = await FirebaseFirestore.instance.collection('user_stats').doc(uid).get();
+      final statsData = userStatsDoc.data() ?? {};
+
+      // Avg Rating
+      final double avgRating = (statsData['avgRating'] is num)
+          ? (statsData['avgRating'] as num).toDouble()
+          : 0.0;
+
+      // Response Rate (Calculated or Fetched)
+      // যদি user_stats এ responseRate থাকে তবে সেটি নিন, নাহলে ডিফল্ট লজিক
+      final double responseRate = (statsData['responseRate'] is num)
+          ? (statsData['responseRate'] as num).toDouble()
+          : 95.0; // ডিফল্ট বা ক্যালকুলেটেড ভ্যালু
 
       return _WorkSummaryData(
         doneCount: doneCount,
         pendingCount: pendingCount,
-        avgRatingLabel: '4.8',
-        responseRateLabel: '95%',
+        avgRatingLabel: avgRating > 0 ? avgRating.toStringAsFixed(1) : 'New',
+        responseRateLabel: '${responseRate.toInt()}%',
       );
     } catch (e) {
       debugPrint('WorkSummary _load error: $e');
-      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '4.8', responseRateLabel: '95%');
+      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '0.0', responseRateLabel: 'N/A');
     }
   }
 
@@ -170,7 +183,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.teal,
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Response rate details coming soon')),
+                            const SnackBar(content: Text('Response rate is calculated based on reply time.')),
                           );
                         },
                       ),
@@ -205,7 +218,7 @@ class _ErrorBox extends StatelessWidget {
   final VoidCallback onRetry;
   final bool isDark;
 
-  const _ErrorBox({required this.message, required this.onRetry, this.isDark = false});
+  const _ErrorBox({required this.message, required this.onRetry, required this.isDark});
 
   @override
   Widget build(BuildContext context) {

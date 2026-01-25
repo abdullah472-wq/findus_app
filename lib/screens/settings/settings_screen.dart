@@ -58,27 +58,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final titleColor = isDark ? Colors.white : AppColors.brandDark;
 
     return FloatingScaffold(
       title: "SETTINGS",
-      // ✅ ব্যাকগ্রাউন্ড কালার পরিবর্তন করা হয়েছে
-      backgroundColor: AppColors.bgBlue,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: titleColor,
+      iconColor: titleColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- ১. অ্যাকাউন্ট ও সিকিউরিটি ---
           _buildSectionHeader("ACCOUNT & SECURITY"),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.verified_user_rounded, "Verification", "Identity & badges", () => _push(const VerificationScreen()), Colors.blueAccent),
             _buildSettingsTile(Icons.block_flipped, "Block List", "Manage blocked users", () => _push(const _BlockListScreen()), Colors.redAccent),
           ], isDark),
 
-          // --- ২. সাবস্ক্রিপশন ও প্রমোশন ---
           _buildSectionHeader("GROW & PROMOTE"),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.workspace_premium_rounded, "Subscription Plans", "Upgrade to Pro/Business", () => _push(const SubscriptionScreen()), Colors.amber),
@@ -86,7 +85,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingsTile(Icons.analytics_rounded, "Analytics", "View your performance", () => _push(const AnalyticsScreen()), Colors.purpleAccent),
           ], isDark),
 
-          // --- ৩. জেনারেল সেটিংস ---
           _buildSectionHeader("PREFERENCES"),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.notifications_active_rounded, "Notifications", "Control alerts & sounds", () => _push(const NotificationControlPage()), Colors.orange),
@@ -100,7 +98,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingsTile(Icons.translate_rounded, "Language", "App display language", () => _push(const LanguageSettingsScreen()), Colors.indigoAccent),
           ], isDark),
 
-          // --- ৪. সাপোর্ট ও লিগ্যাল (✅ এখানে সব আইকন রঙিন করা হয়েছে) ---
           _buildSectionHeader("SUPPORT & LEGAL"),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.headset_mic_rounded, "Help Center", "Get support from experts", () => _push(const HelpCenterScreen()), Colors.pinkAccent),
@@ -111,16 +108,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ], isDark),
 
           const SizedBox(height: 30),
-
-          // --- ৫. ডেঞ্জার জোন ---
           _buildDangerZone(isDark),
           const SizedBox(height: 100),
         ],
       ),
     );
   }
-
-  // --- UI Helpers ---
 
   Widget _buildSectionHeader(String title) {
     return Padding(
@@ -134,14 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(22),
-        // ✅ হালকা শ্যাডো দেওয়া হয়েছে যাতে ব্যাকগ্রাউন্ডের সাথে মিশে না যায়
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 15,
-              offset: const Offset(0, 5)
-          )
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(children: tiles),
     );
@@ -149,19 +135,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSettingsTile(IconData icon, String title, String sub, VoidCallback onTap, Color color) {
     return ListTile(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      // ✅ এখানে আইকনের ব্যাকগ্রাউন্ড কালার এবং মেইন কালার সেট হচ্ছে
-      leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.1), // হালকা ব্যাকগ্রাউন্ড
-              shape: BoxShape.circle
-          ),
-          child: Icon(icon, color: color, size: 22)
-      ),
+      onTap: () { HapticFeedback.lightImpact(); onTap(); },
+      leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 22)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.grey)),
       trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
@@ -172,14 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      secondary: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle
-          ),
-          child: Icon(icon, color: color, size: 22)
-      ),
+      secondary: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 22)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
       subtitle: Text(sub, style: const TextStyle(fontSize: 11, color: Colors.grey)),
       activeThumbColor: AppColors.brandMain,
@@ -220,9 +188,15 @@ class _BlockListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final titleColor = isDark ? Colors.white : AppColors.brandDark;
+
     return FloatingScaffold(
       title: "BLOCKED USERS",
-      backgroundColor: AppColors.bgBlue, // এখানেও ব্যাকগ্রাউন্ড চেঞ্জ করা হলো
+      backgroundColor: bgColor,
+      titleColor: titleColor,
+      iconColor: titleColor,
       showBack: true,
       body: FutureBuilder<List<Map<String, String>>>(
         future: BlockedUserService().getBlockedUsers(),
@@ -243,7 +217,7 @@ class _BlockListScreen extends StatelessWidget {
   }
 }
 
-// --- ফিক্সড ডিলিট অ্যাকাউন্ট স্ক্রিন ---
+// --- ✅ ফিক্সড ডিলিট অ্যাকাউন্ট স্ক্রিন (Dialog Fix) ---
 class _DeleteAccountScreen extends StatefulWidget {
   const _DeleteAccountScreen();
 
@@ -258,6 +232,7 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
     // ১. কনফার্মেশন ডায়ালগ
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false, // বাইরে ট্যাপ করলে বন্ধ হবে না
       builder: (ctx) => AlertDialog(
         title: const Text("Final Confirmation"),
         content: const Text(
@@ -265,11 +240,11 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text("CANCEL"),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             child: const Text("DELETE NOW", style: TextStyle(color: Colors.white)),
           ),
@@ -285,7 +260,7 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // ২. ফায়ারস্টোর থেকে ইউজারের ডাটা ডিলিট (অপশনাল, যদি চান)
+      // ২. ফায়ারস্টোর থেকে ইউজারের ডাটা ডিলিট
       await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
 
       // ৩. অথেন্টিকেশন থেকে ডিলিট
@@ -305,12 +280,10 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
       );
 
     } on FirebaseAuthException catch (e) {
-      // সেনসিটিভ অপারেশন: অনেক সময় ইউজারকে রি-লগইন করতে বলতে হয়
       if (e.code == 'requires-recent-login') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Please login again to delete your account.")),
         );
-        // রি-লগইন করার জন্য পাঠানো যেতে পারে
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error: ${e.message}")),
@@ -327,9 +300,15 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final titleColor = isDark ? Colors.white : AppColors.brandDark;
+
     return FloatingScaffold(
       title: "DELETE ACCOUNT",
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
+      titleColor: titleColor,
+      iconColor: titleColor,
       showBack: true,
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -337,15 +316,15 @@ class _DeleteAccountScreenState extends State<_DeleteAccountScreen> {
           children: [
             const Icon(Icons.warning_amber_rounded, size: 80, color: Colors.redAccent),
             const SizedBox(height: 20),
-            const Text(
+            Text(
                 "Are you sure?",
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: titleColor)
             ),
             const SizedBox(height: 10),
-            const Text(
+            Text(
               "Deleting your account is permanent. All your history, badges, and points will be lost forever.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14),
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.grey, fontSize: 14),
             ),
             const Spacer(),
 

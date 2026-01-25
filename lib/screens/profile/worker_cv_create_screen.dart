@@ -27,9 +27,15 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
   @override
   void dispose() {
     _summaryController.dispose();
-    for (var c in _experienceControllers) c.dispose();
-    for (var c in _educationControllers) c.dispose();
-    for (var c in _skillControllers) c.dispose();
+    for (var c in _experienceControllers) {
+      c.dispose();
+    }
+    for (var c in _educationControllers) {
+      c.dispose();
+    }
+    for (var c in _skillControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 

@@ -372,7 +372,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(
-                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey, borderRadius: const BorderRadius.all(Radius.circular(10)))),
+                  child: Container(width: 40, height: 4, decoration: const BoxDecoration(color: Colors.grey, borderRadius: BorderRadius.all(Radius.circular(10)))),
                 ),
                 const SizedBox(height: 20),
                 const Text("Add Emergency Contact", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.redAccent)),
@@ -401,7 +401,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                   title: Text("Request Public Directory", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
                   subtitle: const Text("Admin approval required", style: TextStyle(fontSize: 12, color: Colors.grey)),
                   value: requestPublic,
-                  activeColor: Colors.redAccent,
+                  activeThumbColor: Colors.redAccent,
                   onChanged: (val) => setModalState(() => requestPublic = val),
                 ),
 

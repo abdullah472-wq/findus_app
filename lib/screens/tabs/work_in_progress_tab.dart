@@ -70,7 +70,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
               ),
             );
           }
-          return Center(child: Text("Something went wrong"));
+          return const Center(child: Text("Something went wrong"));
         }
 
         if (!snapshot.hasData) {

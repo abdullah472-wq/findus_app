@@ -49,7 +49,7 @@ class PerformanceCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.insights_rounded, color: AppColors.brandMain, size: 20),
+                  const Icon(Icons.insights_rounded, color: AppColors.brandMain, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     "Profile Performance",

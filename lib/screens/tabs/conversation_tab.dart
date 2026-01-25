@@ -63,7 +63,7 @@ class _ConversationTabState extends State<ConversationTab> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(uid: _currentUid!, isOwner: true, showBack: true),
+        builder: (_) => UnifiedProfileScreen(uid: _currentUid, isOwner: true, showBack: true),
       ),
     );
   }

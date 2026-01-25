@@ -221,7 +221,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
             radius: 30,
             backgroundColor: AppColors.brandLight,
             backgroundImage: hasImg ? NetworkImage(worker.image) : null,
-            child: hasImg ? null : Icon(Icons.person, color: AppColors.brandDark),
+            child: hasImg ? null : const Icon(Icons.person, color: AppColors.brandDark),
           ),
           const SizedBox(width: 12),
           Expanded(

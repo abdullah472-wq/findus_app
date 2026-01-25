@@ -1,11 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -61,8 +58,8 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
   bool _isUploadingImage = false;
   bool _isSaving = false;
   bool _isLoading = true;
-  bool _isUploadingCv = false;
-  bool _isUploadingPortfolio = false;
+  final bool _isUploadingCv = false;
+  final bool _isUploadingPortfolio = false;
   String? _cvUrl;
   List<String> _portfolioUrls = [];
   TimeOfDay? _workStartTime;
@@ -475,7 +472,7 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
               SwitchListTile(
                 title: Text("Work All Over Bangladesh", style: TextStyle(color: textColor)),
                 value: _allOverBangladesh,
-                activeColor: AppColors.brandMain,
+                activeThumbColor: AppColors.brandMain,
                 onChanged: (v) => setState(() => _allOverBangladesh = v),
               ),
               if (!_allOverBangladesh)

@@ -166,7 +166,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         bool isSpinning = false,
       }) {
     final bool isActive = _selectedTopIndex == index;
-    final activeColor = AppColors.brandMain;
+    const activeColor = AppColors.brandMain;
     final inactiveColor = isDark ? Colors.grey.shade500 : Colors.grey.shade600;
 
     Widget iconWidget = Icon(

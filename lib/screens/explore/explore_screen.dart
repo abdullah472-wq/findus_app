@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -31,8 +30,7 @@ import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
 import 'package:findus_app/screens/profile/earn_post_screen.dart';
 import 'package:findus_app/screens/profile/support_post_screen.dart';
 import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
-import 'package:findus_app/screens/explore//notifications_page.dart'; // ✅ Correct Import
-import '../auth/log_in_chacker_screen.dart';
+import 'package:findus_app/screens/explore/notifications_page.dart'; // ✅ Correct Import
 import '../auth/login_screen.dart';
 import '../emergency_screen.dart';
 import 'profile_sidebar_menu.dart';
@@ -447,7 +445,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     if (t.isEmpty) return false;
     if (t.contains(',')) return true;
     const cities = ['dhaka','chattogram','chittagong','sylhet','rajshahi','khulna','barishal','barisal','mymensingh','rangpur','gazipur','narayanganj','cumilla','comilla','bogura','bogra','tangail','narsingdi','brahmanbaria','feni','noakhali','kishoreganj','habiganj','moulvibazar','sunamganj','gopalganj','madaripur','manikganj','narail'];
-    for (final c in cities) if (t.contains(c)) return true;
+    for (final c in cities) {
+      if (t.contains(c)) return true;
+    }
     return false;
   }
 

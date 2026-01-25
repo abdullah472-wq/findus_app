@@ -10,7 +10,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/badge/badge_theme.dart';
 import 'package:findus_app/constants/status_theme.dart';
 import 'package:findus_app/badge/badge_service.dart' hide BadgeLevel;
 import 'package:findus_app/badge/badge_model.dart';
@@ -243,6 +242,16 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
+  // ✅ Mini Badge Helper (Updated Icon)
+  Widget _miniBadge(BadgeLevel level, int points) {
+    final unlocked = points >= _getThreshold(level);
+    return Icon(
+      Icons.workspace_premium, // 🔥 আইকন পরিবর্তন করা হয়েছে
+      size: 20, // সাইজ একটু বাড়িয়ে দেওয়া হয়েছে যাতে ক্লিয়ার দেখা যায়
+      color: unlocked ? _getLevelColor(level) : Colors.grey.withOpacity(0.3),
+    );
+  }
+
   // 🔥 Next Level Progress Bar
   Widget _buildNextMilestone(BadgeProgress progress, bool isDark) {
     final nextLevel = BadgeService.getLevelByPoints(progress.totalPoints + 1);
@@ -370,10 +379,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   // --- Small Helpers ---
-  Widget _miniBadge(BadgeLevel level, int points) {
-    final unlocked = points >= _getThreshold(level);
-    return Icon(Icons.shield, size: 14, color: unlocked ? _getLevelColor(level) : Colors.grey.withOpacity(0.3));
-  }
 
   Widget _statusIcon(IconData icon, bool active, Color color) {
     return Icon(icon, size: 18, color: active ? color : Colors.grey.withOpacity(0.3));

@@ -8,7 +8,6 @@ import 'package:findus_app/screens/dashboard/widgets/work_summary_section.dart';
 import 'package:findus_app/screens/dashboard/widgets/posted_pins_list.dart';
 
 // Screens
-import 'package:findus_app/screens/explore/notifications_page.dart';
 import 'package:findus_app/screens/ad_center/analytics_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -74,15 +73,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             right: 16,
             child: Column(
               children: [
-                // ১. নোটিফিকেশন বাটন
-                _buildFloatingButton(
-                  icon: Icons.notifications_none_rounded,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
-                  isDark: isDark,
-                  hasBadge: true, // লাল ডট দেখাবে
-                ),
-                const SizedBox(height: 12),
-
                 // ২. অ্যানালিটিক্স বাটন
                 _buildFloatingButton(
                   icon: Icons.analytics_outlined,
@@ -91,21 +81,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   hasBadge: false,
                 ),
               ],
-            ),
-          ),
-
-          // ✅ ফ্লোটিং টাইটেল (উপরে বাম কোণায়)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 20,
-            left: 20,
-            child: Text(
-              "DASHBOARD",
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: textColor,
-                letterSpacing: 1.2,
-              ),
             ),
           ),
         ],

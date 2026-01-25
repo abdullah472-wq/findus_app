@@ -142,7 +142,7 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               child: SwitchListTile(
                 value: _includeContact,
-                activeColor: AppColors.brandMain,
+                activeThumbColor: AppColors.brandMain,
                 title: const Text(
                   "Include Contact Details",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),

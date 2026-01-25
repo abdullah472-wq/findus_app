@@ -140,7 +140,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             inputOptions: InputOptions(
               inputTextStyle: TextStyle(color: textColor),
-              cursorStyle: CursorStyle(color: AppColors.brandMain),
+              cursorStyle: const CursorStyle(color: AppColors.brandMain),
               inputDecoration: InputDecoration(
                 hintText: "Type a message...",
                 hintStyle: TextStyle(color: Colors.grey.shade500),

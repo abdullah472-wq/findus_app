@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:findus_app/constants/app_colors.dart'; // AppColors ইমপোর্ট
+// AppColors ইমপোর্ট
 import 'unified_profile_state.dart';
 
 class UnifiedProfileScreen extends StatefulWidget {

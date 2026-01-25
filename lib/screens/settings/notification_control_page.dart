@@ -139,7 +139,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
               ),
               value: _allEnabled,
               onChanged: _updateAll,
-              activeColor: AppColors.brandMain,
+              activeThumbColor: AppColors.brandMain,
               secondary: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -265,7 +265,7 @@ class _NotificationControlPageState extends State<NotificationControlPage> {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      activeColor: AppColors.brandMain,
+      activeThumbColor: AppColors.brandMain,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       secondary: Container(
         padding: const EdgeInsets.all(8),

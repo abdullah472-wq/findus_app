@@ -353,7 +353,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
     return Container(
       // ✅ উপরের স্পেস কমানো হয়েছে (8px)
-      margin: EdgeInsets.only(top: 8, left: 16, right: 16),
+      margin: const EdgeInsets.only(top: 8, left: 16, right: 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(colors: [adjustedColors[0], adjustedColors[1]], begin: Alignment.topCenter, end: Alignment.bottomCenter),
         borderRadius: BorderRadius.circular(16),
@@ -411,7 +411,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       decoration: BoxDecoration(
         color: isDark ? Colors.white10 : Colors.white.withOpacity(0.7),
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: IconButton(
         icon: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black),
@@ -429,7 +429,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       decoration: BoxDecoration(
         color: isDark ? Colors.white10 : Colors.white.withOpacity(0.7),
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: PopupMenuButton<ProfileMenuOwner>(
         onSelected: _handleOwnerMenu,
@@ -448,7 +448,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       decoration: BoxDecoration(
         color: isDark ? Colors.white10 : Colors.white.withOpacity(0.7),
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: PopupMenuButton<ProfileMenuOther>(
         onSelected: (value) {
@@ -633,7 +633,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   bool _isWorkerRole() { final role = (userData['userRole'] ?? 'finder').toString().toLowerCase(); return role == 'finder'; }
   String _getSafeString(dynamic value, {String defaultValue = 'N/A'}) { if (value == null) return defaultValue; if (value is String && value.isEmpty) return defaultValue; return value.toString(); }
   Future<void> _launchUrl(String url) async { try { if (await canLaunchUrl(Uri.parse(url))) { await launchUrl(Uri.parse(url)); } } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot open link'))); } }
-  List<PopupMenuEntry<ProfileMenuOwner>> _buildOwnerMenuItems(String subscriptionType) { final bool isFreeUser = subscriptionType == 'free'; Widget _menuRow(IconData icon, String text, Color color, {bool showLock = false}) { return Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))), if (showLock) const Icon(Icons.lock_outline, size: 16, color: Colors.grey)]); } return [PopupMenuItem(value: ProfileMenuOwner.edit, child: _menuRow(Icons.edit_rounded, 'Edit Profile', Colors.blue)), PopupMenuItem(value: ProfileMenuOwner.shareProfile, child: _menuRow(Icons.share_rounded, 'Share Profile', Colors.green)), PopupMenuItem(value: ProfileMenuOwner.previewPublicCard, child: _menuRow(Icons.visibility_rounded, 'Preview Card', Colors.purple)), const PopupMenuDivider(), PopupMenuItem(value: ProfileMenuOwner.lockAccount, child: _menuRow(Icons.privacy_tip_rounded, 'Lock Account', Colors.redAccent, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.theme, child: _menuRow(Icons.palette_rounded, 'Theme', Colors.orange, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.hideProfile, child: _menuRow(Icons.visibility_off_rounded, 'Hide Profile', Colors.grey, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.pauseWork, child: _menuRow(Icons.pause_circle_filled_rounded, 'Pause Work', Colors.amber.shade800, showLock: isFreeUser))]; }
+  List<PopupMenuEntry<ProfileMenuOwner>> _buildOwnerMenuItems(String subscriptionType) { final bool isFreeUser = subscriptionType == 'free'; Widget menuRow(IconData icon, String text, Color color, {bool showLock = false}) { return Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))), if (showLock) const Icon(Icons.lock_outline, size: 16, color: Colors.grey)]); } return [PopupMenuItem(value: ProfileMenuOwner.edit, child: menuRow(Icons.edit_rounded, 'Edit Profile', Colors.blue)), PopupMenuItem(value: ProfileMenuOwner.shareProfile, child: menuRow(Icons.share_rounded, 'Share Profile', Colors.green)), PopupMenuItem(value: ProfileMenuOwner.previewPublicCard, child: menuRow(Icons.visibility_rounded, 'Preview Card', Colors.purple)), const PopupMenuDivider(), PopupMenuItem(value: ProfileMenuOwner.lockAccount, child: menuRow(Icons.privacy_tip_rounded, 'Lock Account', Colors.redAccent, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.theme, child: menuRow(Icons.palette_rounded, 'Theme', Colors.orange, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.hideProfile, child: menuRow(Icons.visibility_off_rounded, 'Hide Profile', Colors.grey, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.pauseWork, child: menuRow(Icons.pause_circle_filled_rounded, 'Pause Work', Colors.amber.shade800, showLock: isFreeUser))]; }
   void _handleOwnerMenu(ProfileMenuOwner value) { final subscriptionType = userData['subscription_type']?.toString() ?? 'free'; final bool isFreeUser = subscriptionType == 'free'; switch (value) { case ProfileMenuOwner.edit: Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileEditScreen(uid: widget.uid))); break; case ProfileMenuOwner.shareProfile: _shareProfile(); break; case ProfileMenuOwner.previewPublicCard: _showPublicCardPreviewBottomSheet(); break; case ProfileMenuOwner.lockAccount: case ProfileMenuOwner.hideProfile: case ProfileMenuOwner.pauseWork: if (isFreeUser) { _showUpgradeToPremiumPopup(); } else { _handlePremiumFeature(value); } break; case ProfileMenuOwner.theme: _showCardThemeBottomSheet(); break; } }
   void _handlePremiumFeature(ProfileMenuOwner value) async { if (value == ProfileMenuOwner.lockAccount) { _setAccountLocked(!(userData['accountLocked'] ?? false)); } else if (value == ProfileMenuOwner.hideProfile) { _setProfileHidden(!(userData['profileHidden'] ?? false)); } else if (value == ProfileMenuOwner.pauseWork) { _setWorkPaused(!(userData['workPaused'] ?? false)); } }
   Future<void> _shareProfile() async { final userName = _getSafeString(userData['name'], defaultValue: 'FindUs User'); final profileLink = 'https://findus.app/profile/${widget.uid}'; await Share.share('Check out $userName on FindUs!\n$profileLink'); }
@@ -647,13 +647,147 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   String _formatNumber(int num) { if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(1)}M'; if (num >= 1000) return '${(num / 1000).toStringAsFixed(1)}K'; return num.toString(); }
   bool get _isBusinessUser { return (userData['subscription_type'] ?? 'free') == 'business'; }
   Widget _buildShimmerLoading() { return Shimmer.fromColors(baseColor: Colors.grey[300]!, highlightColor: Colors.grey[100]!, child: ListView(shrinkWrap: true, children: [Container(height: 200, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white)])); }
-  void _showPublicCardPreviewBottomSheet() { showModalBottomSheet(context: context, isScrollControlled: true, builder: (ctx) => SizedBox(height: MediaQuery.of(context).size.height * 0.8, child: Center(child: UniversalWorkerCard(id: widget.uid, name: _getSafeString(userData['name']), role: _isWorkerRole() ? "Worker" : "Supporter", imageUrl: userData['image'], address: _getSafeString(userData['location']), rating: "0", completed: "0", reviews: "0")))); }
+  // ✅ Fix for UnifiedProfileState.dart
+
+  void _showPublicCardPreviewBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent, // ট্রান্সপারেন্ট যাতে কার্ড সুন্দর দেখায়
+      builder: (ctx) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: UniversalWorkerCard(
+            id: widget.uid,
+            // ✅ Safe String Conversion
+            name: (userData['name'] ?? 'User').toString(),
+            role: _isWorkerRole() ? "Worker" : "Supporter",
+            imageUrl: (userData['image'] ?? '').toString(),
+            address: (userData['location'] ?? 'Location not set').toString(),
+            rating: (userData['rating'] ?? 0).toString(),
+            completed: "0",
+            reviews: "0",
+            price: "Negotiable", // ডিফল্ট ভ্যালু
+          ),
+        ),
+      ),
+    );
+  }
   Widget _buildDynamicBottomSection(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [if (widget.isOwner) _buildOwnerSuggestions(isWorker, isDark) else _buildVisitorContent(isWorker, isDark)]); }
   Widget _buildOwnerSuggestions(bool isWorker, bool isDark) { final target = isWorker ? 'supporter' : 'worker'; return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('Suggested for You', isDark), _buildSuggestionStream(target, 'Sponsored', Colors.amber, isDark), const SizedBox(height: 20), _buildSuggestionStream(target, 'Nearby', Colors.blue, isDark)]); }
   Widget _buildVisitorContent(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('User Posts', isDark), _buildOwnerPostsStream(isDark), const SizedBox(height: 20), _sectionTitle(isWorker ? 'Similar Workers' : 'Similar Supporters', isDark), _buildSimilarStream(isWorker, isDark)]); }
   Widget _buildOwnerPostsStream(bool isDark) { return StreamBuilder<QuerySnapshot>(stream: FirebaseFirestore.instance.collection('posts').where('ownerId', isEqualTo: widget.uid).limit(3).snapshots(), builder: (context, snap) { if (!snap.hasData || snap.data!.docs.isEmpty) return SizedBox(height: 100, child: Center(child: Text('No posts found', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)))); final docs = snap.data!.docs; return SizedBox(height: 250, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: docs.length, shrinkWrap: true, physics: const ClampingScrollPhysics(), itemBuilder: (context, index) { final d = docs[index]; return Container(width: 200, margin: const EdgeInsets.symmetric(horizontal: 8), child: UniversalWorkerCard(id: d.id, name: d['title'] ?? 'No Title', role: d['roleLabel'] ?? 'Worker', imageUrl: userData['image'], address: d['address'] ?? 'Not set', rating: "0", completed: "0", reviews: "0", price: d['priceLabel'] ?? 'Negotiable')); })); }); }
-  Widget _buildSimilarStream(bool isWorker, bool isDark) { return StreamBuilder<QuerySnapshot>(stream: FirebaseFirestore.instance.collection('users').where('userRole', isEqualTo: isWorker ? 'finder' : 'maker').where('kyc_completed', isEqualTo: true).limit(2).snapshots(), builder: (context, snap) { if (!snap.hasData || snap.data!.docs.isEmpty) return SizedBox(height: 100, child: Center(child: Text('No users found', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)))); final docs = snap.data!.docs.where((d) => d.id != widget.uid).toList(); if (docs.isEmpty) return const SizedBox.shrink(); return SizedBox(height: 200, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: docs.length, itemBuilder: (context, index) { final d = docs[index]; return Container(width: 200, margin: const EdgeInsets.symmetric(horizontal: 8), child: UniversalWorkerCard(id: d.id, name: d['name'] ?? 'User', role: d['userRole'] ?? 'worker', imageUrl: d['image'], address: d['location'] ?? 'Location not set', rating: (d['rating'] ?? 0).toString(), completed: "0", reviews: "0")); })); }); }
-  Widget _buildSuggestionStream(String role, String tag, Color col, bool isDark) { return StreamBuilder<QuerySnapshot>(stream: FirebaseFirestore.instance.collection('users').where('userRole', isEqualTo: role == 'worker' ? 'finder' : 'maker').limit(1).snapshots(), builder: (context, snap) { if (!snap.hasData || snap.data!.docs.isEmpty) return SizedBox(height: 100, child: Center(child: Text('No suggestions', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)))); final d = snap.data!.docs.first; return SizedBox(height: 200, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: const EdgeInsets.only(left: 16, bottom: 8), child: Text(tag, style: TextStyle(fontSize: 10, color: col, fontWeight: FontWeight.bold))), Expanded(child: UniversalWorkerCard(id: d.id, name: d['name'] ?? 'User', role: d['userRole'] ?? role, imageUrl: d['image'], address: d['location'] ?? 'Location not set', rating: (d['rating'] ?? 0).toString(), completed: "0", reviews: "0"))])); }); }
+  // --- Updated Suggestion Methods ---
+
+  Widget _buildSimilarStream(bool isWorker, bool isDark) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('userRole', isEqualTo: isWorker ? 'finder' : 'maker')
+          .where('kyc_completed', isEqualTo: true)
+          .limit(2)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) {
+          return SizedBox(
+              height: 100,
+              child: Center(
+                  child: Text(
+                      'No similar profiles found',
+                      style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)
+                  )
+              )
+          );
+        }
+
+        final docs = snap.data!.docs.where((d) => d.id != widget.uid).toList();
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        return SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final d = docs[index].data() as Map<String, dynamic>; // ✅ Cast to Map
+
+              return Container(
+                width: 200,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                child: UniversalWorkerCard(
+                  id: docs[index].id,
+                  // ✅ Null Safety Added
+                  name: (d['name'] ?? 'User').toString(),
+                  role: (d['userRole'] ?? 'worker').toString(),
+                  imageUrl: (d['image'] ?? '').toString(),
+                  address: (d['location'] ?? 'Location not set').toString(),
+                  rating: (d['rating'] ?? 0).toString(),
+                  completed: "0",
+                  reviews: "0",
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSuggestionStream(String role, String tag, Color col, bool isDark) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('userRole', isEqualTo: role == 'worker' ? 'finder' : 'maker')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) {
+          return SizedBox(
+              height: 100,
+              child: Center(
+                  child: Text(
+                      'No suggestions available',
+                      style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)
+                  )
+              )
+          );
+        }
+
+        final doc = snap.data!.docs.first;
+        final d = doc.data() as Map<String, dynamic>; // ✅ Cast to Map
+
+        return SizedBox(
+          height: 200,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 8),
+                child: Text(
+                    tag,
+                    style: TextStyle(fontSize: 10, color: col, fontWeight: FontWeight.bold)
+                ),
+              ),
+              Expanded(
+                child: UniversalWorkerCard(
+                  id: doc.id,
+                  // ✅ Null Safety Added
+                  name: (d['name'] ?? 'User').toString(),
+                  role: (d['userRole'] ?? role).toString(),
+                  imageUrl: (d['image'] ?? '').toString(),
+                  address: (d['location'] ?? 'Location not set').toString(),
+                  rating: (d['rating'] ?? 0).toString(),
+                  completed: "0",
+                  reviews: "0",
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
   Widget _sectionTitle(String title, bool isDark) { return Padding(padding: const EdgeInsets.only(left: 16, top: 25, right: 16, bottom: 10), child: Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.3, color: isDark ? Colors.white70 : Colors.black87))); }
 }
 

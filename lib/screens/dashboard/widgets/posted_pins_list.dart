@@ -176,9 +176,9 @@ class PostedPinsList extends StatelessWidget {
   }
 
   Widget _buildPinIcon(Map<String, dynamic> data) {
-    return CircleAvatar(
+    return const CircleAvatar(
       backgroundColor: AppColors.brandLight,
-      child: const Icon(Icons.push_pin, color: AppColors.brandDark),
+      child: Icon(Icons.push_pin, color: AppColors.brandDark),
     );
   }
 

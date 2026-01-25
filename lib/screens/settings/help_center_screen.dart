@@ -10,13 +10,14 @@ class HelpCenterScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
 
     return FloatingScaffold(
-      title: 'Help Center',
-      backgroundColor: isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue,
+      title: 'HELP CENTER',
+      backgroundColor: bgColor,
       titleColor: textColor,
       iconColor: textColor,
       showBack: true,
@@ -50,7 +51,7 @@ class HelpCenterScreen extends StatelessWidget {
           // Chat with Support
           _buildHelpTile(
             context,
-            icon: Icons.chat,
+            icon: Icons.chat_bubble_outline_rounded,
             title: "Chat with Support",
             subtitle: "Get help from our team",
             iconColor: AppColors.brandMain,
@@ -91,8 +92,7 @@ class HelpCenterScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -102,11 +102,19 @@ class HelpCenterScreen extends StatelessWidget {
         ],
       ),
       child: ListTile(
-        leading: Icon(icon, color: iconColor ?? textColor),
-        title: Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: (iconColor ?? textColor).withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: iconColor ?? textColor, size: 22),
+        ),
+        title: Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15)),
         subtitle: Text(subtitle, style: TextStyle(color: subTextColor, fontSize: 12)),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: subTextColor),
+        trailing: Icon(Icons.arrow_forward_ios_rounded, size: 16, color: subTextColor),
         onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );
   }
@@ -179,11 +187,12 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                   },
                 ),
               ),
+              // Input Area
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   color: cardColor,
-                  border: Border(top: BorderSide(color: Colors.grey.withOpacity(0.1))),
+                  border: Border(top: BorderSide(color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.1))),
                 ),
                 child: Row(
                   children: [
@@ -191,27 +200,28 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.black54 : Colors.grey.shade50,
+                          color: isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(25),
-                          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                          border: Border.all(color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.2)),
                         ),
                         child: TextField(
                           controller: _msgController,
                           style: TextStyle(color: textColor),
                           decoration: InputDecoration(
                             hintText: "Type your message...",
-                            hintStyle: TextStyle(color: Colors.grey.shade500),
+                            hintStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey.shade500),
                             border: InputBorder.none,
                           ),
                           onSubmitted: (_) => _sendMessage(),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     CircleAvatar(
                       backgroundColor: AppColors.brandMain,
+                      radius: 22,
                       child: IconButton(
-                        icon: const Icon(Icons.send, size: 20, color: Colors.white),
+                        icon: const Icon(Icons.send_rounded, size: 20, color: Colors.white),
                         onPressed: _sendMessage,
                       ),
                     ),
@@ -221,7 +231,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
             ],
           ),
           _FloatingTopBar(
-            title: "FINDUS Support",
+            title: "Support Chat",
             onBack: () => Navigator.pop(context),
             isDark: isDark,
           ),
@@ -247,13 +257,16 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isMe ? AppColors.brandMain : (isDark ? const Color(0xFF2C2C2C) : Colors.white),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isMe ? 18 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 18),
-                ),
+                  color: isMe ? AppColors.brandMain : (isDark ? const Color(0xFF2C2C2C) : Colors.white),
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isMe ? 18 : 4),
+                    bottomRight: Radius.circular(isMe ? 4 : 18),
+                  ),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))
+                  ]
               ),
               child: Text(
                 text,
@@ -304,9 +317,9 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
               children: [
                 _buildInfoCard(isDark),
                 const SizedBox(height: 25),
-                _buildTextField("Subject", Icons.subject, _subjectController, isDark),
+                _buildTextField("Subject", Icons.subject, _subjectController, isDark, cardColor, textColor),
                 const SizedBox(height: 20),
-                _buildTextField("Message", Icons.message, _messageController, isDark, maxLines: 8),
+                _buildTextField("Message", Icons.message, _messageController, isDark, cardColor, textColor, maxLines: 8),
               ],
             ),
           ),
@@ -365,17 +378,17 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
     );
   }
 
-  Widget _buildTextField(String label, IconData icon, TextEditingController ctrl, bool isDark, {int maxLines = 1}) {
+  Widget _buildTextField(String label, IconData icon, TextEditingController ctrl, bool isDark, Color cardColor, Color textColor, {int maxLines = 1}) {
     return TextFormField(
       controller: ctrl,
       maxLines: maxLines,
-      style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+      style: TextStyle(color: textColor),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: isDark ? Colors.grey : Colors.grey.shade700),
         prefixIcon: Icon(icon, color: AppColors.brandMain),
         filled: true,
-        fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        fillColor: cardColor,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       ),
       validator: (val) => (val == null || val.isEmpty) ? "Required" : null,
@@ -401,7 +414,7 @@ class _FloatingTopBar extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2C2C2C) : AppColors.brandLight,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))],
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
         ),
         child: Padding(
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, left: 8),

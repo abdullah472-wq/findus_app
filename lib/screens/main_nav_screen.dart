@@ -156,7 +156,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    final activeColor = AppColors.brandMain;
+    const activeColor = AppColors.brandMain;
 
     return Expanded(
       child: InkWell(
@@ -176,7 +176,7 @@ class _NavItem extends StatelessWidget {
               margin: const EdgeInsets.only(top: 4),
               height: 4,
               width: isSelected ? 4 : 0,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: activeColor,
                 shape: BoxShape.circle,
               ),
