@@ -99,7 +99,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF4F6FA);
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
 
     return Scaffold(
       backgroundColor: bgColor,

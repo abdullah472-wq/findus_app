@@ -22,7 +22,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Widget build(BuildContext context) {
     // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF4F6FA);
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     return Scaffold(
