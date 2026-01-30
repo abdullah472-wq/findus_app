@@ -6,6 +6,8 @@ import 'package:findus_app/screens/dashboard/widgets/stat_card.dart';
 import 'package:findus_app/screens/rating_history_screen.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 
+import '../../home_feed_screen.dart';
+
 class WorkSummarySection extends StatefulWidget {
   final String userId;
   const WorkSummarySection({super.key, required this.userId});
@@ -129,15 +131,17 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                 Row(
                   children: [
                     Expanded(
-                      child: StatCard(
+                      child: // DashboardScreen.dart ফাইলের StatCard অংশে
+
+                      StatCard(
                         title: "Jobs Done",
                         value: data.doneCount.toString(),
                         icon: Icons.assignment_turned_in,
                         color: Colors.blue,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const CompletedWorkTab()),
-                        ),
+                        onTap: () {
+                          // ✅ সরাসরি Completed Tab এ নিয়ে যাবে
+                          HomeFeedScreen.goToTab(2); // 2 হলো CompletedWorkTab এর ইনডেক্স
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 class ResponsiveWorkerPin extends StatefulWidget {
   final String role;
-  final String price;
+  final String price; // e.g. "500" or "৳500"
   final bool isLive;
   final double currentZoom;
   final double? distanceKm;
@@ -36,7 +36,7 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
       duration: const Duration(seconds: 1),
       lowerBound: 0.9,
       upperBound: 1.1,
-    )..repeat(reverse: true); // Heartbeat animation
+    )..repeat(reverse: true);
   }
 
   @override
@@ -45,7 +45,6 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
     super.dispose();
   }
 
-  // পেশা অনুযায়ী আইকন এবং কালার সিলেক্টর
   Map<String, dynamic> _getStyle() {
     final role = widget.role.toUpperCase();
     if (role.contains("PAINTER")) {
@@ -59,7 +58,6 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
     } else if (role.contains("PLUMBER")) {
       return {'color': Colors.blue, 'icon': Icons.plumbing_rounded};
     }
-    // Default
     return {'color': const Color(0xFF38B6FF), 'icon': Icons.work_rounded};
   }
 
@@ -69,7 +67,6 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
     final Color color = style['color'];
     final IconData icon = style['icon'];
 
-    // Zoom Logic
     final z = widget.currentZoom;
     bool isSmallDot = z < 12;
     bool isCompact = z >= 12 && z < 14 && !widget.isPromoted;
@@ -78,7 +75,6 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
       return _buildDot(color);
     }
 
-    // লাইভ হলে পালস অ্যানিমেশন
     return widget.isLive
         ? ScaleTransition(scale: _controller, child: _buildPin(color, icon, isCompact))
         : _buildPin(color, icon, isCompact);
@@ -98,22 +94,32 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
   }
 
   Widget _buildPin(Color color, IconData icon, bool isCompact) {
+    // ✅ শুধু টাকার অংক বের করা হচ্ছে (টাকা বা টেক্সট)
+    // উদাহরণ: "৳500" অথবা শুধু "500"
+    String displayPrice = widget.price;
+
+    // যদি শুধু নাম্বার আসে, তার আগে টাকার চিহ্ন যোগ করতে পারেন (অপশনাল)
+    // if (!displayPrice.contains('৳') && RegExp(r'^\d+$').hasMatch(displayPrice)) {
+    //   displayPrice = '৳$displayPrice';
+    // }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 8 : 10,
+              horizontal: isCompact ? 8 : 12,
               vertical: isCompact ? 6 : 8
           ),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: color.withOpacity(0.3), width: 1.5), // হালকা বর্ডার
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -122,33 +128,37 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
             children: [
               // Icon Circle
               Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   color: color,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: Colors.white, size: 14),
+                child: Icon(icon, color: Colors.white, size: 16),
               ),
 
               if (!isCompact) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ✅ শুধু প্রাইস (বড় করে)
                     Text(
-                      widget.price,
+                      displayPrice,
                       style: const TextStyle(
                         fontWeight: FontWeight.w900,
-                        fontSize: 13,
+                        fontSize: 15,
                         color: Colors.black87,
+                        letterSpacing: -0.5,
                       ),
                     ),
+                    // ✅ রোল (ছোট করে)
                     Text(
                       widget.role.toUpperCase(),
                       style: TextStyle(
-                        fontSize: 8,
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
                         color: Colors.grey.shade600,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
@@ -161,9 +171,9 @@ class _ResponsiveWorkerPinState extends State<ResponsiveWorkerPin>
         ClipPath(
           clipper: _TriangleClipper(),
           child: Container(
-            width: 10,
-            height: 6,
-            color: Colors.white,
+            width: 12,
+            height: 7,
+            color: Colors.white, // পয়েন্টার সাদা হবে যাতে পিলের সাথে মিশে যায়
           ),
         ),
       ],
