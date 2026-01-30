@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
+// ✅ Achievement service ইম্পোর্ট
+import 'package:findus_app/achievement/achievement_service.dart';
+
 // Screens
 import 'home_feed_screen.dart';
 import 'explore/explore_screen.dart';
@@ -26,6 +29,20 @@ class MainNavScreen extends StatefulWidget {
 class _MainNavScreenState extends State<MainNavScreen> {
   int _currentIndex = 1;
   final PageController _pageController = PageController(initialPage: 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _handleDailyCheckIn(); // ✅ এখানে কল
+  }
+
+  /// ✅ Daily Check‑in progress বাড়ানো
+  Future<void> _handleDailyCheckIn() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      await AchievementService.incrementProgress('daily_open_app');
+    }
+  }
 
   void _goToTab(int index) {
     if (_currentIndex == index) return;
@@ -61,7 +78,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
             // 1. EXPLORE TAB (Public)
             const ExploreScreen(),
 
-            // 2. MESSAGES TAB (✅ Dashboard এর জায়গায় ConversationTab বসানো হলো)
+            // 2. MESSAGES TAB
             const ConversationTab(),
 
             // 3. PROFILE TAB (Login Check)
@@ -113,7 +130,6 @@ class _MainNavScreenState extends State<MainNavScreen> {
             label: 'EXPLORE',
             onTap: _goToTab,
           ),
-          // ✅ ম্যাসেজ আইকন এবং লেবেল
           _NavItem(
             index: 2,
             currentIndex: _currentIndex,

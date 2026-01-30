@@ -54,48 +54,42 @@ class AchievementService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // নটিফায়ার থেকে স্টেট খুঁজে বের করা
     final state = _stateById[id];
     if (state == null) return;
 
-    if (state.isCompleted && !state.claimed) {
-      try {
-        debugPrint("Claiming reward for: $id");
+    if (!state.isCompleted || state.claimed) return;
 
-        // ✅ ১. Firestore আপডেট (ইউজারের টোটাল XP বাড়ানো)
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'xpPoints': FieldValue.increment(state.def.xpReward),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+    debugPrint("Claiming reward for: $id");
 
-        // ✅ ২. ক্লেইম হিস্ট্রি রাখা (ডেইলি কোয়েস্ট ট্র্যাকিংয়ের জন্য)
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('claimed_achievements')
-            .doc(id)
-            .set({
-          'claimedAt': FieldValue.serverTimestamp(),
-          'xpEarned': state.def.xpReward,
-          'period': state.def.resetPeriod.toString(),
-        });
+    // ✅ ১) আগে লোকালি claimed করে দেই, যাতে বারবার claim না করা যায়
+    final updatedState = state.copyWith(claimed: true);
+    _stateById[id] = updatedState;
+    await _saveAll();
+    await BadgeService.addPoints(state.def.xpReward);
 
-        // ✅ ৩. লোকাল স্টেট আপডেট ও সেভ (এটিই মিসিং ছিল)
-        final updatedState = state.copyWith(claimed: true);
-        _stateById[id] = updatedState;
+    try {
+      // ✅ ২) তারপর Firestore এ আপডেট করার চেষ্টা
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'xpPoints': FieldValue.increment(state.def.xpReward),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
-        // সেভ করা যাতে অ্যাপ রিস্টার্ট দিলেও 'Claimed' থাকে
-        await _saveAll();
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('claimed_achievements')
+          .doc(id)
+          .set({
+        'claimedAt': FieldValue.serverTimestamp(),
+        'xpEarned': state.def.xpReward,
+        'period': state.def.resetPeriod.toString(),
+      });
 
-        // ✅ ৪. লোকাল BadgeService আপডেট (UI-তে XP সাথে সাথে বাড়বে)
-        await BadgeService.addPoints(state.def.xpReward);
-
-        debugPrint("Successfully claimed reward for: $id");
-
-      } catch (e) {
-        debugPrint("Error claiming reward: $e");
-        rethrow;
-      }
+      debugPrint("Successfully claimed reward for: $id");
+    } catch (e) {
+      debugPrint("Error claiming reward (remote only): $e");
+      // ইচ্ছে করলে এখানে rollback লজিকও রাখতে পারো,
+      // কিন্তু প্রথমে Rules ঠিক করাই ভালো।
     }
   }
 

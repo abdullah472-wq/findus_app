@@ -709,22 +709,44 @@ class _ExploreScreenState extends State<ExploreScreen>
                   );
                 } : null,
               ),
+              // ExploreScreen.dart ফাইলের ভেতরে MarkerLayer অংশটি:
+
+              // ExploreScreen.dart এর ভেতরে
+
               MarkerLayer(
                 markers: _filteredWorkers
                     .where((data) => !_blockedUserIds.contains((data['id'] ?? data['ownerId']).toString()))
                     .map((data) {
+
                   final LatLng workerLoc = data['location'] is LatLng
                       ? data['location']
-                      : const LatLng(23.8103, 90.4125); // Safe fallback
+                      : const LatLng(23.8103, 90.4125);
+
+                  // 🎯 ডাইনামিক মার্কার সাইজ ক্যালকুলেশন
+                  double markerSize;
+                  if (_currentZoom < 13) {
+                    markerSize = 20.0; // ডট এর জন্য ছোট জায়গা
+                  } else if (_currentZoom < 15) {
+                    markerSize = 50.0; // শুধু পিন এর জন্য মাঝারি জায়গা
+                  } else {
+                    markerSize = 160.0; // ফুল কার্ডের জন্য বড় জায়গা
+                  }
 
                   return Marker(
                     point: workerLoc,
-                    width: 120,
-                    height: 120,
-                    alignment: Alignment.center,
+
+                    // ✅ জুম অনুযায়ী মার্কারের সাইজ পরিবর্তন হবে
+                    width: markerSize,
+                    height: markerSize,
+
+                    alignment: Alignment.center, // ঠিক মাঝখানে থাকবে
+
                     child: GestureDetector(
                       onTap: () => _showProfilePopup(data),
+
                       child: ResponsiveWorkerPin(
+                        key: ValueKey("${data['id']}_$_currentZoom"), // রিফ্রেশ এর জন্য কি
+
                         role: (data['roleLabel'] ?? data['role'] ?? 'Worker').toString(),
                         price: data['priceLabel']?.toString() ?? data['price']?.toString() ?? 'Negotiable',
                         isLive: data['isLive'] ?? false,

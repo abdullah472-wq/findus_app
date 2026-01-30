@@ -734,7 +734,67 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildDynamicBottomSection(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [if (widget.isOwner) _buildOwnerSuggestions(isWorker, isDark) else _buildVisitorContent(isWorker, isDark)]); }
   Widget _buildOwnerSuggestions(bool isWorker, bool isDark) { final target = isWorker ? 'supporter' : 'worker'; return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('Suggested for You', isDark), _buildSuggestionStream(target, 'Sponsored', Colors.amber, isDark), const SizedBox(height: 20), _buildSuggestionStream(target, 'Nearby', Colors.blue, isDark)]); }
   Widget _buildVisitorContent(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('User Posts', isDark), _buildOwnerPostsStream(isDark), const SizedBox(height: 20), _sectionTitle(isWorker ? 'Similar Workers' : 'Similar Supporters', isDark), _buildSimilarStream(isWorker, isDark)]); }
-  Widget _buildOwnerPostsStream(bool isDark) { return StreamBuilder<QuerySnapshot>(stream: FirebaseFirestore.instance.collection('posts').where('ownerId', isEqualTo: widget.uid).limit(3).snapshots(), builder: (context, snap) { if (!snap.hasData || snap.data!.docs.isEmpty) return SizedBox(height: 100, child: Center(child: Text('No posts found', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)))); final docs = snap.data!.docs; return SizedBox(height: 250, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: docs.length, shrinkWrap: true, physics: const ClampingScrollPhysics(), itemBuilder: (context, index) { final d = docs[index]; return Container(width: 200, margin: const EdgeInsets.symmetric(horizontal: 8), child: UniversalWorkerCard(id: d.id, name: d['title'] ?? 'No Title', role: d['roleLabel'] ?? 'Worker', imageUrl: userData['image'], address: d['address'] ?? 'Not set', rating: "0", completed: "0", reviews: "0", price: d['priceLabel'] ?? 'Negotiable')); })); }); }
+  Widget _buildOwnerPostsStream(bool isDark) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('posts')
+          .where('ownerId', isEqualTo: widget.uid)
+          .limit(3)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) {
+          return SizedBox(
+            height: 120,
+            child: Center(
+              child: Text(
+                'No posts found',
+                style: TextStyle(
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+            ),
+          );
+        }
+
+        final docs = snap.data!.docs;
+
+        return SizedBox(
+          height: 270, // আগের 250 থেকে একটু বড় রাখলাম
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: docs.length,
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemBuilder: (context, index) {
+              final d = docs[index];
+
+              return SizedBox(
+                width: screenWidth * 0.8, // ২০০ ফিক্সড না রেখে রেসপন্সিভ
+                child: UniversalWorkerCard(
+                  id: d.id,
+                  name: d['title'] ?? 'No Title',
+                  role: d['roleLabel'] ?? 'Worker',
+                  imageUrl: userData['image'],
+                  address: d['address'] ?? 'Not set',
+                  rating: "0",
+                  completed: "0",
+                  reviews: "0",
+                  price: d['priceLabel'] ?? 'Negotiable',
+
+                  // এই সেকশনে কমপ্যাক্ট করে দিচ্ছি:
+                  margin: const EdgeInsets.all(8),
+                  showActionButtons: false, // ➜ নিচের বাটনগুলো লুকাও
+                  // চাইলে showStats: false করেও আরও ছোট করা যায়
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
   // --- Updated Suggestion Methods ---
 
   Widget _buildSimilarStream(bool isWorker, bool isDark) {

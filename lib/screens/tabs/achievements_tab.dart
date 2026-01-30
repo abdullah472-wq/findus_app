@@ -25,7 +25,7 @@ class AchievementsTab extends StatefulWidget {
 }
 
 class _AchievementsTabState extends State<AchievementsTab> {
-  bool _isCollectPoint = true;
+  bool _isCollectPoint = true; // Toggle state
   late ConfettiController _confettiController;
   late VoidCallback _badgeListener;
 
@@ -41,8 +41,13 @@ class _AchievementsTabState extends State<AchievementsTab> {
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
-    _badgeListener = () { if (mounted) setState(() {}); };
+
+    // Badge Listener
+    _badgeListener = () {
+      if (mounted) setState(() {});
+    };
     BadgeService.badgeNotifier.addListener(_badgeListener);
+
     _listenUserDoc();
   }
 
@@ -57,12 +62,14 @@ class _AchievementsTabState extends State<AchievementsTab> {
   void _listenUserDoc() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
     _userSub?.cancel();
     _userSub = FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((snap) {
+      if (!snap.exists) return;
+
       final data = snap.data() ?? {};
       final rawXp = data['xpPoints'] ?? 0;
       final int xp = rawXp is num ? rawXp.toInt() : int.tryParse(rawXp.toString()) ?? 0;
@@ -80,7 +87,9 @@ class _AchievementsTabState extends State<AchievementsTab> {
         _isTrusted = completed >= 50 && rating >= 4.5;
         _isLoading = false;
       });
-    }, onError: (_) => setState(() => _isLoading = false));
+    }, onError: (_) {
+      if (mounted) setState(() => _isLoading = false);
+    });
   }
 
   String _formatPoints(int points) => points >= 1000 ? "${(points / 1000).toStringAsFixed(1)}K" : points.toString();
@@ -113,6 +122,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
             physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
+                // 1. Hero Card
                 ValueListenableBuilder<BadgeProgress>(
                   valueListenable: BadgeService.badgeNotifier,
                   builder: (context, progress, _) {
@@ -125,14 +135,21 @@ class _AchievementsTabState extends State<AchievementsTab> {
                     );
                   },
                 ),
+
                 const SizedBox(height: 25),
+
+                // 2. Toggle Buttons
                 _buildToggleButtons(isDark),
+
                 const SizedBox(height: 15),
+
+                // 3. Quest List
                 ValueListenableBuilder<List<AchievementState>>(
                   valueListenable: AchievementService.achievementsNotifier,
                   builder: (context, achievementsList, __) {
                     final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
                     final achievements = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: currentPoints);
+
                     final visible = _isCollectPoint
                         ? achievements.where((st) => !st.claimed).toList()
                         : achievements.where((st) => st.claimed).toList();
@@ -147,6 +164,8 @@ class _AchievementsTabState extends State<AchievementsTab> {
               ],
             ),
           ),
+
+          // Confetti Animation
           ConfettiWidget(
             confettiController: _confettiController,
             blastDirectionality: BlastDirectionality.explosive,
@@ -158,7 +177,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Hero Section (Top Card)
+  // 🔥 Hero Section
   Widget _buildHeroCard(BadgeProgress progress, bool isDark) {
     final levelColor = _getLevelColor(progress.level);
     final gradientColors = isDark
@@ -172,7 +191,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: levelColor.withOpacity(0.25),
+            color: levelColor.withOpacity(isDark ? 0.15 : 0.3),
             blurRadius: 20,
             offset: const Offset(0, 8),
           )
@@ -185,7 +204,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: levelColor.withOpacity(0.4), blurRadius: 15, spreadRadius: 2)],
+              boxShadow: [BoxShadow(color: levelColor.withOpacity(0.2), blurRadius: 15, spreadRadius: 2)],
             ),
             child: CircularPercentIndicator(
               radius: 50.0,
@@ -242,12 +261,11 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // ✅ Mini Badge Helper (Updated Icon)
   Widget _miniBadge(BadgeLevel level, int points) {
     final unlocked = points >= _getThreshold(level);
     return Icon(
-      Icons.workspace_premium, // 🔥 আইকন পরিবর্তন করা হয়েছে
-      size: 20, // সাইজ একটু বাড়িয়ে দেওয়া হয়েছে যাতে ক্লিয়ার দেখা যায়
+      Icons.workspace_premium,
+      size: 22,
       color: unlocked ? _getLevelColor(level) : Colors.grey.withOpacity(0.3),
     );
   }
@@ -261,7 +279,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
@@ -270,7 +288,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("NEXT LEVEL: ${BadgeService.getFormattedLevelName(nextLevel)}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey.shade800)),
+              Text("NEXT: ${BadgeService.getFormattedLevelName(nextLevel)}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey.shade800)),
               Text("$needed XP LEFT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: targetColor)),
             ],
           ),
@@ -279,7 +297,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progress.progressPercentage.clamp(0.0, 1.0),
-              minHeight: 10,
+              minHeight: 8,
               backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
               valueColor: AlwaysStoppedAnimation(targetColor),
             ),
@@ -289,11 +307,11 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Quest Card (RPG Style)
+  // 🔥 Quest Card
   Widget _buildQuestCard(AchievementState st, bool isDark) {
-    final isCompleted = st.isCompleted;
+    final isCompleted = st.isCompleted;     // => progress >= def.target
     final canClaim = isCompleted && !st.claimed;
-    final cardColor = isDark ? const Color(0xFF252525) : Colors.white;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final borderColor = canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200);
 
     return Container(
@@ -302,15 +320,14 @@ class _AchievementsTabState extends State<AchievementsTab> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: canClaim ? 2 : 1),
+        border: Border.all(color: borderColor, width: canClaim ? 1.5 : 1),
         boxShadow: [
-          if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.2), blurRadius: 12, spreadRadius: 1),
+          if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 12, spreadRadius: 1),
           BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
         ],
       ),
       child: Row(
         children: [
-          // Icon Box
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -324,7 +341,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
             ),
           ),
           const SizedBox(width: 14),
-          // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +349,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
                 const SizedBox(height: 4),
                 Text(st.def.description, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey.shade600)),
                 const SizedBox(height: 8),
-                // Mini Progress
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
@@ -347,7 +362,6 @@ class _AchievementsTabState extends State<AchievementsTab> {
             ),
           ),
           const SizedBox(width: 10),
-          // Action Button
           if (canClaim)
             ElevatedButton(
               onPressed: () async {
@@ -360,16 +374,16 @@ class _AchievementsTabState extends State<AchievementsTab> {
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                elevation: 4,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                elevation: 2,
               ),
-              child: Text("+${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              child: Text("+${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
             )
           else if (st.claimed)
             const Icon(Icons.check_circle_rounded, color: Colors.green)
           else
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
               child: Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey)),
             ),
@@ -378,7 +392,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // --- Small Helpers ---
+  // --- Helpers ---
 
   Widget _statusIcon(IconData icon, bool active, Color color) {
     return Icon(icon, size: 18, color: active ? color : Colors.grey.withOpacity(0.3));
@@ -388,7 +402,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white10 : Colors.white,
+        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isDark ? Colors.transparent : Colors.grey.shade200),
       ),

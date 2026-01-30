@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/profile/location_picker_screen.dart';
@@ -85,25 +86,79 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
         if (mounted) setState(() => _locationName = "Location not available");
         return;
       }
-      final p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+
+      final p = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      final latLng = LatLng(p.latitude, p.longitude);
+
       if (mounted) {
         setState(() {
-        _selectedLatLng = LatLng(p.latitude, p.longitude);
-        _locationName = "Current Location Detected";
-      });
+          _selectedLatLng = latLng;
+          _locationName = "Getting address...";
+        });
       }
+
+      // ✅ LatLng থেকে আসল address আনো
+      await _updateLocationNameFromLatLng(latLng);
     } catch (_) {
       if (mounted) setState(() => _locationName = "Location not found");
     }
   }
 
   Future<void> _selectLocationOnMap() async {
-    final picked = await Navigator.push(context, MaterialPageRoute(builder: (_) => const LocationPickerScreen()));
+    final picked = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+    );
+
     if (mounted && picked != null && picked is LatLng) {
       setState(() {
         _selectedLatLng = picked;
         _useCurrentLocation = false;
-        _locationName = "Custom Pin Set";
+        _locationName = "Getting address...";
+      });
+
+      // ✅ LatLng থেকে human-readable address
+      await _updateLocationNameFromLatLng(picked);
+    }
+  }
+
+  Future<void> _updateLocationNameFromLatLng(LatLng latLng) async {
+    try {
+      final placemarks = await geo.placemarkFromCoordinates(
+        latLng.latitude,
+        latLng.longitude,
+      );
+
+      if (!mounted) return;
+      if (placemarks.isEmpty) {
+        setState(() {
+          _locationName = "Selected Location";
+        });
+        return;
+      }
+
+      final place = placemarks.first;
+
+      final parts = <String>[];
+      if ((place.street ?? '').isNotEmpty) parts.add(place.street!);
+      if ((place.subLocality ?? '').isNotEmpty) parts.add(place.subLocality!);
+      if ((place.locality ?? '').isNotEmpty) parts.add(place.locality!);
+      if ((place.administrativeArea ?? '').isNotEmpty) {
+        parts.add(place.administrativeArea!);
+      }
+
+      final addressStr = parts.join(', ');
+
+      setState(() {
+        _locationName = addressStr.isNotEmpty ? addressStr : "Selected Location";
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _locationName = "Selected Location";
       });
     }
   }
