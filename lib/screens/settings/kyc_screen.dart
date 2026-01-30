@@ -30,8 +30,9 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
 
   bool _isSubmitting = false;
 
-  // 👉 এখানে তোমার API base URL দাও (নিজের সার্ভারের ঠিকানা)
-  static const String _apiBaseUrl = 'https://your-server-domain.com';
+  // 👉 এখানে তোমার API base URL (Render সার্ভিস URL)
+  static const String _apiBaseUrl =
+      'https://findus-admin-panel.onrender.com';
 
   @override
   void dispose() {
@@ -62,10 +63,9 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
 
   // ---------- Helper: Cloudinary upload ----------
   Future<String> _uploadToCloudinary(File file, String tag) async {
-    // CloudinaryService.uploadFile(Object file, ... ) → file.path ব্যবহার করে upload
     final res = await CloudinaryService.uploadFile(
       file,
-      folder: 'kyc',          // চাইলে 'kyc/$uid' করবে
+      folder: 'kyc', // চাইলে 'kyc/$uid' করবে
       resourceType: 'image',
       tags: [tag],
     );
@@ -245,7 +245,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                 ),
               )
                   : ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius:
+                BorderRadius.circular(12),
                 child: Image.file(
                   file,
                   fit: BoxFit.cover,
@@ -473,7 +474,8 @@ class _KycUploadScreenState extends State<KycUploadScreen> {
                       offset: const Offset(0, 2),
                     ),
                   ],
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius:
+                  BorderRadius.circular(20),
                 ),
                 child: Row(
                   children: [

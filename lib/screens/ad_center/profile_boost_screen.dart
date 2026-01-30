@@ -3,8 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/wallet/payment_screen.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+import '../../wallet/payment_screen.dart'; // ✅ সঠিক ইম্পোর্ট
 
 class ProfileBoostScreen extends StatefulWidget {
   const ProfileBoostScreen({super.key});
@@ -17,7 +17,6 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
   int _selectedDays = 3;
   String _targetArea = "nearby";
 
-  // প্রাইসিং কনফিগ
   final Map<int, int> _pricesNearby = {1: 30, 3: 80, 7: 180};
   final Map<int, int> _pricesCity = {1: 50, 3: 130, 7: 280};
 
@@ -32,44 +31,43 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
     return FloatingScaffold(
       title: "BOOST PROFILE",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ১. টপ প্রোমো ব্যানার
           _buildPromoBanner(),
 
           const SizedBox(height: 25),
 
-          // ২. ডিউরেশন সিলেকশন
-          const Text("Select Duration", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("Select Duration", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 12),
           _buildDurationOptions(isDark),
 
           const SizedBox(height: 25),
 
-          // ৩. টার্গেট এরিয়া সিলেকশন
-          const Text("Target Audience", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("Target Audience", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 12),
-          _buildTargetOptions(isDark),
+          _buildTargetOptions(isDark, cardColor, textColor),
 
           const SizedBox(height: 25),
 
-          // ৪. ইমপ্যাক্ট ও সামারি কার্ড
-          _buildSummaryCard(isDark),
+          _buildSummaryCard(isDark, cardColor, textColor),
 
           const SizedBox(height: 30),
 
-          // ৫. একশন বাটন
           _buildConfirmButton(context),
 
           const SizedBox(height: 100),
@@ -120,6 +118,9 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
 
   Widget _durationCard(int days, String label, bool isDark, String? tag) {
     final isSelected = _selectedDays == days;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+
     return Expanded(
       child: GestureDetector(
         onTap: () {
@@ -129,7 +130,7 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 15),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.brandMain : (isDark ? const Color(0xFF2C2C2C) : Colors.white),
+            color: isSelected ? AppColors.brandMain : cardColor,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.2), width: 2),
             boxShadow: isSelected ? [BoxShadow(color: AppColors.brandMain.withOpacity(0.3), blurRadius: 10)] : [],
@@ -143,7 +144,7 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
                   decoration: BoxDecoration(color: isSelected ? Colors.white24 : AppColors.brandMain.withOpacity(0.1), borderRadius: BorderRadius.circular(5)),
                   child: Text(tag, style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppColors.brandMain)),
                 ),
-              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : AppColors.brandDark)),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : textColor)),
               Text("৳${_targetArea == 'city' ? _pricesCity[days] : _pricesNearby[days]}", style: TextStyle(fontSize: 10, color: isSelected ? Colors.white70 : Colors.grey)),
             ],
           ),
@@ -152,17 +153,17 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
     );
   }
 
-  Widget _buildTargetOptions(bool isDark) {
+  Widget _buildTargetOptions(bool isDark, Color cardColor, Color textColor) {
     return Column(
       children: [
-        _targetTile("nearby", "Nearby Only", "Reach workers/clients within 10km", Icons.location_on_rounded, isDark),
+        _targetTile("nearby", "Nearby Only", "Reach workers/clients within 10km", Icons.location_on_rounded, isDark, cardColor, textColor),
         const SizedBox(height: 12),
-        _targetTile("city", "Whole City", "Expand your visibility across the entire city", Icons.location_city_rounded, isDark), // ✅ 'location_city_rounded' ব্যবহার করুন
+        _targetTile("city", "Whole City", "Expand your visibility across the entire city", Icons.location_city_rounded, isDark, cardColor, textColor),
       ],
     );
   }
 
-  Widget _targetTile(String val, String title, String sub, IconData icon, bool isDark) {
+  Widget _targetTile(String val, String title, String sub, IconData icon, bool isDark, Color cardColor, Color textColor) {
     final isSelected = _targetArea == val;
     return InkWell(
       onTap: () {
@@ -174,7 +175,7 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.brandMain.withOpacity(0.05) : (isDark ? Colors.white.withOpacity(0.05) : Colors.white),
+          color: isSelected ? AppColors.brandMain.withOpacity(0.05) : cardColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: isSelected ? AppColors.brandMain : Colors.grey.withOpacity(0.1), width: 1.5),
         ),
@@ -186,7 +187,7 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
                   Text(sub, style: const TextStyle(color: Colors.grey, fontSize: 11)),
                 ],
               ),
@@ -198,11 +199,11 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
     );
   }
 
-  Widget _buildSummaryCard(bool isDark) {
+  Widget _buildSummaryCard(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
       ),
@@ -217,11 +218,11 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
           ),
           const SizedBox(height: 15),
           LinearProgressIndicator(value: _selectedDays / 7, backgroundColor: Colors.grey.shade100, color: AppColors.brandMain, minHeight: 8, borderRadius: BorderRadius.circular(10)),
-          const Divider(height: 40),
+          Divider(height: 40, color: isDark ? Colors.white24 : Colors.grey.shade300),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Total Investment", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("Total Investment", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
               Text("৳$_totalCost", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
             ],
           ),
@@ -237,8 +238,6 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
       child: ElevatedButton(
         onPressed: () {
           HapticFeedback.mediumImpact();
-
-          // ✅ PaymentScreen এর বদলে ManualPaymentScreen কল করা হচ্ছে
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -263,19 +262,6 @@ class _ProfileBoostScreenState extends State<ProfileBoostScreen> {
           "ACTIVATE BOOST NOW",
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
         ),
-      ),
-    );
-  }
-
-  void _showSuccess(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.verified_rounded, color: Colors.green, size: 60),
-        content: const Text("Your profile is now being promoted! 🚀", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [Center(child: ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.pop(context); }, child: const Text("DONE")))],
       ),
     );
   }

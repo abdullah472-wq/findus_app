@@ -51,13 +51,20 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
       return;
     }
 
+    // 🔹 আগে login check করি, যাতে _isSubmitting=true হবার আগেই বেরিয়ে আসতে পারি
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showSnack("Please login first", Colors.red);
+      return;
+    }
+    final uid = user.uid;
+
     setState(() => _isSubmitting = true);
 
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-
-      await FirebaseFirestore.instance.collection('payment_requests').add({
+      await FirebaseFirestore.instance
+          .collection('payment_requests')
+          .add({
         'uid': uid,
         'planId': widget.planId,
         'amount': widget.amount,
@@ -70,7 +77,11 @@ class _ManualPaymentScreenState extends State<ManualPaymentScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+      // 🔹 যদি শুধু subscription এর জন্য subStatus ব্যবহার করো তবে চাইলে এখানে purpose চেক করতে পারো
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .update({
         'subStatus': 'pending',
         'lastPaymentMethod': _selectedMethod,
         'lastTrxId': trxId,

@@ -3,8 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/wallet/payment_screen.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+import '../../wallet/payment_screen.dart'; // ✅ সঠিক ইম্পোর্ট
 
 class InstantBoostScreen extends StatefulWidget {
   const InstantBoostScreen({super.key});
@@ -20,35 +20,35 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
     return FloatingScaffold(
       title: "INSTANT BOOST",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ১. ফিচার এনিমেশন/আইকন কার্ড
-          _buildBoltHeader(isDark),
+          _buildBoltHeader(),
 
           const SizedBox(height: 25),
 
-          // ২. বেনিফিট কার্ড
-          _buildBenefitCard(isDark),
+          _buildBenefitCard(isDark, cardColor, textColor),
 
           const SizedBox(height: 20),
 
-          // ৩. প্রাইসিং ও সামারি কার্ড
-          _buildPricingSummary(isDark),
+          _buildPricingSummary(isDark, cardColor, textColor),
 
           const SizedBox(height: 30),
 
-          // ৪. কনফার্ম বাটন
           _buildConfirmButton(context),
 
           const SizedBox(height: 100),
@@ -57,7 +57,7 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
     );
   }
 
-  Widget _buildBoltHeader(bool isDark) {
+  Widget _buildBoltHeader() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -95,45 +95,45 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
     );
   }
 
-  Widget _buildBenefitCard(bool isDark) {
+  Widget _buildBenefitCard(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Why Boost Now?", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("Why Boost Now?", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 15),
-          _benefitRow(Icons.rocket_launch_rounded, "Top position in search results"),
-          _benefitRow(Icons.visibility_rounded, "Reach up to $_extraViews+ extra clients"),
-          _benefitRow(Icons.chat_bubble_rounded, "Higher chance of getting hired instantly"),
+          _benefitRow(Icons.rocket_launch_rounded, "Top position in search results", isDark),
+          _benefitRow(Icons.visibility_rounded, "Reach up to $_extraViews+ extra clients", isDark),
+          _benefitRow(Icons.chat_bubble_rounded, "Higher chance of getting hired instantly", isDark),
         ],
       ),
     );
   }
 
-  Widget _benefitRow(IconData icon, String text) {
+  Widget _benefitRow(IconData icon, String text, bool isDark) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           Icon(icon, size: 18, color: Colors.orange),
           const SizedBox(width: 12),
-          Expanded(child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500))),
+          Expanded(child: Text(text, style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.grey, fontWeight: FontWeight.w500))),
         ],
       ),
     );
   }
 
-  Widget _buildPricingSummary(bool isDark) {
+  Widget _buildPricingSummary(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.orange.withOpacity(0.2), width: 1.5),
       ),
@@ -142,27 +142,27 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Boost Duration", style: TextStyle(color: Colors.grey, fontSize: 14)),
-              Text("$_hours Hours", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text("Boost Duration", style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 14)),
+              Text("$_hours Hours", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Cost", style: TextStyle(color: Colors.grey, fontSize: 14)),
+              Text("Cost", style: TextStyle(color: isDark ? Colors.white60 : Colors.grey, fontSize: 14)),
               Text("৳$_cost", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: AppColors.brandMain)),
             ],
           ),
-          const Divider(height: 30),
-          const Row(
+          Divider(height: 30, color: isDark ? Colors.grey.shade800 : Colors.grey.shade300),
+          Row(
             children: [
-              Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey),
-              SizedBox(width: 6),
+              Icon(Icons.info_outline_rounded, size: 14, color: isDark ? Colors.white54 : Colors.grey),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   "This is a one-time non-recurring payment.",
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey),
                 ),
               ),
             ],
@@ -212,33 +212,6 @@ class _InstantBoostScreenState extends State<InstantBoostScreen> {
           style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
         ),
       ],
-    );
-  }
-
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 50),
-        content: const Text(
-          "Boost Activated! 🚀\nYour profile is now being promoted to more people around you.",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx); // Close dialog
-                Navigator.pop(context); // Close Boost Screen
-              },
-              child: const Text("AWESOME!"),
-            ),
-          )
-        ],
-      ),
     );
   }
 }

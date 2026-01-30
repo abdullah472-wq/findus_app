@@ -3,8 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/wallet/payment_screen.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+
+import '../../wallet/payment_screen.dart';
 
 class JobPostBoostScreen extends StatefulWidget {
   const JobPostBoostScreen({super.key});
@@ -21,35 +22,35 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
     return FloatingScaffold(
       title: "PROMOTE JOBS",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ১. ইনফো কার্ড (কেন প্রমোট করবেন)
-          _buildInfoBanner(isDark),
+          _buildInfoBanner(),
 
           const SizedBox(height: 25),
 
-          // ২. কন্ট্রোল কার্ড (দিন ও বাজেট সিলেক্টর)
-          _buildBudgetControlCard(isDark),
+          _buildBudgetControlCard(isDark, cardColor, textColor),
 
           const SizedBox(height: 25),
 
-          // ৩. পেমেন্ট সামারি কার্ড
-          _buildSummaryCard(isDark),
+          _buildSummaryCard(isDark, cardColor, textColor),
 
           const SizedBox(height: 30),
 
-          // ৪. সাবমিট বাটন
           _buildConfirmButton(context),
 
           const SizedBox(height: 100),
@@ -58,7 +59,7 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
     );
   }
 
-  Widget _buildInfoBanner(bool isDark) {
+  Widget _buildInfoBanner() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -92,25 +93,25 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
     );
   }
 
-  Widget _buildBudgetControlCard(bool isDark) {
+  Widget _buildBudgetControlCard(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Customize Promotion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text("Customize Promotion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
           const SizedBox(height: 20),
 
           // দিন সিলেক্টর
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Duration", style: TextStyle(fontWeight: FontWeight.w600)),
+              Text("Duration", style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
               Text("$_days Days", style: const TextStyle(color: AppColors.brandMain, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -119,6 +120,7 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
             min: 1, max: 14,
             divisions: 13,
             activeColor: AppColors.brandMain,
+            inactiveColor: isDark ? Colors.grey : Colors.grey.shade300,
             onChanged: (v) {
               HapticFeedback.selectionClick();
               setState(() => _days = v.round());
@@ -131,7 +133,7 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Daily Budget", style: TextStyle(fontWeight: FontWeight.w600)),
+              Text("Daily Budget", style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
               Text("৳${_dailyBudget.round()}", style: const TextStyle(color: AppColors.brandMain, fontWeight: FontWeight.bold)),
             ],
           ),
@@ -140,6 +142,7 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
             min: 50, max: 500,
             divisions: 9,
             activeColor: AppColors.brandMain,
+            inactiveColor: isDark ? Colors.grey : Colors.grey.shade300,
             onChanged: (v) {
               HapticFeedback.selectionClick();
               setState(() => _dailyBudget = v);
@@ -150,24 +153,24 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
     );
   }
 
-  Widget _buildSummaryCard(bool isDark) {
+  Widget _buildSummaryCard(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.green.withOpacity(0.2), width: 1.5),
       ),
       child: Column(
         children: [
-          _row("Promotion Type", "All Active Posts"),
-          _row("Daily Reach", "Est. 150-300 people"),
-          _row("Total Duration", "$_days Days"),
-          const Divider(height: 30),
+          _row("Promotion Type", "All Active Posts", isDark),
+          _row("Daily Reach", "Est. 150-300 people", isDark),
+          _row("Total Duration", "$_days Days", isDark),
+          Divider(height: 30, color: isDark ? Colors.grey.shade800 : Colors.grey.shade300),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Total Investment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text("Total Investment", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
               Text("৳$_totalBudget", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.green)),
             ],
           ),
@@ -176,14 +179,14 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
     );
   }
 
-  Widget _row(String label, String val) {
+  Widget _row(String label, String val, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          Text(val, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          Text(val, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isDark ? Colors.white70 : Colors.black87)),
         ],
       ),
     );
@@ -201,12 +204,12 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const ManualPaymentScreen(
-                    planId: 'JOB_BOOST_3D',
-                    amount: 240,
-                    duration: 3,
-                    purpose: PaymentPurpose.profileBoost,
-                    description: 'Boosting all job posts for 3 days',
+                  builder: (_) => ManualPaymentScreen(
+                    planId: 'JOB_BOOST_${_days}D',
+                    amount: _totalBudget,
+                    duration: _days,
+                    purpose: PaymentPurpose.profileBoost, // Job post boost as profile boost variant
+                    description: 'Boosting all job posts for $_days days',
                   ),
                 ),
               );
@@ -229,33 +232,6 @@ class _JobPostBoostScreenState extends State<JobPostBoostScreen> {
           style: TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
         ),
       ],
-    );
-  }
-
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 60),
-        content: const Text(
-          "Job Promotion Active! 📈\nYour job posts will now appear on top of search results.",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              },
-              child: const Text("GREAT!"),
-            ),
-          )
-        ],
-      ),
     );
   }
 }

@@ -1,13 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:flutter/foundation.dart'; // ডিবাগ প্রিন্টের জন্য
 
 class PostService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static const String _collection = 'posts'; // কালেকশন নাম কনস্ট্যান্ট হিসেবে রাখা ভালো
 
-  /// ✅ Create post (production-grade) + optional fields for better filtering/ranking on map
+  /// 📌 পিন তৈরি করা (Create Post/Pin)
   static Future<void> createPost({
     required String ownerId,
-    required String ownerRole, // 'finder' or 'maker'
+    required String ownerRole,
     required String title,
     required String description,
     required String roleLabel,
@@ -16,23 +17,22 @@ class PostService {
     required double lng,
     required String address,
     required List<String> locationKeys,
-    required double price, // numeric for filtering
-    required String priceLabel, // display label (e.g. "৳800 / day")
+    required double price,
+    required String priceLabel,
     required List<String> images,
     required bool isLive,
-    dynamic createdAt, // FieldValue.serverTimestamp()
-
-    // ✅ Optional (used by Explore filters/sorting)
-    bool? verified, // default false
-    bool? isPromoted, // default false
-    String? status, // default 'open'
-    String? gender, // 'Male'/'Female'/'Any'
-    int? experience, // years (or any numeric)
-    double? rating, // 0.0 - 5.0
-    bool? trusted, // badge/logic derived if you want
+    // FieldValue.serverTimestamp() পাস করাই উত্তম
+    FieldValue? createdAt,
+    String gender = 'Any',
+    double experience = 0,
+    double rating = 0.0,
+    bool trusted = false,
+    bool verified = false,
+    bool isPromoted = false,
+    String status = 'open',
   }) async {
     try {
-      await _db.collection('posts').add({
+      await _db.collection(_collection).add({
         'ownerId': ownerId,
         'ownerRole': ownerRole,
         'title': title,
@@ -40,79 +40,97 @@ class PostService {
         'roleLabel': roleLabel,
         'roleKey': roleKey,
         'location': GeoPoint(lat, lng),
+        'lat': lat,
+        'lng': lng,
         'address': address,
         'locationKeys': locationKeys,
         'price': price,
         'priceLabel': priceLabel,
+        'image': images.isNotEmpty ? images.first : '',
         'images': images,
         'isLive': isLive,
-
-        // defaults (override-able)
-        'verified': verified ?? false,
-        'isPromoted': isPromoted ?? false,
-        'status': status ?? 'open',
-
-        // optional filter/sort metadata
-        'gender': gender ?? 'Any',
-        'experience': experience ?? 0,
-        'rating': rating ?? 0.0,
-        'trusted': trusted ?? false,
-
         'createdAt': createdAt ?? FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'gender': gender,
+        'experience': experience,
+        'rating': rating,
+        'trusted': trusted,
+        'verified': verified,
+        'isPromoted': isPromoted,
+        'status': status,
       });
+      if (kDebugMode) print("✅ Post created successfully");
     } catch (e) {
-      throw Exception("Post creation failed: $e");
+      if (kDebugMode) print("❌ Error creating post: $e");
+      rethrow; // UI তে এরর দেখানোর জন্য rethrow করা হলো
     }
   }
 
-  /// ✅ ExploreScreen-compatible pins stream
-  /// viewerRole: 'finder' or 'maker'
-  static Stream<List<Map<String, dynamic>>> streamPinsForViewerRole(String viewerRole) {
-    final String targetRole = (viewerRole == 'finder') ? 'maker' : 'finder';
-
+  /// 📍 ম্যাপের সব পিন লোড করা
+  /// দ্রষ্টব্য: Firebase Console এ 'isLive' এবং 'createdAt' এর জন্য Composite Index তৈরি করতে হবে।
+  static Stream<List<Map<String, dynamic>>> streamPins() {
     return _db
-        .collection('posts')
-        .where('ownerRole', isEqualTo: targetRole)
+        .collection(_collection)
         .where('isLive', isEqualTo: true)
-        .where('status', isEqualTo: 'open')
+        .orderBy('createdAt', descending: true)
+        .limit(100)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
 
-        final geo = data['location'];
-        final GeoPoint gp = geo is GeoPoint
-            ? geo
-            : const GeoPoint(23.8103, 90.4125); // fallback Dhaka
+        // সেফটি চেক: লোকেশন ডেটা এক্সট্রাক্ট করা
+        double lat = 0.0;
+        double lng = 0.0;
+
+        if (data['location'] is GeoPoint) {
+          GeoPoint gp = data['location'];
+          lat = gp.latitude;
+          lng = gp.longitude;
+        } else {
+          // যদি GeoPoint না থাকে, lat/lng ফিল্ড চেক করবে
+          lat = double.tryParse(data['lat']?.toString() ?? '0') ?? 0.0;
+          lng = double.tryParse(data['lng']?.toString() ?? '0') ?? 0.0;
+        }
 
         return {
+          ...data,
           'id': doc.id,
-          'name': (data['title'] ?? '').toString(),
-          'role': (data['roleLabel'] ?? '').toString(),
-
-          // ✅ MUST be LatLng (ExploreScreen expects LatLng)
-          'location': LatLng(gp.latitude, gp.longitude),
-
-          'address': (data['address'] ?? '').toString(),
-
-          // ExploreScreen extracts digits from this string for price filtering
-          'price': (data['priceLabel'] ?? '').toString(),
-
-          'verified': data['verified'] == true,
-          'isLive': data['isLive'] == true,
-          'isPromoted': data['isPromoted'] == true,
-
-          // optional filter/sort metadata
-          'gender': (data['gender'] ?? 'Any').toString(),
-          'experience': (data['experience'] ?? 0),
-          'rating': (data['rating'] ?? 0.0),
-          'trusted': (data['trusted'] ?? false),
-
-          'images': (data['images'] is List) ? data['images'] : <dynamic>[],
-          'ownerId': (data['ownerId'] ?? '').toString(),
+          'latitude': lat,
+          'longitude': lng,
+          // UI এর সুবিধার্থে GeoPoint অবজেক্টও রাখা হলো
+          'geoPoint': data['location'] is GeoPoint
+              ? data['location']
+              : GeoPoint(lat, lng),
         };
       }).toList();
+    }).handleError((error) {
+      if (kDebugMode) print("❌ Error streaming posts: $error");
+      return <Map<String, dynamic>>[]; // এরর হলে খালি লিস্ট রিটার্ন করবে
     });
+  }
+
+  /// 🗑️ পিন ডিলিট করা
+  static Future<void> deletePost(String postId) async {
+    try {
+      await _db.collection(_collection).doc(postId).delete();
+      if (kDebugMode) print("🗑️ Post deleted successfully");
+    } catch (e) {
+      if (kDebugMode) print("❌ Error deleting post: $e");
+      rethrow;
+    }
+  }
+
+  /// 🔄 পিন আপডেট করা (Live Status)
+  static Future<void> updatePostStatus(String postId, bool isLive) async {
+    try {
+      await _db.collection(_collection).doc(postId).update({
+        'isLive': isLive,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (kDebugMode) print("🔄 Post status updated to: $isLive");
+    } catch (e) {
+      if (kDebugMode) print("❌ Error updating status: $e");
+      rethrow;
+    }
   }
 }

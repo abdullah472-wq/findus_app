@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -58,8 +61,8 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
   bool _isUploadingImage = false;
   bool _isSaving = false;
   bool _isLoading = true;
-  final bool _isUploadingCv = false;
-  final bool _isUploadingPortfolio = false;
+  bool _isUploadingCv = false;
+  bool _isUploadingPortfolio = false;
   String? _cvUrl;
   List<String> _portfolioUrls = [];
   TimeOfDay? _workStartTime;
@@ -357,8 +360,142 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
   }
 
   // --- CV & Portfolio upload logic (shortened for brevity, same as before) ---
-  Future<void> _pickAndUploadCv() async { /* ... same logic ... */ }
-  Future<void> _pickAndUploadPortfolio() async { /* ... same logic ... */ }
+  Future<void> _pickAndUploadCv() async {
+    if (_isUploadingCv) return;
+
+    try {
+      // ১. ফাইল পিকার ওপেন করা
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+        withData: true, // বাইটস রিড করার জন্য
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      setState(() => _isUploadingCv = true);
+
+      final file = result.files.single;
+
+      // ✅ XFile এ কনভার্ট করা (কারণ CloudinaryService XFile সাপোর্ট করে)
+      // অথবা সরাসরি বাইটস আপলোড করা
+
+      // আমরা এখানে CloudinaryService ব্যবহার না করে সরাসরি http ব্যবহার করছি
+      // কারণ PDF/Doc 'image' টাইপ নয়, 'raw' টাইপ হিসেবে আপলোড করতে হয়।
+
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/${CloudinaryService.cloudName}/raw/upload',
+      );
+
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['upload_preset'] = CloudinaryService.uploadPreset
+        ..fields['folder'] = 'findus/cv';
+
+      if (file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            file.bytes!,
+            filename: file.name,
+          ),
+        );
+      } else if (file.path != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'file',
+            file.path!,
+            filename: file.name,
+          ),
+        );
+      } else {
+        throw Exception("File data not found");
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 200) {
+        throw Exception("Upload failed: ${response.body}");
+      }
+
+      final data = jsonDecode(response.body);
+      final url = data['secure_url'];
+
+      if (url != null) {
+        await FirebaseFirestore.instance.collection('users').doc(widget.uid).set({
+          'cvUrl': url,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        if (mounted) {
+          setState(() => _cvUrl = url);
+          _showError("CV uploaded successfully!"); // Success message (Error method used for simplicity)
+        }
+      }
+    } catch (e) {
+      _showError("CV Upload Failed: $e");
+    } finally {
+      if (mounted) setState(() => _isUploadingCv = false);
+    }
+  }
+  Future<void> _pickAndUploadPortfolio() async {
+    if (_isUploadingPortfolio) return;
+
+    try {
+      // ১. মাল্টিপল ইমেজ সিলেক্ট করা
+      final List<XFile> files = await _picker.pickMultiImage(
+        imageQuality: 80, // কম্প্রেস করা ভালো
+      );
+
+      if (files.isEmpty) return;
+
+      setState(() => _isUploadingPortfolio = true);
+
+      final List<String> newUrls = [];
+
+      // ২. লুপ চালিয়ে আপলোড করা
+      for (final file in files) {
+        try {
+          final uploaded = await CloudinaryService.uploadXFile(
+            file,
+            folder: 'findus/portfolio',
+            resourceType: 'image',
+            tags: const ['portfolio'],
+          );
+
+          final url = uploaded['secure_url']?.toString();
+          if (url != null && url.isNotEmpty) {
+            newUrls.add(url);
+          }
+        } catch (e) {
+          debugPrint("Single file upload failed: $e");
+        }
+      }
+
+      if (newUrls.isEmpty) throw Exception('No images uploaded');
+
+      // ৩. ফায়ারস্টোরে আপডেট করা (আগের গুলোর সাথে নতুনগুলো যোগ করা)
+      // আমরা arrayUnion ব্যবহার করব যাতে আগের ডাটা মুছে না যায়
+      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
+        'portfolioUrls': FieldValue.arrayUnion(newUrls),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        setState(() {
+          _portfolioUrls.addAll(newUrls);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("${newUrls.length} images added to portfolio"), backgroundColor: Colors.green),
+        );
+      }
+
+    } catch (e) {
+      _showError('Portfolio upload failed: $e');
+    } finally {
+      if (mounted) setState(() => _isUploadingPortfolio = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

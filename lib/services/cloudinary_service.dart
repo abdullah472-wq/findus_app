@@ -6,9 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 class CloudinaryService {
-  /// নিজের Cloudinary তথ্য বসান
+  /// 🔹 আপনার Cloudinary তথ্য
   static const String cloudName = 'dlwkqyh1a';
-  static const String uploadPreset = 'ml_default';
+
+  /// ⚠️ নিশ্চিত করুন আপনার Cloudinary Dashboard > Settings > Upload > Upload presets
+  /// এখানে একটি 'Unsigned' প্রিসেট তৈরি করা আছে এবং সেটির নাম নিচে দিন।
+  static const String uploadPreset = 'findus_unsigned';
 
   static Uri _uploadUri(String resourceType) {
     return Uri.parse(
@@ -17,13 +20,13 @@ class CloudinaryService {
   }
 
   static void _ensureConfigured() {
-    if (cloudName == 'dlwkqyh1a' || uploadPreset == 'ml_default') {
-      throw Exception('Cloudinary cloudName/uploadPreset সেট করা নেই');
+    // 🛑 ফিক্স: আগের কোডে নিজের নাম থাকলেই এরর দিচ্ছিল, সেটা বাদ দেওয়া হয়েছে।
+    if (cloudName.isEmpty || uploadPreset.isEmpty) {
+      throw Exception('Cloudinary cloudName অথবা uploadPreset সেট করা নেই!');
     }
   }
 
   static String _basename(String path) {
-    // Windows + Unix path দুটোই হ্যান্ডেল
     final normalized = path.replaceAll('\\', '/');
     final parts = normalized.split('/');
     final last = parts.isNotEmpty ? parts.last : '';
@@ -70,7 +73,6 @@ class CloudinaryService {
         String publicId = '',
         List<String> tags = const [],
       }) async {
-    // XFile দিলে uploadFile() দিয়েই করে দিচ্ছি
     return uploadFile(
       file,
       folder: folder,
@@ -80,20 +82,14 @@ class CloudinaryService {
     );
   }
 
-  /// ✅ পুরোনো কলগুলো ঠিক রাখার জন্য uploadFile() আবার যোগ করা হলো
-  ///
-  /// আপনি এখানে `File`, `XFile`, বা এমন অবজেক্ট পাঠাতে পারবেন যার
-  /// - `path` আছে (মোবাইল), অথবা
-  /// - `readAsBytes()` আছে (ওয়েব/মোবাইল)
-  ///
-  /// ফলে `dart:io` ইমপোর্ট লাগবে না, কিন্তু মোবাইলে `File` দিয়েও কাজ করবে।
+  /// ✅ ফাইল আপলোড হ্যান্ডলার (File, XFile, বা Path অবজেক্ট)
   static Future<Map<String, dynamic>> uploadFile(
       Object file, {
         String folder = '',
         String resourceType = 'image',
         String publicId = '',
         List<String> tags = const [],
-        String? fileName, // bytes path না পেলে কাজে লাগবে
+        String? fileName,
       }) async {
     _ensureConfigured();
 
@@ -134,11 +130,9 @@ class CloudinaryService {
 
     // ---------- ওয়েবে path-based upload চলবে না ----------
     if (kIsWeb) {
-      // যদি ফাইলের readAsBytes() থাকে, সেটাই ব্যবহার করব
       try {
         final Uint8List bytes = await (file as dynamic).readAsBytes() as Uint8List;
 
-        // fileName বের করার চেষ্টা
         String inferredName = fileName ?? 'upload.bin';
         try {
           final n = (file as dynamic).name;
@@ -159,7 +153,6 @@ class CloudinaryService {
     }
 
     // ---------- Mobile: File বা path-ওয়ালা অবজেক্ট ----------
-    // এখানে আমরা dart:io File টাইপ ব্যবহার করছি না; dynamic দিয়ে path/readAsBytes নেয়া হবে
     String? path;
     try {
       path = (file as dynamic).path?.toString();

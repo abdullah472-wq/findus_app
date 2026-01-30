@@ -262,7 +262,14 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      bottomNavigationBar: (!widget.isOwner) ? SafeArea(top: false, child: _buildVisitorActionBar(isDark)) : null,
+      bottomNavigationBar: (!widget.isOwner)
+          ? SafeArea(
+        child: Padding( // প্যাডিং যোগ করা হলো যাতে একদম নিচে লেগে না থাকে
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: _buildVisitorActionBar(isDark),
+        ),
+      )
+          : null,
       body: Builder(
         builder: (ctx) {
           final bool shouldShowBack = widget.showBack ?? Navigator.of(ctx).canPop();
@@ -277,7 +284,14 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
             // ✅ অ্যাপ বার বাটনগুলোর সাইজ সমান করা হয়েছে
             actions: widget.isOwner
                 ? [
-              _buildActionButton(Icons.notifications_none_rounded, 'Notifications', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())), isDark),
+              _buildActionButton(
+                Icons.notifications_none_rounded,
+                'Notifications',
+                    () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
+                isDark,
+                showBadge: true, // ✅ নতুন প্যারামিটার
+                badgeCount: _unreadNotifCount, // ✅ লাইভ কাউন্ট
+              ),
               _buildActionButton(Icons.groups_outlined, 'Team', () => _isBusinessUser ? Navigator.push(context, MaterialPageRoute(builder: (_) => TeamManagementScreen(userId: widget.uid))) : _showUpgradeToBusinessPopup(), isDark),
               _buildActionButton(Icons.settings_outlined, 'Settings', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())), isDark),
               _buildMenuButton(subscriptionType, isDark),
@@ -404,20 +418,41 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // --- Action Buttons (Equal Size) ---
-  Widget _buildActionButton(IconData icon, String tooltip, VoidCallback onPressed, bool isDark) {
+  // এই মেথডটি আপডেট করুন
+  Widget _buildActionButton(IconData icon, String tooltip, VoidCallback onPressed, bool isDark, {bool showBadge = false, int badgeCount = 0}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
-      width: 40, height: 40, // ✅ সমান সাইজ ফিক্স
+      width: 40,
+      height: 40,
       decoration: BoxDecoration(
         color: isDark ? Colors.white10 : Colors.white.withOpacity(0.7),
         shape: BoxShape.circle,
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
-      child: IconButton(
-        icon: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black),
-        onPressed: onPressed,
-        padding: EdgeInsets.zero,
-        tooltip: tooltip,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          IconButton(
+            icon: Icon(icon, size: 20, color: isDark ? Colors.white : Colors.black),
+            onPressed: onPressed,
+            padding: EdgeInsets.zero,
+            tooltip: tooltip,
+          ),
+          if (showBadge && badgeCount > 0)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: isDark ? const Color(0xFF2C2C2C) : Colors.white, width: 1.5),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -479,7 +514,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     final priceLabel = _getSafeString(userData['priceText'], defaultValue: 'Negotiable');
     final timeLabel = _getSafeString(userData['availability'], defaultValue: 'Not Set');
     final cvUrl = userData['cvUrl']?.toString() ?? '';
-    final portfolioUrls = (userData['portfolioUrls'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final List<String> portfolioUrls = (userData['portfolioUrls'] as List?)
+        ?.map((e) => e.toString()) // সব এলিমেন্টকে স্ট্রিং এ কনভার্ট
+        .where((e) => e.isNotEmpty) // খালি স্ট্রিং বাদ দিন
+        .toList() ?? [];
 
     return _section('Work Information', Column(children: [
       _infoTile(Icons.work, 'Experience', expLabel, isDark),
@@ -653,21 +691,41 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent, // ট্রান্সপারেন্ট যাতে কার্ড সুন্দর দেখায়
+      backgroundColor: Colors.transparent,
       builder: (ctx) => Center(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
-          child: UniversalWorkerCard(
-            id: widget.uid,
-            // ✅ Safe String Conversion
-            name: (userData['name'] ?? 'User').toString(),
-            role: _isWorkerRole() ? "Worker" : "Supporter",
-            imageUrl: (userData['image'] ?? '').toString(),
-            address: (userData['location'] ?? 'Location not set').toString(),
-            rating: (userData['rating'] ?? 0).toString(),
-            completed: "0",
-            reviews: "0",
-            price: "Negotiable", // ডিফল্ট ভ্যালু
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              UniversalWorkerCard(
+                // ✅ Null Safety Added Here
+                id: widget.uid,
+                name: (userData['name'] ?? 'User').toString(),
+                role: _isWorkerRole() ? "Worker" : "Supporter",
+                imageUrl: (userData['image'] ?? '').toString(),
+                address: (userData['location'] ?? 'Location not set').toString(),
+
+                // ✅ Numeric values converted safely
+                rating: (userData['rating'] ?? 0).toString(),
+                completed: (userData['completedCount'] ?? 0).toString(),
+                reviews: (userData['reviewsCount'] ?? 0).toString(),
+
+                price: (userData['priceText'] ?? userData['priceLabel'] ?? 'Negotiable').toString(),
+                isVerifiedWorker: userData['kyc_completed'] == true,
+
+                // Optional: Prevent tap action in preview
+                onTap: () {},
+              ),
+              const SizedBox(height: 20),
+              CircleAvatar(
+                backgroundColor: Colors.white,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.black),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -757,7 +815,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         final d = doc.data() as Map<String, dynamic>; // ✅ Cast to Map
 
         return SizedBox(
-          height: 200,
+          height: 288,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,6 +853,7 @@ class _PortfolioViewer extends StatefulWidget {
   final List<String> urls;
   final int initialIndex;
   const _PortfolioViewer({required this.urls, this.initialIndex = 0});
+
   @override
   State<_PortfolioViewer> createState() => _PortfolioViewerState();
 }
@@ -802,18 +861,45 @@ class _PortfolioViewer extends StatefulWidget {
 class _PortfolioViewerState extends State<_PortfolioViewer> {
   late PageController _pageController;
   late int _index;
+
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
     _pageController = PageController(initialPage: _index);
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.transparent, iconTheme: const IconThemeData(color: Colors.white), title: Text('${_index + 1}/${widget.urls.length}', style: const TextStyle(color: Colors.white))),
-      body: PageView.builder(controller: _pageController, itemCount: widget.urls.length, onPageChanged: (i) => setState(() => _index = i), itemBuilder: (ctx, i) => Center(child: CachedNetworkImage(imageUrl: widget.urls[i]))),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text('${_index + 1}/${widget.urls.length}', style: const TextStyle(color: Colors.white)),
+      ),
+      body: PageView.builder(
+        controller: _pageController,
+        itemCount: widget.urls.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (ctx, i) {
+          return Center(
+            child: CachedNetworkImage(
+              imageUrl: widget.urls[i],
+              fit: BoxFit.contain, // ✅ ইমেজ যেন পুরোটা দেখা যায়
+              placeholder: (context, url) => const CircularProgressIndicator(color: Colors.white),
+              errorWidget: (context, url, error) => const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.broken_image, color: Colors.white, size: 50),
+                  SizedBox(height: 10),
+                  Text("Failed to load image", style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

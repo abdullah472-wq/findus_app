@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math'; // pi এর জন্য
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lottie/lottie.dart' hide Marker;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ Welcome logic এর জন্য
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -30,7 +31,7 @@ import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
 import 'package:findus_app/screens/profile/earn_post_screen.dart';
 import 'package:findus_app/screens/profile/support_post_screen.dart';
 import 'package:findus_app/screens/explore/responsive_worker_pin.dart';
-import 'package:findus_app/screens/explore/notifications_page.dart'; // ✅ Correct Import
+import 'package:findus_app/screens/explore/notifications_page.dart';
 import '../auth/login_screen.dart';
 import '../emergency_screen.dart';
 import 'profile_sidebar_menu.dart';
@@ -59,7 +60,6 @@ class _ExploreScreenState extends State<ExploreScreen>
   List<Map<String, dynamic>> _searchSuggestions = [];
   Timer? _suggestDebounce;
 
-  late AnimationController _shakeController;
   bool _hasUnreadNotifs = false;
 
   static bool _hasInitialZoomHappened = false;
@@ -89,6 +89,8 @@ class _ExploreScreenState extends State<ExploreScreen>
   Set<String> _blockedUserIds = {};
   StreamSubscription<List<Map<String, dynamic>>>? _postsSub;
 
+  StreamSubscription? _notifSub;
+
   @override
   void initState() {
     super.initState();
@@ -106,10 +108,12 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     _loadUserRole();
     _loadBlockedUsers();
-    _checkNotifications();
 
-    _shakeController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
-    if (_hasUnreadNotifs) _shakeController.repeat(reverse: true);
+    // ✅ Welcome Notification Logic
+    _handleWelcomeLogic();
+
+    // ✅ 2. Listener Called
+    _listenToNotifications();
 
     _isSearchingLocation = true;
 
@@ -123,14 +127,63 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   @override
   void dispose() {
-    _shakeController.dispose();
     _locationSearchController.dispose();
     _mainSearchController.dispose();
     _searchFocusNode.dispose();
     _postsSub?.cancel();
+    _notifSub?.cancel(); // ✅ Dispose Notification Listener
     _suggestDebounce?.cancel();
     super.dispose();
   }
+
+  // ✅ Welcome Notification Logic
+  Future<void> _handleWelcomeLogic() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'welcome_sent_${user.uid}';
+    final hasSentWelcome = prefs.getBool(key) ?? false;
+
+    if (!hasSentWelcome) {
+      await NotificationService.sendNotificationToUser(
+        toUserId: user.uid,
+        title: "Welcome to FindUs! 🎉",
+        body: "Need help getting started? Tap here to visit our Help Center.",
+        type: "help_center",
+        data: {},
+      );
+      await prefs.setBool(key, true);
+    }
+  }
+
+  // ✅ Notification Listener (Realtime)
+  void _listenToNotifications() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    _notifSub?.cancel();
+
+    _notifSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('notifications')
+        .where('read', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifs = snapshot.docs.isNotEmpty;
+        });
+      }
+    });
+  }
+
+  void _showNotificationPanel() {
+    // Shake logic removed
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+  }
+
 
   Future<void> _loadBlockedUsers() async {
     final users = await BlockedUserService().getBlockedUsers();
@@ -153,43 +206,50 @@ class _ExploreScreenState extends State<ExploreScreen>
     }
   }
 
-  List<Map<String, dynamic>> _buildDemoPins() {
-    // Demo pins logic same as before (removed for brevity)
-    return []; // Replace with your actual demo data generation logic if needed
-  }
-
   void _listenToPosts() {
     _postsSub?.cancel();
-    final viewerRole = _isWorker ? 'finder' : 'maker';
-
-    _postsSub = PostService.streamPinsForViewerRole(viewerRole).listen((posts) {
+    _postsSub = PostService.streamPins().listen((posts) {
       if (!mounted) return;
-      // final demoPins = _buildDemoPins(); // Uncomment if needed
-      final all = <Map<String, dynamic>>[];
-      // all.addAll(demoPins);
-      all.addAll(posts);
+      final all = posts.map((post) {
+        double lat = 0.0;
+        double lng = 0.0;
+        if (post['latitude'] != null) {
+          lat = (post['latitude'] as num).toDouble();
+        }
+        if (post['longitude'] != null) {
+          lng = (post['longitude'] as num).toDouble();
+        }
+        return {
+          ...post,
+          'location': LatLng(lat, lng),
+        };
+      }).toList();
 
       setState(() {
         _allWorkers = all;
         _filteredWorkers = List.from(_allWorkers);
       });
+    }, onError: (error) {
+      debugPrint("❌ Error in streamPins: $error");
     });
   }
 
-  void _checkNotifications() {
-    bool hasUnread = DummyData.notifications.any((n) => n['read'] == false);
-    setState(() => _hasUnreadNotifs = hasUnread);
-  }
+  // ExploreScreen এর initState বা _checkLocationOnly মেথডে:
 
   Future<void> _checkLocationOnly() async {
+    // ১. সেটিংস চেক করা
+    final prefs = await SharedPreferences.getInstance();
+    final isLocationEnabledInSettings = prefs.getBool('settings_location_enabled') ?? true;
+
+    if (!isLocationEnabledInSettings) {
+      // যদি সেটিংসে অফ থাকে, তাহলে লোকেশন নেবে না
+      return;
+    }
+
+    // ২. বাকি কোড (Geolocator...)
     try {
       Position p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      if (mounted) {
-        setState(() {
-          _userCurrentLocation = LatLng(p.latitude, p.longitude);
-          _currentZoom = 15.0;
-        });
-      }
+      // ...
     } catch (_) {}
   }
 
@@ -281,9 +341,92 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   void _resetNorth() => _animateMapRotationTo(0);
 
-  void _zoomToUser() {
-    if (_userCurrentLocation != null) _animateMapMove(_userCurrentLocation!, 16.0, const Duration(milliseconds: 400));
+  // ✅ এই ফাংশনটি আপডেট করা হয়েছে
+  Future<void> _zoomToUser() async {
+    // ১. চেক করুন লোকেশন সার্ভিস (GPS) অন আছে কি না
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      if (!mounted) return;
+      _showLocationServiceDialog(); // 🛑 পপ-আপ দেখাবে
+      return;
+    }
+
+    // ২. পারমিশন চেক
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      // পারমিশন পারমানেন্টলি ডিনাইড হলে সেটিংসে যাওয়ার ডায়ালগ দেখাতে পারেন
+      return;
+    }
+
+    // ৩. লোকেশন অন থাকলে পজিশন নিয়ে জুম করবে
+    try {
+      Position p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      if (mounted) {
+        setState(() {
+          _userCurrentLocation = LatLng(p.latitude, p.longitude);
+        });
+        _animateMapMove(_userCurrentLocation!, 16.0, const Duration(milliseconds: 400));
+      }
+    } catch (e) {
+      debugPrint("Error getting location: $e");
+    }
   }
+
+  // ✅ নতুন ডায়ালগ ফাংশন (GPS অফ থাকলে কল হবে)
+  void _showLocationServiceDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: Row(
+          children: [
+            const Icon(Icons.location_off_rounded, color: Colors.redAccent),
+            const SizedBox(width: 10),
+            Text(
+                "Location Disabled",
+                style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18
+                )
+            ),
+          ],
+        ),
+        content: Text(
+          "Please enable location services to find your position on the map.",
+          style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Geolocator.openLocationSettings(); // ⚙️ সরাসরি লোকেশন সেটিংসে নিয়ে যাবে
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandMain,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text("ENABLE NOW"),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   double? _getDistanceKm(LatLng workerLocation) {
     if (_userCurrentLocation == null) return null;
@@ -306,7 +449,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
       final suggestions = _allWorkers.where((item) {
         final name = (item['name'] ?? '').toString().toLowerCase();
-        final role = (item['role'] ?? '').toString().toLowerCase();
+        final role = (item['roleLabel'] ?? item['role'] ?? '').toString().toLowerCase();
         final address = (item['address'] ?? '').toString().toLowerCase();
         return name.contains(q) || role.contains(q) || address.contains(q);
       }).take(6).toList();
@@ -321,10 +464,10 @@ class _ExploreScreenState extends State<ExploreScreen>
   Worker _mapDataToWorker(Map<String, dynamic> data) {
     final String uid = (data['ownerId'] ?? data['uid'] ?? data['userId'] ?? data['id'] ?? '').toString().trim();
     String userRole = 'finder';
-    if (data['userRole'] != null) {
+    if (data['ownerRole'] != null) {
+      userRole = data['ownerRole'].toString();
+    } else if (data['userRole'] != null) {
       userRole = data['userRole'].toString();
-    } else if (data['type'] != null) {
-      userRole = data['type'].toString();
     }
 
     String priceText = 'Negotiable';
@@ -349,11 +492,11 @@ class _ExploreScreenState extends State<ExploreScreen>
     return Worker(
       uid: uid,
       postId: data['id']?.toString(),
-      name: (data['name'] ?? 'Unknown').toString(),
+      name: (data['title'] ?? data['name'] ?? 'Unknown').toString(),
       userRole: userRole,
       image: (data['image'] ?? '').toString(),
       location: (data['address'] ?? 'Bangladesh').toString(),
-      priceText: priceText,
+      priceText: (data['priceLabel'] ?? priceText).toString(),
       price: price,
       rating: rating,
       kycCompleted: data['verified'] == true,
@@ -368,44 +511,9 @@ class _ExploreScreenState extends State<ExploreScreen>
     );
   }
 
-  void _showNotificationPanel() {
-    setState(() {
-      _hasUnreadNotifs = false;
-      _shakeController.stop();
-      _shakeController.reset();
-    });
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
-  }
-
-  Future<void> _sendProfileViewNotification(Map<String, dynamic> data) async {
-    try {
-      final postId = data['id']?.toString() ?? '';
-      if (postId.isEmpty || postId.startsWith('demo_')) return;
-      final doc = await FirebaseFirestore.instance.collection('posts').doc(postId).get();
-      if (!doc.exists) return;
-      final postData = doc.data()!;
-      final ownerId = postData['ownerId']?.toString();
-      if (ownerId == null || ownerId.isEmpty) return;
-      final currentUid = FirebaseAuth.instance.currentUser?.uid;
-      if (currentUid != null && currentUid == ownerId) return;
-
-      final title = postData['title']?.toString() ?? 'Your post';
-      final roleLabel = postData['roleLabel']?.toString();
-
-      await NotificationService.sendNotificationToUser(
-        toUserId: ownerId,
-        title: "Your post was viewed",
-        body: 'Someone viewed your job/post “$title”.',
-        type: 'profile_view',
-        relatedPostId: postId,
-        data: {'roleLabel': roleLabel, 'viewerRole': _isWorker ? 'finder' : 'maker', 'source': 'map_pin'},
-      );
-    } catch (_) {}
-  }
-
+  // ... _showProfilePopup, _geocodeLocation, etc. (They remain same)
   void _showProfilePopup(Map<String, dynamic> data) async {
     final workerModel = _mapDataToWorker(data);
-    _sendProfileViewNotification(data);
     await showWorkerProfileBottomSheet(
       context: context,
       data: data,
@@ -515,9 +623,9 @@ class _ExploreScreenState extends State<ExploreScreen>
       final locationText = _locationSearchController.text.toLowerCase().trim();
 
       List<Map<String, dynamic>> results = _allWorkers.where((worker) {
-        final name = worker['name'].toString().toLowerCase();
-        final role = worker['role'].toString().toLowerCase();
-        final address = worker['address'].toString().toLowerCase();
+        final name = (worker['title'] ?? worker['name'] ?? '').toString().toLowerCase();
+        final role = (worker['roleLabel'] ?? worker['role'] ?? '').toString().toLowerCase();
+        final address = (worker['address'] ?? '').toString().toLowerCase();
 
         final matchesMainQuery = searchTextLower.isEmpty || name.contains(searchTextLower) || role.contains(searchTextLower) || address.contains(searchTextLower);
         final matchesLocationQuery = locationText.isEmpty || address.contains(locationText) || name.contains(locationText);
@@ -589,7 +697,6 @@ class _ExploreScreenState extends State<ExploreScreen>
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.findus.app',
-                // ✅ ডার্ক মোডে ম্যাপ টাইলস কালচে করা হয়েছে
                 tileBuilder: isDark ? (context, widget, tile) {
                   return ColorFiltered(
                     colorFilter: const ColorFilter.matrix([
@@ -604,9 +711,12 @@ class _ExploreScreenState extends State<ExploreScreen>
               ),
               MarkerLayer(
                 markers: _filteredWorkers
-                    .where((data) => !_blockedUserIds.contains((data['id'] ?? data['name']).toString()))
+                    .where((data) => !_blockedUserIds.contains((data['id'] ?? data['ownerId']).toString()))
                     .map((data) {
-                  final LatLng workerLoc = data['location'] as LatLng;
+                  final LatLng workerLoc = data['location'] is LatLng
+                      ? data['location']
+                      : const LatLng(23.8103, 90.4125); // Safe fallback
+
                   return Marker(
                     point: workerLoc,
                     width: 120,
@@ -615,8 +725,8 @@ class _ExploreScreenState extends State<ExploreScreen>
                     child: GestureDetector(
                       onTap: () => _showProfilePopup(data),
                       child: ResponsiveWorkerPin(
-                        role: data['role'],
-                        price: data['price'],
+                        role: (data['roleLabel'] ?? data['role'] ?? 'Worker').toString(),
+                        price: data['priceLabel']?.toString() ?? data['price']?.toString() ?? 'Negotiable',
                         isLive: data['isLive'] ?? false,
                         currentZoom: _currentZoom,
                         distanceKm: _getDistanceKm(workerLoc),
@@ -792,13 +902,13 @@ class _ExploreScreenState extends State<ExploreScreen>
                                 child: item['image'] == null ? Icon(Icons.person, color: Colors.grey.shade400) : null,
                               ),
                               title: Text(
-                                item['name']?.toString() ?? '',
+                                item['title']?.toString() ?? item['name']?.toString() ?? '',
                                 style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(
-                                item['role']?.toString() ?? '',
+                                item['roleLabel']?.toString() ?? item['role']?.toString() ?? '',
                                 style: TextStyle(fontSize: 12, color: isDark ? Colors.grey : Colors.grey.shade600),
                               ),
                               trailing: Text(
@@ -806,7 +916,7 @@ class _ExploreScreenState extends State<ExploreScreen>
                                 style: const TextStyle(fontSize: 12, color: AppColors.brandMain, fontWeight: FontWeight.w600),
                               ),
                               onTap: () {
-                                final name = item['name']?.toString() ?? '';
+                                final name = item['title']?.toString() ?? item['name']?.toString() ?? '';
                                 setState(() {
                                   _mainSearchController.text = name;
                                   _showSuggestions = false;
@@ -830,40 +940,44 @@ class _ExploreScreenState extends State<ExploreScreen>
               right: 15,
               child: Column(
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      GestureDetector(
-                        onTap: _showNotificationPanel,
-                        child: RotationTransition(
-                          turns: Tween(begin: -0.05, end: 0.05).animate(_shakeController),
-                          child: Container(
-                            width: 45,
-                            height: 45,
-                            decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)]
-                            ),
-                            child: const Icon(Icons.notifications, color: Colors.redAccent),
-                          ),
-                        ),
-                      ),
-                      if (_hasUnreadNotifs)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: AppColors.brandMain,
+                  GestureDetector(
+                    onTap: _showNotificationPanel,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 45,
+                          height: 45,
+                          decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
+                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)]
+                          ),
+                          child: Icon(
+                            Icons.notifications_outlined,
+                            color: isDark ? Colors.white : Colors.black87,
+                            size: 26,
                           ),
                         ),
-                    ],
+                        if (_hasUnreadNotifs)
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+                                    width: 2
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 15),
                   _mapBtn(Icons.tune, AppColors.brandDark, _showFilterPanel, isDark),

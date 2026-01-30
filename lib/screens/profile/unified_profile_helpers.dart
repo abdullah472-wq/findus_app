@@ -18,14 +18,16 @@ mixin UnifiedProfileHelpers {
   }
 
   Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
     try {
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url));
+      // সরাসরি লঞ্চ করার চেষ্টা করুন
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw 'Could not launch $url';
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('লিংক খোলা যায়নি: $e')),
-      );
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot open link')));
+      }
     }
   }
 

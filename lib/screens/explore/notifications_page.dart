@@ -7,6 +7,7 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import '../auth/log_in_chacker_screen.dart';
+import 'package:findus_app/screens/settings/help_center_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -18,20 +19,21 @@ class NotificationScreen extends StatefulWidget {
 class _NotificationScreenState extends State<NotificationScreen> {
   final String _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  void _showAdminNoticeDialog(String title, String body) {
+  void _showAdminNoticeDialog(String title, String body, bool isDark) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             const Icon(Icons.admin_panel_settings_rounded, color: AppColors.brandMain),
             const SizedBox(width: 10),
-            Expanded(child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            Expanded(child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black))),
           ],
         ),
         content: SingleChildScrollView(
-          child: Text(body, style: const TextStyle(fontSize: 15, height: 1.5)),
+          child: Text(body, style: TextStyle(fontSize: 15, height: 1.5, color: isDark ? Colors.white70 : Colors.black87)),
         ),
         actions: [
           SizedBox(
@@ -39,8 +41,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
             child: ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.shade200,
-                foregroundColor: Colors.black,
+                backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                foregroundColor: isDark ? Colors.white : Colors.black,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
@@ -64,18 +66,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ১. লগইন না থাকলে সুন্দর লগইন পেজ দেখাবে
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+
     if (_uid.isEmpty) {
       return const ProfileNotLoggedIn(
         title: "Notifications",
-        showBackButton: true, // যেহেতু এটি আলাদা স্ক্রিন, ব্যাক বাটন দরকার
+        showBackButton: true,
       );
     }
 
-    // ✅ ২. লগইন থাকলে নোটিফিকেশন লিস্ট দেখাবে
     return FloatingScaffold(
       title: "NOTIFICATIONS",
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -93,7 +99,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(isDark);
           }
 
           final docs = snapshot.data!.docs;
@@ -107,7 +113,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
             itemBuilder: (ctx, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               final notifId = docs[index].id;
-              return _buildNotificationItem(data, notifId);
+              return _buildNotificationItem(data, notifId, isDark);
             },
           );
         },
@@ -115,18 +121,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark) {
     return SizedBox(
       height: MediaQuery.of(context).size.height * 0.6,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.notifications_off_outlined, size: 80, color: Colors.grey.shade300),
+            Icon(Icons.notifications_off_outlined, size: 80, color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               "No notifications yet",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.grey.shade500 : Colors.grey),
             ),
           ],
         ),
@@ -134,7 +140,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
-  Widget _buildNotificationItem(Map<String, dynamic> data, String id) {
+  Widget _buildNotificationItem(Map<String, dynamic> data, String id, bool isDark) {
     final title = data['title'] ?? 'New Notification';
     final body = data['body'] ?? '';
     final type = data['type'] ?? 'info';
@@ -145,6 +151,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     IconData icon = Icons.notifications;
     Color iconColor = AppColors.brandMain;
 
+    // ✅ আইকন লজিক আপডেট করা হয়েছে
     if (type == 'admin') {
       icon = Icons.admin_panel_settings;
       iconColor = Colors.redAccent;
@@ -154,7 +161,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
     } else if (type == 'message') {
       icon = Icons.chat_bubble;
       iconColor = Colors.blue;
+    } else if (type == 'help_center') { // ✅ Welcome Notification Icon
+      icon = Icons.support_agent;
+      iconColor = Colors.purpleAccent;
+    } else if (type == 'profile_view') {
+      icon = Icons.visibility;
+      iconColor = Colors.teal;
     }
+
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final readColor = isDark ? const Color(0xFF1E1E1E) : Colors.blue.withOpacity(0.05);
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
 
     return Dismissible(
       key: Key(id),
@@ -178,12 +196,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
       },
       child: InkWell(
         onTap: () {
+          // ✅ Action Logic Updated
           if (type == 'admin') {
-            _showAdminNoticeDialog(title, body);
+            _showAdminNoticeDialog(title, body, isDark);
+          } else if (type == 'help_center') {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen())); // ✅ Navigate to Help
           } else if (senderId.isNotEmpty) {
             _navigateToSenderProfile(senderId);
           }
 
+          // Mark as Read
           if (!isRead) {
             FirebaseFirestore.instance
                 .collection('users')
@@ -197,14 +219,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isRead ? Colors.white : Colors.blue.withOpacity(0.05),
+            color: isRead ? cardColor : readColor,
             borderRadius: BorderRadius.circular(16),
             border: isRead
                 ? Border.all(color: Colors.transparent)
                 : Border.all(color: AppColors.brandMain.withOpacity(0.3)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.03), // ✅ Dark Shadow Fixed
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               )
@@ -235,7 +257,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: isRead ? FontWeight.w600 : FontWeight.bold,
-                              color: Colors.black87,
+                              color: textColor,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -244,14 +266,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         if (ts != null)
                           Text(
                             _formatTime(ts),
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade500 : Colors.grey.shade600),
                           ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       body,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.4),
+                      style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -30,7 +30,7 @@ class _ReportScreenState extends State<ReportScreen> {
   void _submitReport() {
     if (!_formKey.currentState!.validate()) return;
 
-    // TODO: এখানে backend এ report পাঠাবে (API call)
+    // TODO: Backend integration (API call)
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Report submitted successfully."),
@@ -43,12 +43,21 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ ডার্ক মোড চেক
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final hintColor = isDark ? Colors.grey : Colors.grey.shade400;
+
     return FloatingScaffold(
       title: "REPORT A PROBLEM",
-      backgroundColor: AppColors.bgBlue,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       showBack: true,
       scrollable: true,
-      bodyPadding: const EdgeInsets.fromLTRB(16, 10, 16, 100), // নিচে স্পেস রাখা হয়েছে বাটনের জন্য
+      bodyPadding: const EdgeInsets.fromLTRB(16, 10, 16, 100),
       body: Form(
         key: _formKey,
         child: Column(
@@ -62,14 +71,14 @@ class _ReportScreenState extends State<ReportScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.blue.withOpacity(0.2)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                  SizedBox(width: 10),
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       "Please describe your issue in detail. Our support team will review it shortly.",
-                      style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.blueGrey),
                     ),
                   ),
                 ],
@@ -77,13 +86,13 @@ class _ReportScreenState extends State<ReportScreen> {
             ),
             const SizedBox(height: 20),
 
-            _buildLabel("Report Type"),
+            _buildLabel("Report Type", textColor),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade300),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.02),
@@ -96,6 +105,8 @@ class _ReportScreenState extends State<ReportScreen> {
                 child: DropdownButton<String>(
                   value: _reportType,
                   isExpanded: true,
+                  dropdownColor: cardColor,
+                  style: TextStyle(color: textColor, fontSize: 15),
                   icon: const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.brandMain),
                   items: const [
                     DropdownMenuItem(value: 'Worker issue', child: Text('Worker issue')),
@@ -114,21 +125,29 @@ class _ReportScreenState extends State<ReportScreen> {
 
             const SizedBox(height: 20),
 
-            _buildLabel("Related Info (Optional)"),
+            _buildLabel("Related Info (Optional)", textColor),
             _buildTextField(
               controller: _relatedInfoController,
               hint: "e.g. Worker name, Job ID, Date...",
               icon: Icons.info_outline,
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              hintColor: hintColor,
             ),
 
             const SizedBox(height: 20),
 
-            _buildLabel("Description"),
+            _buildLabel("Description", textColor),
             _buildTextField(
               controller: _descriptionController,
               hint: "Please explain what happened...",
               maxLines: 5,
               isRequired: true,
+              isDark: isDark,
+              cardColor: cardColor,
+              textColor: textColor,
+              hintColor: hintColor,
             ),
 
             const SizedBox(height: 25),
@@ -136,20 +155,20 @@ class _ReportScreenState extends State<ReportScreen> {
             // কন্টাক্ট টগল
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade200),
               ),
               child: SwitchListTile(
                 value: _includeContact,
-                activeThumbColor: AppColors.brandMain,
-                title: const Text(
+                activeColor: AppColors.brandMain,
+                title: Text(
                   "Include Contact Details",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   "Allow support team to contact you",
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.grey : Colors.grey.shade600),
                 ),
                 onChanged: (val) => setState(() => _includeContact = val),
               ),
@@ -161,6 +180,10 @@ class _ReportScreenState extends State<ReportScreen> {
                 controller: _contactController,
                 hint: "Phone / Email (optional)",
                 icon: Icons.contact_phone_outlined,
+                isDark: isDark,
+                cardColor: cardColor,
+                textColor: textColor,
+                hintColor: hintColor,
               ),
             ],
 
@@ -194,14 +217,14 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  Widget _buildLabel(String text) {
+  Widget _buildLabel(String text, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, left: 4),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.bold,
-          color: AppColors.brandDark,
+          color: color,
           fontSize: 14,
         ),
       ),
@@ -214,27 +237,32 @@ class _ReportScreenState extends State<ReportScreen> {
     IconData? icon,
     int maxLines = 1,
     bool isRequired = false,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
+    required Color hintColor,
   }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
+      style: TextStyle(color: textColor),
       validator: isRequired
           ? (v) => (v == null || v.trim().isEmpty) ? "This field is required" : null
           : null,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        hintStyle: TextStyle(color: hintColor, fontSize: 14),
         prefixIcon: icon != null ? Icon(icon, color: Colors.grey) : null,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: cardColor,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: BorderSide(color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

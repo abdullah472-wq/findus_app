@@ -1,4 +1,5 @@
-// lib/screens/analytics/analytics_screen.dart
+// lib/screens/ad_center/analytics_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,10 +25,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       return const Scaffold(body: Center(child: Text("User not logged in")));
     }
 
-    // ✅ ডার্ক মোড চেক
+    // ✅ ডার্ক মোড এবং কালার ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final subTextColor = isDark ? Colors.white54 : Colors.grey;
 
     return FloatingScaffold(
       title: 'ANALYTICS',
@@ -43,9 +46,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             .where('participants', arrayContains: _uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return _buildError(snapshot.error.toString());
+          if (snapshot.hasError) return _buildError(snapshot.error.toString(), textColor);
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
           }
 
           final docs = snapshot.data?.docs ?? [];
@@ -53,25 +56,38 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
           return Column(
             children: [
-              _buildStatsCards(stats, isDark),
+              // ১. স্ট্যাটস গ্রিড
+              _buildStatsCards(stats, isDark, cardColor, textColor, subTextColor),
+
               const SizedBox(height: 25),
+
+              // ২. আর্নিং চার্ট (Bar Chart)
               _buildChartSection(
                   "Monthly Earnings",
                   stats['monthlyEarnings'],
                   isDark,
+                  cardColor,
                   textColor,
                   isBarChart: true
               ),
+
               const SizedBox(height: 25),
+
+              // ৩. জব ট্রেন্ড (Line Chart)
               _buildChartSection(
                   "Job Completion Trend",
                   stats['monthlyJobs'],
                   isDark,
+                  cardColor,
                   textColor,
                   isBarChart: false
               ),
+
               const SizedBox(height: 25),
-              _buildPerformanceMetrics(stats, isDark),
+
+              // ৪. পারফরম্যান্স মেট্রিক্স
+              _buildPerformanceMetrics(stats, isDark, cardColor, textColor, subTextColor),
+
               const SizedBox(height: 50),
             ],
           );
@@ -80,8 +96,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // চার্ট সেকশন
-  Widget _buildChartSection(String title, Map data, bool isDark, Color textColor, {required bool isBarChart}) {
+  // --- Chart Section ---
+  Widget _buildChartSection(String title, Map data, bool isDark, Color cardColor, Color textColor, {required bool isBarChart}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -89,9 +105,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         const SizedBox(height: 12),
         Container(
           height: 250,
-          padding: const EdgeInsets.fromLTRB(12, 24, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 10),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+            color: cardColor,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -102,22 +118,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ],
           ),
           child: isBarChart
-              ? _buildBarChart(Map<String, double>.from(data), isDark)
-              : _buildLineChart(Map<String, int>.from(data), isDark),
+              ? _buildBarChart(Map<String, double>.from(data), isDark, textColor)
+              : _buildLineChart(Map<String, int>.from(data), isDark, textColor),
         ),
       ],
     );
   }
 
-  // ✅ ফিক্সড বার চার্ট
-  Widget _buildBarChart(Map<String, double> data, bool isDark) {
+  // ✅ Bar Chart
+  Widget _buildBarChart(Map<String, double> data, bool isDark, Color textColor) {
     if (data.isEmpty) {
       data = {'Jan': 0, 'Feb': 0, 'Mar': 0, 'Apr': 0, 'May': 0, 'Jun': 0};
     }
 
     final keys = data.keys.toList();
     final values = data.values.toList();
-    final textColor = isDark ? Colors.white70 : Colors.black87;
 
     return BarChart(
       BarChartData(
@@ -130,6 +145,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 color: AppColors.brandMain,
                 width: 14,
                 borderRadius: BorderRadius.circular(4),
+                backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: (values.reduce((a, b) => a > b ? a : b) * 1.2), // Max height background
+                  color: isDark ? Colors.white10 : Colors.grey.shade100,
+                ),
               ),
             ],
           );
@@ -142,7 +162,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 if (value.toInt() >= 0 && value.toInt() < keys.length) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(keys[value.toInt()], style: TextStyle(fontSize: 10, color: textColor)),
+                    child: Text(keys[value.toInt()], style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7))),
                   );
                 }
                 return const Text('');
@@ -154,20 +174,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         borderData: FlBorderData(show: false),
-        gridData: const FlGridData(show: false),
+        gridData: FlGridData(show: false),
       ),
     );
   }
 
-  // ✅ ফিক্সড লাইন চার্ট
-  Widget _buildLineChart(Map<String, int> data, bool isDark) {
+  // ✅ Line Chart
+  Widget _buildLineChart(Map<String, int> data, bool isDark, Color textColor) {
     if (data.isEmpty) {
       data = {'Jan': 0, 'Feb': 0, 'Mar': 0, 'Apr': 0, 'May': 0, 'Jun': 0};
     }
 
     final keys = data.keys.toList();
     final values = data.values.toList();
-    final textColor = isDark ? Colors.white70 : Colors.black87;
 
     return LineChart(
       LineChartData(
@@ -182,8 +201,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             barWidth: 3,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
-                show: true,
-                color: Colors.green.withOpacity(0.1)
+              show: true,
+              color: Colors.green.withOpacity(0.15),
             ),
           ),
         ],
@@ -195,7 +214,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 if (value.toInt() >= 0 && value.toInt() < keys.length) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(keys[value.toInt()], style: TextStyle(fontSize: 10, color: textColor)),
+                    child: Text(keys[value.toInt()], style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7))),
                   );
                 }
                 return const Text('');
@@ -211,7 +230,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) => FlLine(
-            color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+            color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.1),
             strokeWidth: 1,
           ),
         ),
@@ -219,7 +238,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // ক্যালকুলেশন লজিক
+  // --- Calculation Logic ---
   Map<String, dynamic> _calculateStats(List<QueryDocumentSnapshot> docs) {
     double totalEarned = 0;
     int jobsCompleted = docs.length;
@@ -228,6 +247,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     Map<String, double> monthlyEarnings = {};
     Map<String, int> monthlyJobs = {};
+
+    // গত ৬ মাসের জন্য ডিফল্ট ০ সেট করা
+    final now = DateTime.now();
+    for (int i = 5; i >= 0; i--) {
+      final month = DateFormat('MMM').format(DateTime(now.year, now.month - i, 1));
+      monthlyEarnings[month] = 0.0;
+      monthlyJobs[month] = 0;
+    }
 
     for (var doc in docs) {
       final data = doc.data() as Map<String, dynamic>;
@@ -244,17 +271,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       if (ts != null) {
         final date = ts.toDate();
         final monthKey = DateFormat('MMM').format(date);
-        monthlyEarnings[monthKey] = (monthlyEarnings[monthKey] ?? 0) + amount;
-        monthlyJobs[monthKey] = (monthlyJobs[monthKey] ?? 0) + 1;
-      }
-    }
 
-    if (monthlyEarnings.isEmpty) {
-      final now = DateTime.now();
-      for (int i = 5; i >= 0; i--) {
-        final month = DateFormat('MMM').format(DateTime(now.year, now.month - i, 1));
-        monthlyEarnings[month] = 0.0;
-        monthlyJobs[month] = 0;
+        // যদি ম্যাপে কি (Key) থাকে তবে আপডেট হবে
+        if (monthlyEarnings.containsKey(monthKey)) {
+          monthlyEarnings[monthKey] = (monthlyEarnings[monthKey] ?? 0) + amount;
+          monthlyJobs[monthKey] = (monthlyJobs[monthKey] ?? 0) + 1;
+        }
       }
     }
 
@@ -267,11 +289,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     };
   }
 
-  // স্ট্যাটস কার্ড
-  Widget _buildStatsCards(Map stats, bool isDark) {
-    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black87;
-
+  // --- Stats Cards ---
+  Widget _buildStatsCards(Map stats, bool isDark, Color cardColor, Color textColor, Color subTextColor) {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -280,15 +299,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.5,
       children: [
-        _statCard("Total Earned", "৳${stats['totalEarned'].toInt()}", Icons.attach_money, Colors.green, cardColor, textColor),
-        _statCard("Jobs Done", "${stats['jobsCompleted']}", Icons.work_outline, Colors.blue, cardColor, textColor),
-        _statCard("Avg Rating", "${stats['avgRating'].toStringAsFixed(1)} ★", Icons.star_border, Colors.amber, cardColor, textColor),
-        _statCard("Completion Rate", "100%", Icons.check_circle_outline, Colors.purple, cardColor, textColor),
+        _statCard("Total Earned", "৳${stats['totalEarned'].toInt()}", Icons.attach_money, Colors.green, cardColor, textColor, subTextColor),
+        _statCard("Jobs Done", "${stats['jobsCompleted']}", Icons.work_outline, Colors.blue, cardColor, textColor, subTextColor),
+        _statCard("Avg Rating", "${stats['avgRating'].toStringAsFixed(1)} ★", Icons.star_border, Colors.amber, cardColor, textColor, subTextColor),
+        _statCard("Completion Rate", "100%", Icons.check_circle_outline, Colors.purple, cardColor, textColor, subTextColor),
       ],
     );
   }
 
-  Widget _statCard(String title, String value, IconData icon, Color color, Color cardColor, Color textColor) {
+  Widget _statCard(String title, String value, IconData icon, Color color, Color cardColor, Color textColor, Color subTextColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -303,47 +322,46 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Icon(icon, color: color, size: 28),
           const SizedBox(height: 8),
           Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)),
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          Text(title, style: TextStyle(fontSize: 12, color: subTextColor)),
         ],
       ),
     );
   }
 
-  Widget _buildPerformanceMetrics(Map stats, bool isDark) {
-    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black87;
-
+  // --- Performance Metrics ---
+  Widget _buildPerformanceMetrics(Map stats, bool isDark, Color cardColor, Color textColor, Color subTextColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Performance Metrics", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          Text("Performance Metrics", style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
           const SizedBox(height: 10),
-          _metricRow("Response Time", "Fast (< 1hr)", textColor),
-          _metricRow("On-time Arrival", "98%", textColor),
-          _metricRow("Profile Visits", "120+ this week", textColor),
+          _metricRow("Response Time", "Fast (< 1hr)", textColor, subTextColor),
+          _metricRow("On-time Arrival", "98%", textColor, subTextColor),
+          _metricRow("Profile Visits", "120+ this week", textColor, subTextColor),
         ],
       ),
     );
   }
 
-  Widget _metricRow(String label, String val, Color textColor) {
+  Widget _metricRow(String label, String val, Color textColor, Color subTextColor) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(val, style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          Text(label, style: TextStyle(color: subTextColor, fontSize: 13)),
+          Text(val, style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 13)),
         ],
       ),
     );
   }
 
-  Widget _buildError(String err) => Center(child: Text("Error: $err"));
+  Widget _buildError(String err, Color textColor) => Center(child: Text("Error: $err", style: TextStyle(color: textColor)));
 }

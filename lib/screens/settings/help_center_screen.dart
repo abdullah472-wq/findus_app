@@ -121,7 +121,7 @@ class HelpCenterScreen extends StatelessWidget {
 }
 
 // ============================================================
-// Support Chat Screen
+// Support Chat Screen (Fixed Padding)
 // ============================================================
 
 class SupportChatScreen extends StatefulWidget {
@@ -171,6 +171,9 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
+    // ✅ Top Padding Calculation
+    final double topPadding = MediaQuery.of(context).padding.top + kToolbarHeight + 20;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: Stack(
@@ -179,7 +182,8 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
             children: [
               Expanded(
                 child: ListView.builder(
-                  padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + kToolbarHeight + 20, bottom: 80),
+                  // ✅ Fixed Padding: Content won't go under AppBar
+                  padding: EdgeInsets.only(top: topPadding, bottom: 80),
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
                     final msg = _messages[index];
@@ -284,7 +288,7 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
 }
 
 // ============================================================
-// Email Support Screen
+// Email Support Screen (Fixed Padding)
 // ============================================================
 
 class EmailSupportScreen extends StatefulWidget {
@@ -306,6 +310,9 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
+    // ✅ Top Padding Calculation
+    final double topPadding = MediaQuery.of(context).padding.top + kToolbarHeight + 20;
+
     return Scaffold(
       backgroundColor: bgColor,
       body: Stack(
@@ -313,7 +320,8 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
           Form(
             key: _formKey,
             child: ListView(
-              padding: EdgeInsets.only(top: 100, left: 20, right: 20, bottom: 100),
+              // ✅ Fixed Padding
+              padding: EdgeInsets.only(top: topPadding, left: 20, right: 20, bottom: 100),
               children: [
                 _buildInfoCard(isDark),
                 const SizedBox(height: 25),
@@ -396,6 +404,7 @@ class _EmailSupportScreenState extends State<EmailSupportScreen> {
   }
 }
 
+// ✅ _FloatingTopBar Fixed (SafeArea + Height)
 class _FloatingTopBar extends StatelessWidget {
   final String title;
   final VoidCallback onBack;
@@ -405,35 +414,38 @@ class _FloatingTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ SafeArea-র উচ্চতা ক্যালকুলেট করা হয়েছে
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final double barHeight = kToolbarHeight;
+
     return Positioned(
-      top: 10,
+      top: topPadding + 10, // Status bar থেকে একটু নিচে
       left: 10,
       right: 10,
       child: Container(
-        height: kToolbarHeight + MediaQuery.of(context).padding.top,
+        height: barHeight,
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF2C2C2C) : AppColors.brandLight,
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
         ),
-        child: Padding(
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, left: 8),
-          child: Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.white : AppColors.brandDark),
-                onPressed: onBack,
+        padding: const EdgeInsets.symmetric(horizontal: 8), // Inner padding
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.white : AppColors.brandDark),
+              onPressed: onBack,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                color: isDark ? Colors.white : AppColors.brandDark,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
               ),
-              Text(
-                title,
-                style: TextStyle(
-                  color: isDark ? Colors.white : AppColors.brandDark,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

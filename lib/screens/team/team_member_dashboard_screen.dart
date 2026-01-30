@@ -1,9 +1,8 @@
-// lib/screens/team/team_member_dashboard_screen.dart
-
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // ফোন কলের জন্য (অপশনাল)
+import 'package:url_launcher/url_launcher.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/team_member.dart';
+import 'package:findus_app/widgets/floating_scaffold.dart'; // ✅ Added FloatingScaffold
 
 class TeamMemberDashboardScreen extends StatelessWidget {
   final TeamMember member;
@@ -13,13 +12,11 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     required this.member,
   });
 
-  // নাম সেইফলি হ্যান্ডেল করার জন্য
   String get _displayName {
     if (member.name.isEmpty) return "Member";
     return member.name.split(' ').first;
   }
 
-  // ফোন কল লঞ্চার (সহজ ইমপ্লিমেন্টেশন)
   void _makeCall(BuildContext context) async {
     final Uri launchUri = Uri(scheme: 'tel', path: member.phone);
     try {
@@ -27,73 +24,85 @@ class TeamMemberDashboardScreen extends StatelessWidget {
         await launchUrl(launchUri);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not launch dialer")),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not launch dialer")),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text("$_displayName's Dashboard"),
-        backgroundColor: Colors.white,
-        foregroundColor: AppColors.brandDark,
-        elevation: 0.5,
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ১. প্রোফাইল হেডার এবং অ্যাকশন বাটন
-            _buildProfileHeader(context),
+    // ✅ Theme & Color Constants (Consistent with TeamManagementScreen)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final titleColor = isDark ? Colors.white : AppColors.brandDark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final subTextColor = isDark ? Colors.grey.shade400 : Colors.black54;
 
-            const SizedBox(height: 20),
+    return FloatingScaffold(
+      title: "${_displayName.toUpperCase()}'S DASHBOARD", // Uppercase style
+      backgroundColor: bgColor,
+      titleColor: titleColor,
+      iconColor: titleColor,
+      showBack: true,
+      scrollable: true, // Body scrollable
+      bodyPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Profile Header
+          _buildProfileHeader(context, isDark, cardColor, titleColor, subTextColor),
 
-            // ২. আর্নিং কার্ড (মডেল আপডেটের পর এটি এখন গুরুত্বপূর্ণ)
-            _buildEarningsCard(),
+          const SizedBox(height: 20),
 
-            const SizedBox(height: 12),
+          // 2. Earnings Card
+          _buildEarningsCard(isDark),
 
-            // ৩. স্ট্যাটাস গ্রিড (Completed, Active, Rating)
-            _buildStatsRow(),
+          const SizedBox(height: 16),
 
-            const SizedBox(height: 24),
+          // 3. Status Grid
+          _buildStatsRow(isDark, cardColor, titleColor, subTextColor),
 
-            // ৪. রিসেন্ট অ্যাক্টিভিটি (মক লিস্ট)
-            Text(
-              "Recent Jobs",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                color: Colors.grey[800],
-              ),
+          const SizedBox(height: 24),
+
+          // 4. Recent Activity Title
+          Text(
+            "Recent Jobs",
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              color: titleColor,
+              letterSpacing: 0.5,
             ),
-            const SizedBox(height: 12),
-            _buildRecentActivityList(),
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+
+          // 5. Activity List
+          _buildRecentActivityList(isDark, cardColor, titleColor, subTextColor),
+
+          const SizedBox(height: 30),
+        ],
       ),
     );
   }
 
-  Widget _buildProfileHeader(BuildContext context) {
+  Widget _buildProfileHeader(BuildContext context, bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
+        border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
       ),
       child: Column(
         children: [
@@ -102,18 +111,18 @@ class TeamMemberDashboardScreen extends StatelessWidget {
               Hero(
                 tag: 'avatar_${member.id}',
                 child: CircleAvatar(
-                  radius: 30,
+                  radius: 32,
                   backgroundColor: member.role == 'manager'
-                      ? Colors.orange.shade100
-                      : Colors.blue.shade100,
+                      ? (isDark ? Colors.orange.shade900 : Colors.orange.shade100)
+                      : (isDark ? Colors.blue.shade900 : Colors.blue.shade100),
                   child: Text(
                     member.name.isNotEmpty ? member.name[0].toUpperCase() : "?",
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: member.role == 'manager'
-                          ? Colors.orange.shade800
-                          : Colors.blue.shade800,
+                          ? (isDark ? Colors.orange.shade100 : Colors.orange.shade800)
+                          : (isDark ? Colors.blue.shade100 : Colors.blue.shade800),
                     ),
                   ),
                 ),
@@ -125,10 +134,10 @@ class TeamMemberDashboardScreen extends StatelessWidget {
                   children: [
                     Text(
                       member.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
-                        color: AppColors.brandDark,
+                        color: titleColor,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -136,15 +145,15 @@ class TeamMemberDashboardScreen extends StatelessWidget {
                       member.phone,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.grey[600],
+                        color: subTextColor,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.brandMain.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         member.role.toUpperCase(),
@@ -152,6 +161,7 @@ class TeamMemberDashboardScreen extends StatelessWidget {
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           color: AppColors.brandMain,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
@@ -161,33 +171,32 @@ class TeamMemberDashboardScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
+          Divider(height: 1, color: isDark ? Colors.grey[800] : Colors.grey[200]),
+          const SizedBox(height: 16),
           // Action Buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildActionButton(
-                icon: Icons.call,
+                icon: Icons.call_rounded,
                 label: "Call",
                 color: Colors.green,
                 onTap: () => _makeCall(context),
+                isDark: isDark,
               ),
               _buildActionButton(
-                icon: Icons.message,
+                icon: Icons.message_rounded,
                 label: "Message",
                 color: Colors.blue,
-                onTap: () {
-                  // TODO: Implement Chat or SMS
-                },
+                onTap: () {}, // TODO
+                isDark: isDark,
               ),
               _buildActionButton(
-                icon: Icons.edit_note,
+                icon: Icons.edit_note_rounded,
                 label: "Edit Role",
                 color: Colors.orange,
-                onTap: () {
-                  // TODO: Show Edit Dialog
-                },
+                onTap: () {}, // TODO
+                isDark: isDark,
               ),
             ],
           )
@@ -196,39 +205,52 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEarningsCard() {
+  Widget _buildEarningsCard(bool isDark) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppColors.brandMain, AppColors.brandMain.withOpacity(0.8)],
+          colors: [
+            AppColors.brandMain,
+            isDark ? const Color(0xFF005F99) : AppColors.brandMain.withOpacity(0.8)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppColors.brandMain.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Total Earnings",
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Total Earnings",
+                style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.currency_exchange, color: Colors.white, size: 16),
+              )
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             "৳${member.totalEarnings.toStringAsFixed(2)}",
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+              fontSize: 32,
+              fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
@@ -242,33 +264,36 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
     return Row(
       children: [
         Expanded(
           child: _statCard(
             title: "Completed",
             value: member.jobsCompleted.toString(),
-            icon: Icons.check_circle_outline,
+            icon: Icons.check_circle_rounded,
             color: Colors.green,
+            isDark: isDark, cardColor: cardColor, titleColor: titleColor, subTextColor: subTextColor,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: _statCard(
             title: "Active Jobs",
             value: member.jobsInProgress.toString(),
-            icon: Icons.timelapse,
+            icon: Icons.timelapse_rounded,
             color: Colors.orange,
+            isDark: isDark, cardColor: cardColor, titleColor: titleColor, subTextColor: subTextColor,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: _statCard(
             title: "Rating",
             value: member.rating.toStringAsFixed(1),
             icon: Icons.star_rounded,
             color: Colors.amber,
+            isDark: isDark, cardColor: cardColor, titleColor: titleColor, subTextColor: subTextColor,
           ),
         ),
       ],
@@ -280,30 +305,34 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     required String value,
     required IconData icon,
     required Color color,
+    required bool isDark,
+    required Color cardColor,
+    required Color titleColor,
+    required Color subTextColor,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           )
         ],
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
+          Icon(icon, color: color, size: 26),
+          const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
               fontSize: 18,
-              color: AppColors.brandDark,
+              color: titleColor,
             ),
           ),
           const SizedBox(height: 4),
@@ -311,8 +340,8 @@ class TeamMemberDashboardScreen extends StatelessWidget {
             title,
             style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500
+                color: subTextColor,
+                fontWeight: FontWeight.w600
             ),
             textAlign: TextAlign.center,
           ),
@@ -326,29 +355,30 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     required String label,
     required Color color,
     required VoidCallback onTap,
+    required bool isDark,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 22),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
+                color: isDark ? Colors.grey[300] : Colors.grey[700],
               ),
             ),
           ],
@@ -357,8 +387,7 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentActivityList() {
-    // Demo Activity Data (পরবর্তীতে Firestore থেকে আসবে)
+  Widget _buildRecentActivityList(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
     final activities = [
       {"title": "Fixing AC Unit", "status": "Completed", "amount": "৳1,200", "date": "Today, 10:00 AM"},
       {"title": "Plumbing Work", "status": "In Progress", "amount": "---", "date": "Yesterday, 4:30 PM"},
@@ -374,38 +403,50 @@ class TeamMemberDashboardScreen extends StatelessWidget {
         final isCompleted = item['status'] == "Completed";
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 10),
+          margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade100),
+            color: cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.1 : 0.02),
+                blurRadius: 5,
+                offset: const Offset(0, 2),
+              )
+            ],
           ),
           child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             leading: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isCompleted ? Colors.green.shade50 : Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
+                color: isCompleted ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                isCompleted ? Icons.check : Icons.timer,
+                isCompleted ? Icons.check_circle_rounded : Icons.timelapse_rounded,
                 color: isCompleted ? Colors.green : Colors.orange,
                 size: 20,
               ),
             ),
             title: Text(
               item['title']!,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: titleColor),
             ),
-            subtitle: Text(
-              "${item['date']} • ${item['status']}",
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                "${item['date']} • ${item['status']}",
+                style: TextStyle(fontSize: 12, color: subTextColor),
+              ),
             ),
             trailing: Text(
               item['amount']!,
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w900,
                 color: isCompleted ? AppColors.brandMain : Colors.grey,
+                fontSize: 15,
               ),
             ),
           ),
@@ -414,7 +455,6 @@ class TeamMemberDashboardScreen extends StatelessWidget {
     );
   }
 
-  // Simple Date Formatter (No external package needed for simple case)
   String _formatDate(DateTime date) {
     return "${date.day}/${date.month}/${date.year}";
   }
