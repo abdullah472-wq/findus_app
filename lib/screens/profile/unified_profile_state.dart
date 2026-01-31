@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:findus_app/screens/profile/worker_job_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -33,6 +34,7 @@ import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/screens/explore/notifications_page.dart'; // Notification Page Import
 import 'package:findus_app/screens/profile/worker_documents_screen.dart';
 import 'package:findus_app/screens/rating_history_screen.dart';
+import '../../models/worker_model.dart';
 import 'card_theme_bottom_sheet.dart';
 import 'followers_following_screen.dart';
 
@@ -943,15 +945,15 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('ownerId', isEqualTo: widget.uid)
-          .limit(3)
+          .limit(5)
           .snapshots(),
       builder: (context, snap) {
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return SizedBox(
-            height: 120,
+            height: 100,
             child: Center(
               child: Text(
-                'No posts found',
+                'No active posts',
                 style: TextStyle(
                   color: isDark ? Colors.white60 : Colors.black54,
                 ),
@@ -963,32 +965,71 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         final docs = snap.data!.docs;
 
         return SizedBox(
-          height: 270, // আগের 250 থেকে একটু বড় রাখলাম
+          height: 305,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: docs.length,
-            physics: const ClampingScrollPhysics(),
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 8),
             itemBuilder: (context, index) {
               final d = docs[index];
+              final data = d.data() as Map<String, dynamic>;
 
               return SizedBox(
-                width: screenWidth * 0.8, // ২০০ ফিক্সড না রেখে রেসপন্সিভ
+                width: screenWidth * 0.85,
                 child: UniversalWorkerCard(
                   id: d.id,
-                  name: d['title'] ?? 'No Title',
-                  role: d['roleLabel'] ?? 'Worker',
-                  imageUrl: userData['image'],
-                  address: d['address'] ?? 'Not set',
-                  rating: "0",
+                  name: data['title'] ?? 'No Title',
+                  role: data['roleLabel'] ?? 'Worker',
+                  imageUrl: userData['image'] ?? '',
+                  address: data['address'] ?? 'Location not set',
+                  rating: "0.0",
                   completed: "0",
                   reviews: "0",
-                  price: d['priceLabel'] ?? 'Negotiable',
+                  price: data['priceLabel'] ?? 'Negotiable',
 
-                  // এই সেকশনে কমপ্যাক্ট করে দিচ্ছি:
-                  margin: const EdgeInsets.all(8),
-                  showActionButtons: false, // ➜ নিচের বাটনগুলো লুকাও
-                  // চাইলে showStats: false করেও আরও ছোট করা যায়
+                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  showActionButtons: true,
+                  primaryButtonText: "View Job Details",
+
+                  // ✅ ফিক্স করা অংশ:
+                  onViewProfileTap: () {
+                    // ১. সঠিক প্যারামিটার দিয়ে Worker অবজেক্ট তৈরি
+                    final workerObj = Worker(
+                      uid: widget.uid,
+                      postId: d.id, // ✅ postId এখানে পাস করা হলো
+                      name: userData['name'] ?? 'User',
+                      userRole: userData['userRole'] ?? 'finder',
+                      image: userData['image'] ?? '',
+                      about: userData['about'] ?? '', // ✅ about ফিল্ড
+                      location: userData['location'] ?? 'Unknown',
+                      rating: double.tryParse(userData['rating']?.toString() ?? '0') ?? 0.0,
+
+                      // ✅ Price লজিক
+                      priceText: data['priceLabel'] ?? userData['priceText'] ?? 'Negotiable',
+                      price: double.tryParse(userData['price']?.toString() ?? '0'),
+
+                      // ✅ আপনার মডেলে এটি 'kycCompleted', 'kyc_completed' নয়
+                      kycCompleted: userData['kyc_completed'] == true,
+
+                      // ✅ আপনার মডেলে এটি 'experience' (double), String নয়
+                      experience: double.tryParse(userData['experienceYears']?.toString() ?? '0'),
+
+                      phone: userData['phone'],
+                    );
+
+                    // ২. সঠিক স্ক্রিনে পাঠানো
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WorkerJobDetailsScreen(worker: workerObj),
+                      ),
+                    );
+                  },
+
+                  showSaveButton: false,
+                  showShareButton: false,
+                  onChatTap: null,
                 ),
               );
             },

@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:intl/intl.dart'; // তারিখ ফরম্যাটের জন্য
+import 'package:url_launcher/url_launcher.dart'; // ম্যাপ ওপেন করার জন্য
 import '../../profile/earn_post_screen.dart';
 
 class PostedPinsList extends StatelessWidget {
@@ -12,7 +14,6 @@ class PostedPinsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (userId.isEmpty) {
@@ -23,6 +24,7 @@ class PostedPinsList extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('ownerId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true) // নতুন পোস্ট আগে দেখাবে
           .snapshots(),
       builder: (context, snapshot) {
         return _buildContent(context, snapshot, isDark);
@@ -35,7 +37,7 @@ class PostedPinsList extends StatelessWidget {
       return _buildErrorWidget(snapshot.error.toString());
     }
 
-    if (!snapshot.hasData) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
       return _buildLoadingWidget();
     }
 
@@ -59,7 +61,7 @@ class PostedPinsList extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline, color: Colors.red),
           const SizedBox(width: 12),
-          Expanded(child: Text('Error loading pins: $error', style: const TextStyle(color: Colors.red))),
+          Expanded(child: Text('Error: $error', style: const TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -81,19 +83,9 @@ class PostedPinsList extends StatelessWidget {
       decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          Container(width: 40, height: 40, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
+          Container(width: 50, height: 50, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
           const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(width: 120, height: 16, color: Colors.grey),
-                const SizedBox(height: 8),
-                Container(width: 80, height: 12, color: Colors.grey),
-              ],
-            ),
-          ),
-          Container(width: 60, height: 20, color: Colors.grey),
+          Expanded(child: Container(width: double.infinity, height: 20, color: Colors.grey)),
         ],
       ),
     );
@@ -115,18 +107,12 @@ class PostedPinsList extends StatelessWidget {
             'No pins posted yet',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.grey),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Post your first pin to start earning.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-            textAlign: TextAlign.center,
-          ),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain),
             child: const Text('POST NEW PIN', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -145,27 +131,122 @@ class PostedPinsList extends StatelessWidget {
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
+    // ১. তারিখ ফরম্যাটিং
+    String dateStr = "";
+    if (data['createdAt'] != null) {
+      try {
+        final Timestamp ts = data['createdAt'];
+        dateStr = DateFormat('MMM d, yyyy').format(ts.toDate());
+      } catch (_) {}
+    }
+
+    // ২. স্ট্যাটাস চেক (Active/Expired)
+    final bool isActive = data['isActive'] ?? true; // ডিফল্ট Active
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Card(
+      decoration: BoxDecoration(
         color: cardColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
         child: InkWell(
-          onTap: () => _handlePinTap(context, doc.id, data),
-          borderRadius: BorderRadius.circular(12),
+          onTap: () => _handlePinTap(context, data), // লোকেশনে নিয়ে যাবে
+          borderRadius: BorderRadius.circular(16),
           child: Padding(
-            padding: const EdgeInsets.all(15),
+            padding: const EdgeInsets.all(16),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ৩. ক্যাটাগরি আইকন
                 _buildPinIcon(data),
-                const SizedBox(width: 15),
-                Expanded(child: _buildPinInfo(data, textColor)),
-                _buildPriceTag(data),
+
+                const SizedBox(width: 16),
+
+                // ইনফো সেকশন
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              data['title'] ?? 'No Title',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // ৪. স্ট্যাটাস চিপ
+                          _buildStatusChip(isActive),
+                        ],
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      Row(
+                        children: [
+                          Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              data['address'] ?? 'No Location',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      if (dateStr.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 12, color: Colors.grey.shade400),
+                            const SizedBox(width: 4),
+                            Text(
+                              dateStr,
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  onPressed: () => _deletePin(context, doc.id),
+
+                // প্রাইস এবং ডিলিট বাটন
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _buildPriceTag(data),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: () => _deletePin(context, doc.id),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -175,31 +256,55 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
+  // ✅ ক্যাটাগরি অনুযায়ী আইকন সাজেশন
   Widget _buildPinIcon(Map<String, dynamic> data) {
-    return const CircleAvatar(
-      backgroundColor: AppColors.brandLight,
-      child: Icon(Icons.push_pin, color: AppColors.brandDark),
+    IconData icon = Icons.work_outline;
+    Color color = AppColors.brandMain;
+
+    // টাইটেল বা রোল অনুযায়ী আইকন সেট
+    final String text = (data['title'] ?? '').toString().toLowerCase() +
+        (data['roleLabel'] ?? '').toString().toLowerCase();
+
+    if (text.contains('plumb')) {
+      icon = Icons.plumbing; color = Colors.blue;
+    } else if (text.contains('electric') || text.contains('bijli')) {
+      icon = Icons.electric_bolt; color = Colors.orange;
+    } else if (text.contains('clean') || text.contains('wash')) {
+      icon = Icons.cleaning_services; color = Colors.teal;
+    } else if (text.contains('drive') || text.contains('car')) {
+      icon = Icons.directions_car; color = Colors.indigo;
+    } else if (text.contains('food') || text.contains('cook')) {
+      icon = Icons.restaurant; color = Colors.redAccent;
+    } else if (text.contains('teach') || text.contains('tutor')) {
+      icon = Icons.school; color = Colors.brown;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Icon(icon, color: color, size: 24),
     );
   }
 
-  Widget _buildPinInfo(Map<String, dynamic> data, Color textColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          data['title'] ?? 'No Title',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+  Widget _buildStatusChip(bool isActive) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isActive ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: isActive ? Colors.green.withOpacity(0.3) : Colors.grey.withOpacity(0.3)),
+      ),
+      child: Text(
+        isActive ? 'Active' : 'Closed',
+        style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: isActive ? Colors.green : Colors.grey
         ),
-        const SizedBox(height: 4),
-        Text(
-          data['address'] ?? 'No Location',
-          style: const TextStyle(fontSize: 12, color: Colors.grey),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+      ),
     );
   }
 
@@ -210,9 +315,37 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  void _handlePinTap(BuildContext context, String pinId, Map<String, dynamic> data) {
-    // পিন ডিটেইলস পেজে যাওয়ার লজিক (ভবিষ্যতে অ্যাড করতে পারেন)
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Pin: ${data['title']}")));
+  // ✅ লোকেশনে নিয়ে যাওয়ার লজিক (গুগল ম্যাপ)
+  Future<void> _handlePinTap(BuildContext context, Map<String, dynamic> data) async {
+    final double? lat = data['latitude'];
+    final double? lng = data['longitude'];
+
+    if (lat != null && lng != null) {
+      // গুগল ম্যাপ ওপেন করা
+      final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng");
+
+      try {
+        if (await canLaunchUrl(googleMapsUrl)) {
+          await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+        } else {
+          _showError(context, "Could not open Maps application.");
+        }
+      } catch (e) {
+        _showError(context, "Error opening map: $e");
+      }
+    } else {
+      // যদি কোঅর্ডিনেট না থাকে, তবে শুধু মেসেজ দেখাবে
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Location details for '${data['title']}' not available on map."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
   }
 
   Future<void> _deletePin(BuildContext context, String pinId) async {
@@ -220,7 +353,7 @@ class PostedPinsList extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Delete Pin?"),
-        content: const Text("Are you sure you want to delete this post?"),
+        content: const Text("Are you sure you want to delete this post? This cannot be undone."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           TextButton(

@@ -1,10 +1,19 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
-
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
+}
+
+// 1. Load key.properties file
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -21,11 +30,8 @@ android {
     }
 
     compileOptions {
-        // Java 17
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-
-        // flutter_local_notifications এর জন্য জরুরি
         isCoreLibraryDesugaringEnabled = true
     }
 
@@ -35,13 +41,25 @@ android {
         }
     }
 
+    // 2. Configure Signing (Release Key)
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+        }
+    }
+
     buildTypes {
         debug {
-            // চাইলে debug–এর জন্য আলাদা কিছু দিতেও পারো
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            // টেস্টিংয়ের জন্য debug keystore ব্যবহার
-            signingConfig = signingConfigs.getByName("debug")
+            // 3. Use the release signing config
+            signingConfig = signingConfigs.getByName("release")
+
+            // Note: If app crashes, set these to false
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -58,7 +76,5 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
-
-    // Core library desugaring (Java 8+ API support)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

@@ -105,8 +105,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final userCred = await _signInWithGoogle();
-      final user = userCred.user;
+      final auth = FirebaseAuth.instance;
+      User? user = auth.currentUser;
+
+      // 🔹 যদি আগে থেকেই লগইন থাকে, তাহলে আবার Google sign-in দরকার নাও হতে পারে
+      if (user == null) {
+        final userCred = await _signInWithGoogle();
+        user = userCred.user;
+      }
 
       if (user == null) {
         _showError("Google সাইন-ইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
@@ -116,15 +122,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
 
       final uid = user.uid;
       final db = FirebaseFirestore.instance;
-
       final userRef = db.collection('users').doc(uid);
       final snap = await userRef.get();
 
-      String roleForUi = selectedRole;
+      // maker/finder → supporter/worker core role
+      final String coreRole = _mapMakerFinderToCoreRole(selectedRole);
 
       if (!snap.exists) {
-        final coreRole = _mapMakerFinderToCoreRole(selectedRole);
-
+        // 🔹 একদম নতুন ইউজার
         await userRef.set({
           'userRole': coreRole,
           'roles': [coreRole],
@@ -137,9 +142,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
-
-        roleForUi = selectedRole;
       } else {
+        // 🔹 পুরোনো ইউজার - এখন সিলেক্ট করা role অনুযায়ী আপডেট করব
         final data = snap.data() ?? <String, dynamic>{};
 
         if (data['isBlocked'] == true) {
@@ -148,24 +152,37 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           return;
         }
 
-        final coreRole = (data['userRole'] ?? '').toString();
-        if (coreRole == 'supporter' || coreRole == 'worker') {
-          roleForUi = _mapCoreRoleToMakerFinder(coreRole);
+        // পুরোনো roles array থেকে নতুনটা add করব
+        List<dynamic> rolesRaw = (data['roles'] as List?) ?? [];
+        final List<String> roles = rolesRaw.map((e) => e.toString()).toList();
+
+        if (!roles.contains(coreRole)) {
+          roles.add(coreRole);
         }
+
+        final Map<String, dynamic> updateData = {
+          'userRole': coreRole,
+          'roles': roles,
+          'isSupporter': coreRole == 'supporter',
+          'isWorker': coreRole == 'worker',
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
 
         if (data['termsAcceptedAt'] == null) {
-          await userRef.set({
-            'termsAcceptedAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          updateData['termsAcceptedAt'] = FieldValue.serverTimestamp();
         }
+
+        await userRef.set(updateData, SetOptions(merge: true));
       }
 
+      // 🔹 আপডেটেড ডাটা রিফ্রেশ করে profileCompleted চেক
       final fresh = await userRef.get();
       final freshData = fresh.data() ?? <String, dynamic>{};
       final completed = freshData['profileCompleted'] == true;
 
       if (!mounted) return;
+
+      final String roleForUi = selectedRole; // UI তে maker/finder পাঠাব
 
       if (completed) {
         Navigator.pushAndRemoveUntil(

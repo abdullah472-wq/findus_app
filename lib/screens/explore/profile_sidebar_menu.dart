@@ -62,7 +62,17 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
         final data = userDoc.data()!;
         setState(() {
           _userName = data['name'] ?? 'User';
-          _userRole = data['userRole'] ?? 'finder';
+          final rawRole = (data['userRole'] ?? 'worker').toString().toLowerCase();
+// পুরোনো ডাটা থেকে আসলে finder/maker থাকলেও map করে নিচ্ছি
+          String mappedRole;
+          if (rawRole == 'finder') {
+            mappedRole = 'worker';
+          } else if (rawRole == 'maker') {
+            mappedRole = 'supporter';
+          } else {
+            mappedRole = rawRole; // worker/supporter
+          }
+          _userRole = mappedRole;
           _profileImage = data['image'] ?? data['imageUrl'];
           _followersCount = data['followersCount'] ?? 0;
           _subscriptionPlan = (data['subscription'] ?? 'free').toLowerCase();
@@ -318,5 +328,110 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
   Future<void> _handleLogout() async { await FirebaseAuth.instance.signOut(); final prefs = await SharedPreferences.getInstance(); await prefs.clear(); if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); }
 
   // _switchRoleLogic & _buildRoleSwitchCard বাদ দেওয়া হয়েছে কারণ বাটন এখন হেডারে
-  Future<void> _switchRoleLogic() async { HapticFeedback.mediumImpact(); final prefs = await SharedPreferences.getInstance(); String currentRole = _userRole ?? 'finder'; String targetRole = (currentRole == 'finder') ? 'maker' : 'finder'; bool hasTargetAccount = (targetRole == 'finder') ? (prefs.getBool('has_worker_account') ?? false) : (prefs.getBool('has_supporter_account') ?? false); if (hasTargetAccount) { await prefs.setString('user_role', targetRole); setState(() => _userRole = targetRole); Navigator.pop(context); } else { showDialog(context: context, builder: (ctx) => AlertDialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), title: Text("Create ${targetRole == 'finder' ? 'Worker' : 'Supporter'} Profile?"), content: const Text("You don't have this profile yet. Create one now to switch modes."), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("LATER")), ElevatedButton(onPressed: () { Navigator.pop(ctx); Navigator.push(context, MaterialPageRoute(builder: (_) => const RoleSelectionScreen())); }, style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white), child: const Text("CREATE"))])); } }
+  Future<void> _switchRoleLogic() async {
+    HapticFeedback.mediumImpact();
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      // লগইন না থাকলে Login এ পাঠাই
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      return;
+    }
+
+    final uid = currentUser.uid;
+    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+
+    try {
+      final snap = await userRef.get();
+      final data = snap.data() ?? <String, dynamic>{};
+
+      // current core role বের করা (worker/supporter)
+      String rawRole = (data['userRole'] ?? 'worker').toString().toLowerCase();
+      if (rawRole == 'finder') rawRole = 'worker';
+      if (rawRole == 'maker') rawRole = 'supporter';
+
+      final String currentCoreRole =
+      (rawRole == 'supporter') ? 'supporter' : 'worker';
+
+      // টার্গেট role
+      final String targetCoreRole =
+      currentCoreRole == 'worker' ? 'supporter' : 'worker';
+
+      // roles array থেকে টার্গেট role আছে কিনা দেখি
+      final List<dynamic> rolesRaw = (data['roles'] as List?) ?? [];
+      final List<String> roles =
+      rolesRaw.map((e) => e.toString()).toList();
+
+      final bool hasTargetRole = roles.contains(targetCoreRole);
+
+      if (hasTargetRole) {
+        // 🔹 শুধু active role (userRole) switch করব
+        await userRef.set(
+          {
+            'userRole': targetCoreRole,
+            'isWorker': targetCoreRole == 'worker',
+            'isSupporter': targetCoreRole == 'supporter',
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        if (!mounted) return;
+        setState(() => _userRole = targetCoreRole);
+        Navigator.pop(context); // Drawer বন্ধ
+      } else {
+        // 🔹 এখনও ওই role এর প্রোফাইল নেই → RoleSelectionScreen এ পাঠাই
+        final targetLabel =
+        targetCoreRole == 'worker' ? 'Worker' : 'Supporter';
+
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            title: Text("Create $targetLabel Profile?"),
+            content: const Text(
+              "You don't have this profile yet. Create one now to switch modes.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("LATER"),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx); // dialog বন্ধ
+                  Navigator.pop(context); // drawer বন্ধ
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const RoleSelectionScreen(),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("CREATE"),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error in _switchRoleLogic: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to switch role. Please try again."),
+          ),
+        );
+      }
+    }
+  }
 }

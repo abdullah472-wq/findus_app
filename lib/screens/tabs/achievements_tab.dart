@@ -3,12 +3,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:percent_indicator/percent_indicator.dart';
 import 'package:confetti/confetti.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/constants/status_theme.dart';
 import 'package:findus_app/badge/badge_service.dart' hide BadgeLevel;
 import 'package:findus_app/badge/badge_model.dart';
 
@@ -177,34 +179,42 @@ class _AchievementsTabState extends State<AchievementsTab> {
 
   // 🔥 Hero Section
   // 🔥 New Hero Section Design
-  // 🔥 Colorful Premium Hero Card
-  // 🔥 Soft Pastel Header Card
   Widget _buildHeroCard(BadgeProgress progress, bool isDark) {
-    final gradient = _getLevelGradient(progress.level);
-    final String levelName = progress.level.toString().split('.').last.toUpperCase();
+    final levelColor = _getLevelColor(progress.level);
+    final String levelName = progress.level.toString().split('.').last.toUpperCase(); // e.g., GOLD
 
-    // হালকা ব্যাকগ্রাউন্ডের ওপর গাঢ় টেক্সট
-    final textColor = Colors.black87;
-    final subTextColor = Colors.black54;
-    final levelColor = _getLevelColor(progress.level); // অরিজিনাল কালার আইকনের জন্য
+    // Background Gradient based on Badge Level
+    final gradientColors = isDark
+        ? [const Color(0xFF252525), const Color(0xFF151515)]
+        : [levelColor.withOpacity(0.1), Colors.white];
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: gradient,
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+            color: levelColor.withOpacity(0.5),
+            width: 2
+        ),
         boxShadow: [
           BoxShadow(
-            color: levelColor.withOpacity(0.15), // শ্যাডো খুব হালকা
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: levelColor.withOpacity(0.25),
+            blurRadius: 25,
+            offset: const Offset(0, 10),
+            spreadRadius: -5,
           )
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Row: Rank Name & Big Icon
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,43 +222,85 @@ class _AchievementsTabState extends State<AchievementsTab> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("CURRENT RANK", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.1, color: subTextColor)),
-                  const SizedBox(height: 4),
+                  Text(
+                    "CURRENT RANK",
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Text(
                     levelName,
                     style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      color: textColor.withOpacity(0.8),
-                      letterSpacing: 1.2,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w900,
+                        color: levelColor,
+                        letterSpacing: 1.5,
+                        shadows: [
+                          Shadow(
+                            color: levelColor.withOpacity(0.5),
+                            blurRadius: 15,
+                          )
+                        ]
                     ),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.6), // Glassy white
+                      color: levelColor.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       "${_formatPoints(progress.totalPoints)} XP",
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
                 ],
               ),
-              // Big Icon (No Background Box, just the icon floating)
-              Icon(Icons.workspace_premium, size: 70, color: levelColor.withOpacity(0.8)),
+
+              // Big Badge Icon with Glow
+              Container(
+                height: 80,
+                width: 80,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: levelColor.withOpacity(0.1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: levelColor.withOpacity(0.4),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    )
+                  ],
+                ),
+                child: Icon(
+                  Icons.workspace_premium, // অথবা আপনার কাস্টম ব্যাজ আইকন
+                  size: 45,
+                  color: levelColor,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          // Status Chips with Darker Text
+
+          const SizedBox(height: 25),
+          Divider(color: isDark ? Colors.white10 : Colors.grey.shade300),
+          const SizedBox(height: 15),
+
+          // Bottom Row: Status Chips
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildStatusChip("Top Rated", _isTopRated, textColor),
-              _buildStatusChip("Trusted", _isTrusted, textColor),
-              _buildStatusChip("Verified", _isVerified, textColor),
+              _buildStatusChip("Top Rated", _isTopRated, StatusTheme.topRatedColor, isDark),
+              _buildStatusChip("Trusted", _isTrusted, StatusTheme.trustedColor, isDark),
+              _buildStatusChip("Verified", _isVerified, StatusTheme.verifiedColor, isDark),
             ],
           ),
         ],
@@ -256,58 +308,39 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // Updated Status Chip Helper for Dark Text
-  Widget _buildStatusChip(String label, bool isActive, Color textColor) {
+  // Helper Widget for Status Chips
+  Widget _buildStatusChip(String label, bool isActive, Color color, bool isDark) {
     return Opacity(
       opacity: isActive ? 1.0 : 0.4,
-      child: Row(
-        children: [
-          Icon(isActive ? Icons.check_circle : Icons.circle_outlined, size: 16, color: isActive ? Colors.black54 : Colors.grey),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor)),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.15) : (isDark ? Colors.white10 : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isActive ? color.withOpacity(0.5) : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isActive ? Icons.check_circle : Icons.circle_outlined,
+              size: 14,
+              color: isActive ? color : Colors.grey,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isActive ? color : (isDark ? Colors.grey : Colors.grey.shade600),
+              ),
+            ),
+          ],
+        ),
       ),
     );
-  }
-
-  // 🔥 নতুন ফাংশন: লেভেল অনুযায়ী ব্যাকগ্রাউন্ড কালার
-  LinearGradient _getLevelGradient(BadgeLevel level) {
-    switch (level) {
-      case BadgeLevel.bronze:
-        return const LinearGradient(
-          colors: [Color(0xFFE65C00), Color(0xFFF9D423)], // Orange to Yellow
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-      case BadgeLevel.silver:
-        return const LinearGradient(
-          colors: [Color(0xFF434343), Color(0xFF909FA5)], // Dark Grey to Silver
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-      case BadgeLevel.gold:
-        return const LinearGradient(
-          colors: [Color(0xFFFF8008), Color(0xFFFFC837)], // Deep Gold
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-      case BadgeLevel.platinum:
-        return const LinearGradient(
-          colors: [Color(0xFF20002C), Color(0xFFcbb4d4)], // Dark Purple to Platinum
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-      case BadgeLevel.diamond:
-        return const LinearGradient(
-          colors: [Color(0xFF00C6FF), Color(0xFF0072FF)], // Cyan to Blue
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        );
-      default:
-        return const LinearGradient(
-          colors: [Color(0xFF11998e), Color(0xFF38ef7d)], // Default Greenish
-        );
-    }
   }
 
   // 🔥 Next Level Progress Bar
@@ -348,97 +381,60 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   // 🔥 Quest Card
-  // 🔥 Colorful Soft Quest Card
   Widget _buildQuestCard(AchievementState st, bool isDark) {
-    final isCompleted = st.isCompleted;
+    final isCompleted = st.isCompleted;     // => progress >= def.target
     final canClaim = isCompleted && !st.claimed;
-
-    // কার্ডের ব্যাকগ্রাউন্ড কালার লজিক (সফট কালারফুল)
-    final Gradient cardBackground = isDark
-        ? const LinearGradient(colors: [Color(0xFF2C2C2C), Color(0xFF252525)]) // ডার্ক মোড
-        : canClaim
-        ? const LinearGradient( // ক্লেইম করার জন্য হালকা সবুজ আভা
-        colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
-        begin: Alignment.topLeft, end: Alignment.bottomRight)
-        : const LinearGradient( // সাধারণ অবস্থায় হালকা নীল/বেগুনি আভা
-        colors: [Color(0xFFF3E5F5), Color(0xFFE3F2FD)],
-        begin: Alignment.topLeft, end: Alignment.bottomRight);
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final borderColor = canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: cardBackground,
-        borderRadius: BorderRadius.circular(20), // কার্ডগুলো একটু বেশি গোল
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: canClaim ? 1.5 : 1),
         boxShadow: [
-          BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 4)
-          )
+          if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 12, spreadRadius: 1),
+          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
         ],
-        border: Border.all(
-            color: canClaim ? Colors.green.withOpacity(0.3) : Colors.white.withOpacity(0.5),
-            width: 1
-        ),
       ),
       child: Row(
         children: [
-          // আইকন বক্স
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white, // আইকনের পেছনে সাদা
-              borderRadius: BorderRadius.circular(15),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+              color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               canClaim ? Icons.redeem : Icons.emoji_events_rounded,
-              color: canClaim ? Colors.green : const Color(0xFF7986CB), // সফট নীল আইকন
-              size: 26,
+              color: canClaim ? Colors.green : (isDark ? Colors.grey : AppColors.brandMain),
+              size: 24,
             ),
           ),
-          const SizedBox(width: 16),
-
-          // টেক্সট এবং প্রগ্রেস
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                    st.def.title,
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: isDark ? Colors.white : Colors.black87
-                    )
-                ),
+                Text(st.def.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
                 const SizedBox(height: 4),
-                Text(
-                    st.def.description,
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)
-                ),
-                const SizedBox(height: 10),
-
-                // প্রগ্রেস বার
+                Text(st.def.description, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey.shade600)),
+                const SizedBox(height: 8),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: (st.progress / st.def.target).clamp(0.0, 1.0),
-                    minHeight: 6,
-                    backgroundColor: Colors.white.withOpacity(0.5),
-                    valueColor: AlwaysStoppedAnimation(
-                        canClaim ? Colors.greenAccent.shade700 : const Color(0xFF9FA8DA) // সফট ইন্ডিকেটর
-                    ),
+                    minHeight: 4,
+                    backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
+                    valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.orange),
                   ),
                 ),
               ],
             ),
           ),
-
-          const SizedBox(width: 12),
-
-          // বাটন অথবা কাউন্ট
+          const SizedBox(width: 10),
           if (canClaim)
             ElevatedButton(
               onPressed: () async {
@@ -448,23 +444,21 @@ class _AchievementsTabState extends State<AchievementsTab> {
                 if (mounted) setState(() {});
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.green,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.green.withOpacity(0.2))
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                elevation: 2,
               ),
-              child: Text("+${st.def.xpReward}", style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: Text("+${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
             )
           else if (st.claimed)
-            const Icon(Icons.check_circle, color: Colors.green, size: 28)
+            const Icon(Icons.check_circle_rounded, color: Colors.green)
           else
-            Text(
-                "${st.progress}/${st.def.target}",
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black45)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+              child: Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey)),
             ),
         ],
       ),

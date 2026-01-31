@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/badge/badge_model.dart';
+import 'package:findus_app/badge/badge_theme.dart';
 
 class UniversalWorkerCard extends StatelessWidget {
   final String? id;
@@ -45,8 +46,6 @@ class UniversalWorkerCard extends StatelessWidget {
   final double? elevation;
   final BorderRadius? borderRadius;
   final bool enableImageZoom;
-
-  /// 🔹 নতুন: বাটনের টেক্সট কাস্টমাইজ করার জন্য
   final String primaryButtonText;
 
   const UniversalWorkerCard({
@@ -89,211 +88,292 @@ class UniversalWorkerCard extends StatelessWidget {
     this.elevation,
     this.borderRadius,
     this.enableImageZoom = true,
-    this.primaryButtonText = "View Job Details", // ✅ ডিফল্ট এখন View Job Details
+    this.primaryButtonText = "View Job Details",
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final borderColor = isDark ? Colors.white10 : Colors.grey.shade300;
+
+    // Badge color helper
+    final Color badgeColor = _getBadgeColor(badgeLevel);
+
+    // Price Logic: Check if price is simply "Negotiable" text
+    final bool isNegotiableText = price.toLowerCase().contains('negotiable');
+
+    return Container(
       margin: margin,
-      elevation: elevation ?? 2,
-      shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: borderRadius ?? BorderRadius.circular(15),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: borderRadius ?? BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: borderRadius ?? BorderRadius.circular(15),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: borderRadius ?? BorderRadius.circular(20),
+          child: Stack(
             children: [
-              // Header section with image and basic info
-              _buildHeaderSection(context),
-
-              if (showStats) ...[
-                const SizedBox(height: 12),
-                _buildStatsSection(context),
-              ],
-
-              // Action buttons
-              if (showActionButtons) ...[
-                const SizedBox(height: 16),
-                _buildActionButtons(context),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderSection(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Profile Image
-        _buildProfileImage(context),
-        const SizedBox(width: 12),
-
-        // User Info
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Name and verification
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              // 🎨 Background Watermark
+              Positioned(
+                right: -15,
+                top: -15,
+                child: Opacity(
+                  opacity: 0.05,
+                  child: Icon(
+                    Icons.workspace_premium,
+                    size: 120,
+                    color: isDark ? Colors.white : Colors.black,
                   ),
-                  if (isVerifiedWorker) ...[
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.verified,
-                      color: Colors.blue,
-                      size: 16,
-                    ),
-                  ],
-                ],
-              ),
-
-              // Role
-              Text(
-                role,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
 
-              const SizedBox(height: 4),
+              // 🪪 Main Content
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // Top Section
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ID Photo
+                        _buildIDProfileImage(context, isDark),
 
-              // Address
-              Row(
-                children: [
-                  Icon(Icons.location_on_outlined, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: Text(
-                      address,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
+                        const SizedBox(width: 14),
+
+                        // Info Column
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 🔹 Name & Badge Row
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Name Part
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name.toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                            color: isDark ? Colors.white : Colors.black87,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          role.toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: AppColors.brandMain,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 🔥 BADGE SECTION
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    child: Column(
+                                      children: [
+                                        Icon(
+                                          Icons.workspace_premium,
+                                          size: 28,
+                                          color: badgeColor,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          (badgeLevel?.name ?? 'MEMBER').toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                            color: badgeColor,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 8),
+
+                              // Verification & Address
+                              Row(
+                                children: [
+                                  if (isVerifiedWorker) ...[
+                                    const Icon(Icons.verified, color: Colors.blue, size: 14),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      address,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark ? Colors.white60 : Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 6),
+
+                              // 💰 Price Pill with Fixed Taka Icon
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.brandMain.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // যদি Negotiable না হয়, তবে টাকার আইকন দেখাবে
+                                    if (!isNegotiableText)
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 3),
+                                        child: Text(
+                                          "৳", // Fixed Taka Icon
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.brandMain,
+                                          ),
+                                        ),
+                                      ),
+
+                                    // Amount Text
+                                    Text(
+                                      price,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandMain,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Stats Section
+                    if (showStats) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white10 : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isDark ? Colors.transparent : Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildIDStat(completed, "JOBS", isDark),
+                            _verticalDivider(isDark),
+                            _buildIDStat(rating, "RATING", isDark),
+                            _verticalDivider(isDark),
+                            _buildIDStat(reviews, "REVIEWS", isDark),
+                          ],
+                        ),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+                    ],
 
-              const SizedBox(height: 4),
-
-              // Price and Time
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    price,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.brandMain,
-                    ),
-                  ),
-                  if (time.isNotEmpty) ...[
-                    const Text(
-                      " • ",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    Text(
-                      time,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ]
-                ],
+                    // Action Buttons
+                    if (showActionButtons) ...[
+                      const SizedBox(height: 16),
+                      _buildActionButtons(context, isDark),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildProfileImage(BuildContext context) {
-    const double size = 80;
+  // 🎨 Helper: Get Badge Color
+  Color _getBadgeColor(BadgeLevel? level) {
+    if (level == null) return Colors.grey;
+    switch (level) {
+      case BadgeLevel.bronze: return const Color(0xFFCD7F32);
+      case BadgeLevel.silver: return const Color(0xFF757575);
+      case BadgeLevel.gold: return const Color(0xFFD4AF37);
+      case BadgeLevel.platinum: return const Color(0xFF795548);
+      case BadgeLevel.diamond: return const Color(0xFF00ACC1);
+      default: return Colors.grey;
+    }
+  }
 
-    // ✅ imageUrl ফাঁকা / "null" হলে placeholder দেখাবে
+  // 🖼️ Helper: Squircle Image
+  Widget _buildIDProfileImage(BuildContext context, bool isDark) {
+    const double size = 75;
     final String url = imageUrl.trim();
     final bool hasImage = url.isNotEmpty && url.toLowerCase() != 'null';
 
-    Widget imageChild;
-
-    if (!hasImage) {
-      imageChild = Container(
-        width: size,
-        height: size,
-        color: Colors.grey[200],
-        child: const Center(
-          child: Icon(Icons.person, size: 40, color: Colors.grey),
-        ),
-      );
-    } else {
-      imageChild = CachedNetworkImage(
-        imageUrl: url,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          width: size,
-          height: size,
-          color: Colors.grey[200],
-          child: const Center(
-            child: Icon(Icons.person, size: 40, color: Colors.grey),
-          ),
-        ),
-        errorWidget: (context, url, error) => Container(
-          width: size,
-          height: size,
-          color: Colors.grey[200],
-          child: const Center(
-            child: Icon(Icons.person, size: 40, color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: imageChild,
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: isDark ? Colors.white24 : Colors.grey.shade300,
+                width: 2
+            ),
+            color: Colors.grey[200],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: hasImage
+                ? CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => const Center(child: Icon(Icons.person, color: Colors.grey)),
+              errorWidget: (_, __, ___) => const Center(child: Icon(Icons.person, color: Colors.grey)),
+            )
+                : const Center(child: Icon(Icons.person, size: 35, color: Colors.grey)),
+          ),
         ),
-
-        // Online status indicator
         if (showOnlineStatus && isOnline)
           Positioned(
-            right: 2,
-            bottom: 2,
+            right: -2,
+            top: -2,
             child: Container(
-              width: 12,
-              height: 12,
+              width: 14,
+              height: 14,
               decoration: BoxDecoration(
                 color: Colors.green,
                 shape: BoxShape.circle,
@@ -305,172 +385,93 @@ class UniversalWorkerCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatItem(String value, String label, IconData icon) {
-    return Expanded(
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: AppColors.brandMain,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
+  // 📊 Helper: Stats
+  Widget _buildIDStat(String value, String label, bool isDark) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black87,
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[600],
-            ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white54 : Colors.grey.shade500,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildStatsSection(BuildContext context) {
+  Widget _verticalDivider(bool isDark) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildStatItem(
-            completed,
-            "Completed",
-            Icons.check_circle_outline,
-          ),
-          Container(
-            height: 20,
-            width: 1,
-            color: Colors.grey[300],
-          ),
-          _buildStatItem(
-            rating,
-            "Rating",
-            Icons.star_outline,
-          ),
-          Container(
-            height: 20,
-            width: 1,
-            color: Colors.grey[300],
-          ),
-          _buildStatItem(
-            reviews,
-            "Reviews",
-            Icons.rate_review_outlined,
-          ),
-        ],
-      ),
+      height: 20,
+      width: 1,
+      color: isDark ? Colors.white12 : Colors.grey.shade300,
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  // 🔘 Helper: Buttons
+  Widget _buildActionButtons(BuildContext context, bool isDark) {
     return Row(
       children: [
-        // Primary Button
         Expanded(
-          child: _buildViewProfileButton(context),
-        ),
-
-        const SizedBox(width: 8),
-
-        // Chat Button
-        if (onChatTap != null)
-          _buildIconButton(
-            onTap: onChatTap!,
-            icon: Icons.chat_outlined,
-            color: AppColors.brandMain,
-            bgColor: AppColors.brandMain.withOpacity(0.1),
+          child: SizedBox(
+            height: 38,
+            child: OutlinedButton(
+              onPressed: onViewProfileTap,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.brandMain),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: isDark ? Colors.transparent : Colors.white,
+                foregroundColor: AppColors.brandMain,
+              ),
+              child: Text(
+                primaryButtonText.toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+              ),
+            ),
           ),
-
-        // Save Button
+        ),
+        const SizedBox(width: 8),
+        if (onChatTap != null)
+          _buildIDIconButton(Icons.chat_bubble_outline, onChatTap!, AppColors.brandMain, isDark),
         if (showSaveButton && onSaveTap != null) ...[
           const SizedBox(width: 8),
-          _buildIconButton(
-            onTap: onSaveTap!,
-            icon: isSaved ? Icons.favorite : Icons.favorite_border,
-            color: isSaved ? Colors.red : Colors.grey[600]!,
-            bgColor: Colors.grey[100]!,
+          _buildIDIconButton(
+              isSaved ? Icons.favorite : Icons.favorite_border,
+              onSaveTap!,
+              isSaved ? Colors.red : (isDark ? Colors.white70 : Colors.grey.shade600),
+              isDark
           ),
         ],
-
-        // Share Button
         if (showShareButton && onShareTap != null) ...[
           const SizedBox(width: 8),
-          _buildIconButton(
-            onTap: onShareTap!,
-            icon: Icons.share_outlined,
-            color: Colors.grey[600]!,
-            bgColor: Colors.grey[100]!,
-          ),
+          _buildIDIconButton(Icons.share_outlined, onShareTap!, isDark ? Colors.white70 : Colors.grey.shade600, isDark),
         ],
       ],
     );
   }
 
-  Widget _buildIconButton({
-    required VoidCallback onTap,
-    required IconData icon,
-    required Color color,
-    required Color bgColor,
-  }) {
+  Widget _buildIDIconButton(IconData icon, VoidCallback onTap, Color color, bool isDark) {
     return Container(
-      width: 40,
-      height: 40,
+      width: 38,
+      height: 38,
       decoration: BoxDecoration(
-        color: bgColor,
+        color: isDark ? Colors.white10 : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(10),
       ),
       child: IconButton(
         onPressed: onTap,
         padding: EdgeInsets.zero,
-        icon: Icon(
-          icon,
-          color: color,
-          size: 20,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildViewProfileButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 40,
-      child: OutlinedButton(
-        onPressed: onViewProfileTap,
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: AppColors.brandMain),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          backgroundColor: Colors.white,
-        ),
-        child: Text(
-          primaryButtonText, // ✅ এখন কাস্টমাইজযোগ্য, ডিফল্ট "View Job Details"
-          style: const TextStyle(
-            color: AppColors.brandMain,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-        ),
+        icon: Icon(icon, color: color, size: 18),
       ),
     );
   }

@@ -17,17 +17,20 @@ class Worker {
 
   final bool isVerified;
   final List<String>? languages;
-  final double? experience;
+  final double? experience; // ✅ আপনার মডেলে এটি double
   final String? gender;
   final bool isLive;
   final bool isTrusted;
   final bool isPromoted;
   final String? phone;
 
-  // ✅ Backward Compatibility Getters (পুরানো কোড যাতে না ভাঙে)
+  // ✅ Backward Compatibility Getters
   String get id => uid;
   String get role => userRole;
   String get message => about;
+
+  // 🔥 এই লাইনটি নতুন যোগ করুন (এরর ফিক্স করার জন্য)
+  String? get experienceYears => experience?.toStringAsFixed(1);
 
   const Worker({
     required this.uid,

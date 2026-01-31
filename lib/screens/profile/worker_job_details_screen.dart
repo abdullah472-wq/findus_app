@@ -1,6 +1,7 @@
 // lib/screens/profile/worker_job_details_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // ✅ ইমেজ ক্যাশিং অ্যাড করা হলো
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
@@ -32,18 +33,21 @@ class WorkerJobDetailsScreen extends StatelessWidget {
     final subtitleColor = isDark ? Colors.grey.shade400 : Colors.black87;
 
     final ratingText = worker.rating.toStringAsFixed(1);
-    final jobTitle = "$_roleLabel service";
-    final priceLabel = worker.priceText.trim().isNotEmpty
+    final jobTitle = "$_roleLabel Service Details";
+
+    // ✅ প্রাইস লেবেল লজিক (টাকা আইকন সহ)
+    String displayPrice = worker.priceText.trim().isNotEmpty
         ? worker.priceText
-        : (worker.price != null ? "৳ ${worker.price!.toInt()}" : "Negotiable");
+        : (worker.price != null ? "${worker.price!.toInt()}" : "Negotiable");
 
     final jobDescription =
-        "This ${_roleLabel.toLowerCase()} is offering service near ${worker.location}.\n\n"
-        "• You can discuss exact work details and timing in chat.\n"
-        "• Price is $priceLabel (negotiable).";
+        "This ${_roleLabel.toLowerCase()} is offering professional services in ${worker.location}.\n\n"
+        "• Verified Profile: ${worker.kycCompleted ? 'Yes' : 'No'}\n"
+        "• Experience: ${worker.experienceYears ?? 'Fresh'} Years\n"
+        "• You can discuss work details, timing, and final pricing in chat.";
 
     return FloatingScaffold(
-      title: "Job Details",
+      title: "JOB DETAILS",
       backgroundColor: bgColor,
       titleColor: textColor,
       iconColor: textColor,
@@ -52,15 +56,10 @@ class WorkerJobDetailsScreen extends StatelessWidget {
       actions: [
         IconButton(
           icon: Icon(Icons.person_outline, color: textColor),
+          tooltip: "View Profile",
           onPressed: () {
             final uid = worker.uid.trim();
-            if (uid.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Profile ID missing")),
-              );
-              return;
-            }
-
+            if (uid.isEmpty) return;
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -80,13 +79,18 @@ class WorkerJobDetailsScreen extends StatelessWidget {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeaderCard(context, ratingText, priceLabel, isDark, cardColor, textColor),
-                    const SizedBox(height: 16),
-                    _buildJobInfoCard(jobTitle, jobDescription, cardColor, textColor, subtitleColor),
+                    // 🔥 ID Card Style Header
+                    _buildHeaderCard(context, ratingText, displayPrice, isDark, cardColor, textColor),
+
+                    const SizedBox(height: 20),
+
+                    // 📄 Description Card
+                    _buildJobInfoCard(jobTitle, jobDescription, cardColor, textColor, subtitleColor, isDark),
+
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -95,7 +99,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
             // Bottom fixed bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               decoration: BoxDecoration(
                 color: cardColor,
                 boxShadow: [
@@ -105,6 +109,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                     offset: const Offset(0, -4),
                   )
                 ],
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 children: [
@@ -112,12 +117,7 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                     child: OutlinedButton.icon(
                       onPressed: () async {
                         final uid = worker.uid.trim();
-                        if (uid.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("Chat user ID missing")),
-                          );
-                          return;
-                        }
+                        if (uid.isEmpty) return;
 
                         final cid = await FirestoreChatService.getOrCreateConversation(
                           otherUserId: uid,
@@ -140,20 +140,20 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.brandMain),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        minimumSize: const Size.fromHeight(45),
+                        minimumSize: const Size.fromHeight(50),
                         backgroundColor: isDark ? Colors.transparent : Colors.white,
                         foregroundColor: AppColors.brandMain,
                       ),
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text(
                         "CHAT",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
@@ -165,18 +165,19 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandDark,
+                        backgroundColor: AppColors.brandMain, // Brand Color
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        minimumSize: const Size.fromHeight(45),
+                        minimumSize: const Size.fromHeight(50),
+                        elevation: 4,
                       ),
                       child: const Text(
                         "HIRE NOW",
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: 14,
                         ),
                       ),
                     ),
@@ -190,107 +191,174 @@ class WorkerJobDetailsScreen extends StatelessWidget {
     );
   }
 
-  // ---------- Header card ----------
+  // ---------- 🔥 Header card (ID Style) ----------
   Widget _buildHeaderCard(
       BuildContext context,
       String ratingText,
-      String priceLabel,
+      String displayPrice,
       bool isDark,
       Color cardColor,
       Color textColor,
       ) {
     final hasImg = worker.image.trim().isNotEmpty;
+    final bool isNegotiable = displayPrice.toLowerCase().contains('negotiable');
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           )
         ],
-        border: Border.all(color: isDark ? Colors.grey.withOpacity(0.1) : Colors.grey.shade200),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppColors.brandLight,
-            backgroundImage: hasImg ? NetworkImage(worker.image) : null,
-            child: hasImg ? null : const Icon(Icons.person, color: AppColors.brandDark),
+          // 🖼️ Squircle Image (ID Style)
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  width: 2
+              ),
+              color: Colors.grey[200],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: hasImg
+                  ? CachedNetworkImage(
+                imageUrl: worker.image,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => const Icon(Icons.person, color: Colors.grey),
+              )
+                  : const Icon(Icons.person, size: 40, color: Colors.grey),
+            ),
           ),
-          const SizedBox(width: 12),
+
+          const SizedBox(width: 16),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  worker.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: textColor,
-                  ),
+                // 🔹 Name & FINDUS Stamp
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        worker.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    // FINDUS Stamp
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.brandMain.withOpacity(0.4)),
+                        borderRadius: BorderRadius.circular(4),
+                        color: AppColors.brandMain.withOpacity(0.05),
+                      ),
+                      child: Text(
+                        "FINDUS",
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.5,
+                          fontStyle: FontStyle.italic,
+                          color: AppColors.brandMain,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
+
                 Text(
                   _roleLabel.toUpperCase(),
                   style: const TextStyle(
                     fontSize: 11,
-                    color: Colors.redAccent,
+                    color: AppColors.brandMain,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 1.1,
                   ),
                 ),
-                const SizedBox(height: 4),
+
+                const SizedBox(height: 6),
+
+                // Location
                 Row(
                   children: [
-                    const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                    Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
                         worker.location,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // Rating & Reviews
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star, size: 14, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            ratingText,
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    // 💰 Fixed Taka Icon Logic
+                    Row(
+                      children: [
+                        if (!isNegotiable)
+                          Text("৳ ", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
+                        Text(
+                          displayPrice,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.brandMain,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                priceLabel,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.orange,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.star, size: 14, color: Colors.amber),
-                  const SizedBox(width: 3),
-                  Text(
-                    ratingText,
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
-                  ),
-                ],
-              ),
-            ],
-          )
         ],
       ),
     );
@@ -303,32 +371,48 @@ class WorkerJobDetailsScreen extends StatelessWidget {
       Color cardColor,
       Color textColor,
       Color subtitleColor,
+      bool isDark,
       ) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-              color: textColor,
-            ),
+          Row(
+            children: [
+              Icon(Icons.description_outlined, color: AppColors.brandMain, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                  color: textColor,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             description,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               color: subtitleColor,
-              height: 1.5,
+              height: 1.6,
             ),
           ),
         ],
