@@ -30,7 +30,7 @@ Future<void> showWorkerProfileBottomSheet({
 
   final NavigatorState rootNav = Navigator.of(context, rootNavigator: true);
 
-  // ✅ হেল্পার ফাংশন: লগইন চেক করার জন্য
+  // ✅ লগইন চেক হেল্পার
   bool checkLogin(BuildContext ctx) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -48,8 +48,7 @@ Future<void> showWorkerProfileBottomSheet({
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(dialogCtx); // ডায়ালগ বন্ধ
-                Navigator.pop(ctx); // বটম শিট বন্ধ
-                // লগইন পেজে নেভিগেট
+                Navigator.pop(ctx);       // বটম শিট বন্ধ
                 Navigator.push(
                   ctx,
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -77,7 +76,6 @@ Future<void> showWorkerProfileBottomSheet({
   }).take(5).toList();
 
   Future<void> openProfile() async {
-    // ✅ লগইন চেক
     if (!checkLogin(context)) return;
 
     Navigator.pop(context); // close sheet
@@ -105,7 +103,6 @@ Future<void> showWorkerProfileBottomSheet({
   }
 
   Future<void> openJobDetails() async {
-    // ✅ লগইন চেক
     if (!checkLogin(context)) return;
 
     showDialog(
@@ -121,7 +118,12 @@ Future<void> showWorkerProfileBottomSheet({
             children: [
               CircularProgressIndicator(strokeWidth: 2),
               SizedBox(width: 12),
-              Expanded(child: Text("Loading details...", style: TextStyle(fontSize: 14))),
+              Expanded(
+                child: Text(
+                  "Loading details...",
+                  style: TextStyle(fontSize: 14),
+                ),
+              ),
             ],
           ),
         );
@@ -132,9 +134,17 @@ Future<void> showWorkerProfileBottomSheet({
     if (Navigator.canPop(context)) Navigator.pop(context);
 
     if (isWorker) {
-      rootNav.push(MaterialPageRoute(builder: (_) => JobPostGateScreen(worker: workerModel)));
+      rootNav.push(
+        MaterialPageRoute(
+          builder: (_) => JobPostGateScreen(worker: workerModel),
+        ),
+      );
     } else {
-      rootNav.push(MaterialPageRoute(builder: (_) => WorkerJobDetailsScreen(worker: workerModel)));
+      rootNav.push(
+        MaterialPageRoute(
+          builder: (_) => WorkerJobDetailsScreen(worker: workerModel),
+        ),
+      );
     }
   }
 
@@ -163,11 +173,16 @@ Future<void> showWorkerProfileBottomSheet({
             minChildSize: 0.4,
             maxChildSize: 0.95,
             expand: false,
-            builder: (_, controller) {
+            builder: (scrollCtx, controller) {
+              final isDark = Theme.of(scrollCtx).brightness == Brightness.dark;
+              final bgColor = isDark ? const Color(0xFF1E1E1E) : AppColors.bgBlue;
+              final handleColor = isDark ? Colors.grey[700]! : Colors.grey[400]!;
+              final sectionTitleColor = isDark ? Colors.white70 : Colors.black87;
+
               return Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.bgBlue,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 ),
                 child: ListView(
                   controller: controller,
@@ -179,12 +194,13 @@ Future<void> showWorkerProfileBottomSheet({
                         height: 5,
                         margin: const EdgeInsets.only(bottom: 15),
                         decoration: BoxDecoration(
-                          color: Colors.grey[400],
+                          color: handleColor,
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
                     ),
 
+                    // 🔹 মেইন কার্ড: কার্ডে ট্যাপ = প্রোফাইল, বাটনে ট্যাপ = Job Details
                     UniversalWorkerCard(
                       id: workerModel.uid,
                       name: (data['name'] ?? 'Unknown').toString(),
@@ -203,16 +219,19 @@ Future<void> showWorkerProfileBottomSheet({
                       isTopRated: isTopRated,
                       isSaved: isSaved,
 
-                      onSaveTap: () async {
-                        // ✅ লগইন চেক
-                        if (!checkLogin(context)) return;
+                      // কার্ডে ট্যাপ → প্রোফাইল
+                      onTap: openProfile,
 
+                      // নিচের primary বাটন → Job Details
+                      onViewProfileTap: openJobDetails,
+
+                      onSaveTap: () async {
+                        if (!checkLogin(context)) return;
                         await SavedService.toggleSave(data);
                         setSheetState(() => isSaved = SavedService.isSaved(data));
                       },
 
                       onChatTap: () async {
-                        // ✅ লগইন চেক
                         if (!checkLogin(context)) return;
 
                         showDialog(
@@ -241,50 +260,20 @@ Future<void> showWorkerProfileBottomSheet({
                           ),
                         );
                       },
-
-                      onTap: openProfile,
                     ),
 
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 20),
 
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: openJobDetails,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandMain,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                          ),
-                          child: const Text(
-                            'VIEW JOB DETAILS',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // ... Suggestions Section (Same as before) ...
-                    const SizedBox(height: 25),
-
+                    // 🔹 Suggestions Section
                     if (suggestions.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.only(left: 15, bottom: 10),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 15, bottom: 10),
                         child: Text(
                           "Nearby Verified Workers",
                           style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: sectionTitleColor,
                           ),
                         ),
                       ),
@@ -307,6 +296,8 @@ Future<void> showWorkerProfileBottomSheet({
                               price: (s['price'] ?? s['priceLabel'] ?? "Negotiable").toString(),
                               time: "Available now",
                               isVerifiedWorker: true,
+
+                              // suggestion কার্ডে শুধু ট্যাপ → নতুন bottom sheet
                               onTap: () {
                                 Navigator.pop(sheetCtx);
                                 showWorkerProfileBottomSheet(
@@ -327,12 +318,16 @@ Future<void> showWorkerProfileBottomSheet({
                                   ),
                                 );
                               },
+
+                              // এখানে action buttons লাগবে না, dead button এড়াতে
+                              showActionButtons: false,
                             ),
                           );
                         }).toList(),
                       ),
                     ],
-                    const SizedBox(height: 50),
+
+                    const SizedBox(height: 40),
                   ],
                 ),
               );

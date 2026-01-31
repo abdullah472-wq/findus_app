@@ -1,10 +1,10 @@
-//lib/widgets/universal_worker_card
+// lib/widgets/universal_worker_card.dart
 
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/badge/badge_model.dart'; // Ensure this path exists
+import 'package:findus_app/badge/badge_model.dart';
 
 class UniversalWorkerCard extends StatelessWidget {
   final String? id;
@@ -46,6 +46,9 @@ class UniversalWorkerCard extends StatelessWidget {
   final BorderRadius? borderRadius;
   final bool enableImageZoom;
 
+  /// 🔹 নতুন: বাটনের টেক্সট কাস্টমাইজ করার জন্য
+  final String primaryButtonText;
+
   const UniversalWorkerCard({
     super.key,
     this.id,
@@ -86,6 +89,7 @@ class UniversalWorkerCard extends StatelessWidget {
     this.elevation,
     this.borderRadius,
     this.enableImageZoom = true,
+    this.primaryButtonText = "View Job Details", // ✅ ডিফল্ট এখন View Job Details
   });
 
   @override
@@ -219,7 +223,7 @@ class UniversalWorkerCard extends StatelessWidget {
                       time,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.green[700],
+                        color: Colors.green,
                       ),
                     ),
                   ]
@@ -233,28 +237,53 @@ class UniversalWorkerCard extends StatelessWidget {
   }
 
   Widget _buildProfileImage(BuildContext context) {
+    const double size = 80;
+
+    // ✅ imageUrl ফাঁকা / "null" হলে placeholder দেখাবে
+    final String url = imageUrl.trim();
+    final bool hasImage = url.isNotEmpty && url.toLowerCase() != 'null';
+
+    Widget imageChild;
+
+    if (!hasImage) {
+      imageChild = Container(
+        width: size,
+        height: size,
+        color: Colors.grey[200],
+        child: const Center(
+          child: Icon(Icons.person, size: 40, color: Colors.grey),
+        ),
+      );
+    } else {
+      imageChild = CachedNetworkImage(
+        imageUrl: url,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: size,
+          height: size,
+          color: Colors.grey[200],
+          child: const Center(
+            child: Icon(Icons.person, size: 40, color: Colors.grey),
+          ),
+        ),
+        errorWidget: (context, url, error) => Container(
+          width: size,
+          height: size,
+          color: Colors.grey[200],
+          child: const Center(
+            child: Icon(Icons.person, size: 40, color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            width: 80,
-            height: 80,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => Container(
-              width: 80,
-              height: 80,
-              color: Colors.grey[200],
-              child: const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
-            ),
-            errorWidget: (context, url, error) => Container(
-              width: 80,
-              height: 80,
-              color: Colors.grey[200],
-              child: const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
-            ),
-          ),
+          child: imageChild,
         ),
 
         // Online status indicator
@@ -324,7 +353,7 @@ class UniversalWorkerCard extends StatelessWidget {
         children: [
           _buildStatItem(
             completed,
-            "Completed", // Replaced context.tr()
+            "Completed",
             Icons.check_circle_outline,
           ),
           Container(
@@ -334,7 +363,7 @@ class UniversalWorkerCard extends StatelessWidget {
           ),
           _buildStatItem(
             rating,
-            "Rating", // Replaced context.tr()
+            "Rating",
             Icons.star_outline,
           ),
           Container(
@@ -344,7 +373,7 @@ class UniversalWorkerCard extends StatelessWidget {
           ),
           _buildStatItem(
             reviews,
-            "Reviews", // Replaced context.tr()
+            "Reviews",
             Icons.rate_review_outlined,
           ),
         ],
@@ -355,7 +384,7 @@ class UniversalWorkerCard extends StatelessWidget {
   Widget _buildActionButtons(BuildContext context) {
     return Row(
       children: [
-        // View Profile Button
+        // Primary Button
         Expanded(
           child: _buildViewProfileButton(context),
         ),
@@ -434,9 +463,9 @@ class UniversalWorkerCard extends StatelessWidget {
           ),
           backgroundColor: Colors.white,
         ),
-        child: const Text(
-          "View Profile", // Replaced context.tr()
-          style: TextStyle(
+        child: Text(
+          primaryButtonText, // ✅ এখন কাস্টমাইজযোগ্য, ডিফল্ট "View Job Details"
+          style: const TextStyle(
             color: AppColors.brandMain,
             fontWeight: FontWeight.bold,
             fontSize: 14,

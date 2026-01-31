@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -186,24 +187,79 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
   // ... (Helper Methods: _generateLocationKeys, _pickAndUploadProfileImage, etc. - keep same logic)
   // Logic code is same, only UI part updated below.
 
+  Future<XFile> _compressIfNeeded(
+      XFile file, {
+        required int maxSizeInBytes,
+      }) async {
+    final originalBytes = await file.readAsBytes();
+
+    // আগে থেকেই যদি ছোট হয়, compress করার দরকার নাই
+    if (originalBytes.lengthInBytes <= maxSizeInBytes) {
+      return file;
+    }
+
+    int quality = 90;
+    Uint8List compressedBytes = originalBytes;
+
+    // ধাপে ধাপে quality কমিয়ে compress করি
+    while (quality >= 30) {
+      compressedBytes = await FlutterImageCompress.compressWithList(
+        originalBytes,
+        quality: quality,
+      );
+
+      if (compressedBytes.lengthInBytes <= maxSizeInBytes) {
+        break;
+      }
+
+      quality -= 10;
+    }
+
+    // যদি কম্প্রেশন তেমন লাভ না দেয়, অরিজিনালটাই রিটার্ন করি
+    if (compressedBytes.lengthInBytes >= originalBytes.lengthInBytes) {
+      return file;
+    }
+
+    return XFile.fromData(
+      compressedBytes,
+      name: file.name,
+      mimeType: file.mimeType,
+    );
+  }
+
   Future<void> _pickAndUploadProfileImage() async {
     if (_isUploadingImage) return;
-    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+
+    // imageQuality না দিলেও চলবে, আমরা নিজেই compress করবো
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 100,
+    );
     if (picked == null) return;
 
-    final bytes = await picked.readAsBytes();
-    setState(() {
-      _profileImageBytes = bytes;
-      _isUploadingImage = true;
-    });
+    setState(() => _isUploadingImage = true);
 
     try {
-      final uploaded = await CloudinaryService.uploadXFile(
+      // ✅ 300KB limit ধরলাম profile picture এর জন্য
+      const int maxSize = 300 * 1024;
+      final compressed = await _compressIfNeeded(
         picked,
+        maxSizeInBytes: maxSize,
+      );
+
+      final bytes = await compressed.readAsBytes();
+
+      setState(() {
+        _profileImageBytes = bytes; // preview এর জন্য compressed bytes
+      });
+
+      final uploaded = await CloudinaryService.uploadXFile(
+        compressed,
         folder: 'findus/profile_images',
         resourceType: 'image',
         tags: const ['profile'],
       );
+
       final url = uploaded['secure_url']?.toString();
       if (url == null) throw Exception('No secure_url returned');
 
@@ -368,14 +424,16 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx'],
-        withData: true, // বাইটস রিড করার জন্য
+        withData: true,
       );
 
       if (result == null || result.files.isEmpty) return;
-
-      setState(() => _isUploadingCv = true);
-
       final file = result.files.single;
+
+      if (file.size > 5 * 1024 * 1024) {
+        _showError('File too large. Max 5MB allowed.');
+        return;
+      }
 
       // ✅ XFile এ কনভার্ট করা (কারণ CloudinaryService XFile সাপোর্ট করে)
       // অথবা সরাসরি বাইটস আপলোড করা
@@ -438,13 +496,14 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
       if (mounted) setState(() => _isUploadingCv = false);
     }
   }
+
+
   Future<void> _pickAndUploadPortfolio() async {
     if (_isUploadingPortfolio) return;
 
     try {
-      // ১. মাল্টিপল ইমেজ সিলেক্ট করা
       final List<XFile> files = await _picker.pickMultiImage(
-        imageQuality: 80, // কম্প্রেস করা ভালো
+        imageQuality: 100,
       );
 
       if (files.isEmpty) return;
@@ -453,11 +512,17 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
 
       final List<String> newUrls = [];
 
-      // ২. লুপ চালিয়ে আপলোড করা
       for (final file in files) {
         try {
-          final uploaded = await CloudinaryService.uploadXFile(
+          // ✅ 1MB limit প্রতিটা portfolio ইমেজের জন্য
+          const int maxSize = 1024 * 1024;
+          final compressed = await _compressIfNeeded(
             file,
+            maxSizeInBytes: maxSize,
+          );
+
+          final uploaded = await CloudinaryService.uploadXFile(
+            compressed,
             folder: 'findus/portfolio',
             resourceType: 'image',
             tags: const ['portfolio'],
@@ -474,8 +539,6 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
 
       if (newUrls.isEmpty) throw Exception('No images uploaded');
 
-      // ৩. ফায়ারস্টোরে আপডেট করা (আগের গুলোর সাথে নতুনগুলো যোগ করা)
-      // আমরা arrayUnion ব্যবহার করব যাতে আগের ডাটা মুছে না যায়
       await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
         'portfolioUrls': FieldValue.arrayUnion(newUrls),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -486,10 +549,12 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
           _portfolioUrls.addAll(newUrls);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("${newUrls.length} images added to portfolio"), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text("${newUrls.length} images added to portfolio"),
+            backgroundColor: Colors.green,
+          ),
         );
       }
-
     } catch (e) {
       _showError('Portfolio upload failed: $e');
     } finally {

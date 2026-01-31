@@ -31,6 +31,8 @@ import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/screens/explore/notifications_page.dart'; // Notification Page Import
+import 'package:findus_app/screens/profile/worker_documents_screen.dart';
+import 'package:findus_app/screens/rating_history_screen.dart';
 import 'card_theme_bottom_sheet.dart';
 import 'followers_following_screen.dart';
 
@@ -149,6 +151,17 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     } catch (_) {}
   }
 
+  void _openRatingHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RatingHistoryScreen(
+          targetUserId: widget.uid, // ✅ এখানে uid পাঠাচ্ছি
+        ),
+      ),
+    );
+  }
+
   // --- Actions ---
 
   Future<void> _toggleFollow() async {
@@ -261,13 +274,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     final scaffoldBg = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
 
     return Scaffold(
-      backgroundColor: bgColor,
       bottomNavigationBar: (!widget.isOwner)
           ? SafeArea(
-        child: Padding( // প্যাডিং যোগ করা হলো যাতে একদম নিচে লেগে না থাকে
-          padding: const EdgeInsets.only(bottom: 8.0),
-          child: _buildVisitorActionBar(isDark),
-        ),
+        top: false, // শুধু নিচের সেফ এরিয়া
+        child: _buildVisitorActionBar(isDark),
       )
           : null,
       body: Builder(
@@ -330,8 +340,15 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
           Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(16)),
-            child: Text(locked ? 'This profile is locked.' : 'This profile is currently hidden.', textAlign: TextAlign.center, style: TextStyle(color: textColor)),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              locked ? 'This profile is locked.' : 'This profile is currently hidden.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: textColor),
+            ),
           ),
           const SizedBox(height: 100),
         ],
@@ -339,14 +356,18 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     }
 
     final bool isWorker = _isWorkerRole();
+
+    final double bottomSpacer = widget.isOwner ? 40.0 : 80.0;
+
     return Column(
       children: [
         _buildHeaderCard(isWorker ? "Worker" : "Supporter", isDark),
         _buildSocialLinks(),
         isWorker ? _buildWorkerInfo(isDark) : _buildSupporterInfo(isDark),
+        _buildDocumentsButton(isDark),
         _buildAboutSection(isDark),
         _buildDynamicBottomSection(isWorker, isDark),
-        const SizedBox(height: 100),
+        SizedBox(height: bottomSpacer),
       ],
     );
   }
@@ -395,25 +416,73 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildStatsRow(double rating, int completed, int reviews, bool isDark) {
     final textColor = isDark ? Colors.white : Colors.black87;
     final labelColor = isDark ? Colors.white60 : Colors.grey;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _statItem('Rating', rating.toStringAsFixed(1), Icons.star_border, textColor, labelColor),
-        _statItem('Completed', completed.toString(), Icons.check_circle_outline, textColor, labelColor),
-        _statItem('Reviews', reviews.toString(), Icons.rate_review_outlined, textColor, labelColor),
+        _statItem(
+          'Rating',
+          rating.toStringAsFixed(1),
+          Icons.star_border,
+          textColor,
+          labelColor,
+          onTap: _openRatingHistory, // ✅ Rating tap
+        ),
+        _statItem(
+          'Completed',
+          completed.toString(),
+          Icons.check_circle_outline,
+          textColor,
+          labelColor,
+        ),
+        _statItem(
+          'Reviews',
+          reviews.toString(),
+          Icons.rate_review_outlined,
+          textColor,
+          labelColor,
+          onTap: _openRatingHistory, // ✅ Reviews tap
+        ),
       ],
     );
   }
 
-  Widget _statItem(String label, String value, IconData icon, Color textColor, Color labelColor) {
-    return Column(
+  Widget _statItem(
+      String label,
+      String value,
+      IconData icon,
+      Color textColor,
+      Color labelColor, {
+        VoidCallback? onTap,
+      }) {
+    final child = Column(
       children: [
         Icon(icon, size: 20.0, color: AppColors.brandMain),
         const SizedBox(height: 5),
-        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: textColor,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 10, color: labelColor)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: labelColor,
+          ),
+        ),
       ],
+    );
+
+    if (onTap == null) return child;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: child,
     );
   }
 
@@ -476,6 +545,56 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
+  Widget _buildDocumentsButton(bool isDark) {
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListTile(
+        leading: const Icon(Icons.folder_shared, color: AppColors.brandMain),
+        title: Text(
+          'CV & Portfolio',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: textColor,
+          ),
+        ),
+        subtitle: Text(
+          'View documents & portfolio',
+          style: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.white60 : Colors.grey[600],
+          ),
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WorkerDocumentsScreen(
+                uid: widget.uid,
+                isOwner: widget.isOwner,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildVisitorMenuButton(bool isDark) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -511,21 +630,29 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildWorkerInfo(bool isDark) {
     final expYears = userData['experienceYears'];
     final expLabel = (expYears == null) ? 'New' : '$expYears Years';
-    final priceLabel = _getSafeString(userData['priceText'], defaultValue: 'Negotiable');
-    final timeLabel = _getSafeString(userData['availability'], defaultValue: 'Not Set');
-    final cvUrl = userData['cvUrl']?.toString() ?? '';
-    final List<String> portfolioUrls = (userData['portfolioUrls'] as List?)
-        ?.map((e) => e.toString()) // সব এলিমেন্টকে স্ট্রিং এ কনভার্ট
-        .where((e) => e.isNotEmpty) // খালি স্ট্রিং বাদ দিন
-        .toList() ?? [];
+    final priceLabel = _getSafeString(
+      userData['priceText'],
+      defaultValue: 'Negotiable',
+    );
+    final timeLabel = _getSafeString(
+      userData['availability'],
+      defaultValue: 'Not Set',
+    );
 
-    return _section('Work Information', Column(children: [
-      _infoTile(Icons.work, 'Experience', expLabel, isDark),
-      _infoTile(Icons.payments, 'Rate', priceLabel, isDark),
-      _infoTile(Icons.access_time, 'Hours', timeLabel, isDark),
-      if (cvUrl.isNotEmpty) _clickableInfoTile(icon: Icons.description_outlined, title: 'CV', value: 'View', onTap: () => _launchUrl(cvUrl), isDark: isDark),
-      if (portfolioUrls.isNotEmpty) _clickableInfoTile(icon: Icons.photo_library_outlined, title: 'Portfolio', value: '${portfolioUrls.length} files', onTap: () => _openPortfolioViewer(portfolioUrls), isDark: isDark),
-    ]), isDark);
+    final String cvUrl = userData['cvUrl']?.toString() ?? '';
+    final List<String> portfolioUrls = _safeStringList(userData['portfolioUrls']);
+
+    return _section(
+      'Work Information',
+      Column(
+        children: [
+          _infoTile(Icons.work, 'Experience', expLabel, isDark),
+          _infoTile(Icons.payments, 'Rate', priceLabel, isDark),
+          _infoTile(Icons.access_time, 'Hours', timeLabel, isDark),
+        ],
+      ),
+      isDark,
+    );
   }
 
   Widget _buildSupporterInfo(bool isDark) {
@@ -604,7 +731,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     final barColor = isDark ? const Color(0xFF2C2C2C) : AppColors.brandLight;
 
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8), // আগে all(16) ছিল
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: barColor,
@@ -663,8 +790,70 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildBadgeSection(BadgeLevel badge) { return Column(children: [Icon(AppBadgeTheme.baseIcon, color: AppBadgeTheme.colorForLevel(badge), size: 45), const SizedBox(height: 5), Text(badge.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1))]); }
   Widget _buildStatusPills(double rating, int completed) { final pills = <Widget>[]; if (userData['kyc_completed'] == true) pills.add(_pill('Verified', Colors.blue, Icons.verified)); if (rating >= 4.9) pills.add(_pill('Top Rated', Colors.orange, Icons.star)); if (completed >= 50 && rating >= 4.5) pills.add(_pill('Trusted', Colors.green, Icons.shield)); return Row(mainAxisAlignment: MainAxisAlignment.center, children: pills); }
   Widget _pill(String label, Color color, IconData icon) { return Container(margin: const EdgeInsets.symmetric(horizontal: 4), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.5))), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 12.0, color: color), const SizedBox(width: 4), Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color))])); }
-  Widget _buildProfileImageWithOnline() { final imageUrl = _getSafeString(userData['image'], defaultValue: ''); final hasImage = imageUrl.isNotEmpty; return GestureDetector(onTap: hasImage ? _showImageFullScreen : null, child: Stack(children: [Hero(tag: 'profile_${widget.uid}', child: ClipOval(child: SizedBox(width: 130, height: 130, child: hasImage ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, placeholder: (context, _) => Container(color: Colors.grey[200], child: Center(child: Lottie.asset('assets/animations/profile_avatar.json', fit: BoxFit.contain))), errorWidget: (context, _, __) => Container(color: Colors.grey[200], child: const Icon(Icons.person, size: 50, color: Colors.grey))) : Container(color: Colors.grey[200], child: Center(child: Lottie.asset('assets/animations/profile_avatar.json', fit: BoxFit.contain)))))), if (!widget.isOwner) Positioned(bottom: 5, right: 5, child: Container(width: 20, height: 20, decoration: BoxDecoration(color: isOnline ? Colors.green : Colors.grey, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2))))])); }
-  void _showImageFullScreen() { showDialog(context: context, builder: (context) => Dialog(backgroundColor: Colors.transparent, insetPadding: const EdgeInsets.all(20), child: InteractiveViewer(panEnabled: true, minScale: 0.5, maxScale: 3, child: Hero(tag: 'profile_${widget.uid}', child: CachedNetworkImage(imageUrl: _getSafeString(userData['image'], defaultValue: 'https://i.pravatar.cc/150'), fit: BoxFit.contain))))); }
+
+  Widget _buildProfileImageWithOnline() {
+    final imageUrl = _getSafeString(userData['image'], defaultValue: '');
+    final hasImage = imageUrl.isNotEmpty;
+
+    return Stack(
+      children: [
+        Hero(
+          tag: 'profile_${widget.uid}',
+          child: ClipOval(
+            child: SizedBox(
+              width: 130,
+              height: 130,
+              child: hasImage
+                  ? CachedNetworkImage(
+                imageUrl: imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, _) => Container(
+                  color: Colors.grey[200],
+                  child: Center(
+                    child: Lottie.asset(
+                      'assets/animations/profile_avatar.json',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                errorWidget: (context, _, __) => Container(
+                  color: Colors.grey[200],
+                  child: const Icon(
+                    Icons.person,
+                    size: 50,
+                    color: Colors.grey,
+                  ),
+                ),
+              )
+                  : Container(
+                color: Colors.grey[200],
+                child: Center(
+                  child: Lottie.asset(
+                    'assets/animations/profile_avatar.json',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (!widget.isOwner)
+          Positioned(
+            bottom: 5,
+            right: 5,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isOnline ? Colors.green : Colors.grey,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
   void _showFollowersList() { Navigator.push(context, MaterialPageRoute(builder: (_) => FollowersFollowingScreen(userId: widget.uid, listType: FollowListType.followers))); }
   void _showFollowingList() { Navigator.push(context, MaterialPageRoute(builder: (_) => FollowersFollowingScreen(userId: widget.uid, listType: FollowListType.following))); }
   Widget _buildSocialLinks() { final fb = userData['facebookUrl']?.toString() ?? ""; final ig = userData['instagramUrl']?.toString() ?? ""; final linkedin = userData['linkedInUrl']?.toString() ?? ""; final socialLinks = <Widget>[]; if (fb.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.facebook, color: Colors.blue, size: 30), onPressed: () => _launchUrl(fb))); if (ig.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.camera_alt, color: Colors.pink, size: 28), onPressed: () => _launchUrl(ig))); if (linkedin.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.work, color: Color(0xFF0077B5), size: 28), onPressed: () => _launchUrl(linkedin))); return socialLinks.isEmpty ? const SizedBox.shrink() : Row(mainAxisAlignment: MainAxisAlignment.center, children: socialLinks); }
@@ -683,6 +872,19 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   void _handleHireOrRequest(bool isWorker) { showModalBottomSheet(context: context, builder: (ctx) => Container(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(isWorker ? 'Hire Options' : 'Request Options', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)), const SizedBox(height: 10), ListTile(leading: const Icon(Icons.send), title: const Text('Send Proposal'), onTap: () { Navigator.pop(ctx); _openChat(isWorker ? 'Worker' : 'Supporter'); })]))); }
   void _openPortfolioViewer(List<String> urls, {int initialIndex = 0}) { Navigator.push(context, MaterialPageRoute(fullscreenDialog: true, builder: (_) => _PortfolioViewer(urls: urls, initialIndex: initialIndex))); }
   String _formatNumber(int num) { if (num >= 1000000) return '${(num / 1000000).toStringAsFixed(1)}M'; if (num >= 1000) return '${(num / 1000).toStringAsFixed(1)}K'; return num.toString(); }
+  List<String> _safeStringList(dynamic value) {
+    if (value is Iterable) {
+      try {
+        return value
+            .map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      } catch (_) {
+        return <String>[];
+      }
+    }
+    return <String>[];
+  }
   bool get _isBusinessUser { return (userData['subscription_type'] ?? 'free') == 'business'; }
   Widget _buildShimmerLoading() { return Shimmer.fromColors(baseColor: Colors.grey[300]!, highlightColor: Colors.grey[100]!, child: ListView(shrinkWrap: true, children: [Container(height: 200, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white)])); }
   // ✅ Fix for UnifiedProfileState.dart
