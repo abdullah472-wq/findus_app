@@ -1,7 +1,7 @@
 // lib/screens/profile/worker_job_details_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // ✅ ইমেজ ক্যাশিং অ্যাড করা হলো
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
@@ -25,21 +25,13 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
-    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final subtitleColor = isDark ? Colors.grey.shade400 : Colors.black87;
 
-    final ratingText = worker.rating.toStringAsFixed(1);
     final jobTitle = "$_roleLabel Service Details";
-
-    // ✅ প্রাইস লেবেল লজিক (টাকা আইকন সহ)
-    String displayPrice = worker.priceText.trim().isNotEmpty
-        ? worker.priceText
-        : (worker.price != null ? "${worker.price!.toInt()}" : "Negotiable");
-
     final jobDescription =
         "This ${_roleLabel.toLowerCase()} is offering professional services in ${worker.location}.\n\n"
         "• Verified Profile: ${worker.kycCompleted ? 'Yes' : 'No'}\n"
@@ -58,13 +50,12 @@ class WorkerJobDetailsScreen extends StatelessWidget {
           icon: Icon(Icons.person_outline, color: textColor),
           tooltip: "View Profile",
           onPressed: () {
-            final uid = worker.uid.trim();
-            if (uid.isEmpty) return;
+            if (worker.uid.isEmpty) return;
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => UnifiedProfileScreen(
-                  uid: uid,
+                  uid: worker.uid,
                   isOwner: false,
                   showBack: true,
                 ),
@@ -83,8 +74,8 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔥 ID Card Style Header
-                    _buildHeaderCard(context, ratingText, displayPrice, isDark, cardColor, textColor),
+                    // 🔥 Full Cover Style Header
+                    _buildModernHeader(context, isDark, cardColor, textColor),
 
                     const SizedBox(height: 20),
 
@@ -97,265 +88,198 @@ class WorkerJobDetailsScreen extends StatelessWidget {
               ),
             ),
 
-            // Bottom fixed bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(
-                color: cardColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 10,
-                    offset: const Offset(0, -4),
-                  )
-                ],
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final uid = worker.uid.trim();
-                        if (uid.isEmpty) return;
-
-                        final cid = await FirestoreChatService.getOrCreateConversation(
-                          otherUserId: uid,
-                        );
-
-                        if (!context.mounted) return;
-
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              conversationId: cid,
-                              userName: worker.name,
-                              userRole: worker.userRole,
-                              userImage: worker.image,
-                            ),
-                          ),
-                        );
-                      },
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.brandMain),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        minimumSize: const Size.fromHeight(50),
-                        backgroundColor: isDark ? Colors.transparent : Colors.white,
-                        foregroundColor: AppColors.brandMain,
-                      ),
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text(
-                        "CHAT",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => HireRequestScreen(worker: worker),
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandMain, // Brand Color
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        minimumSize: const Size.fromHeight(50),
-                        elevation: 4,
-                      ),
-                      child: const Text(
-                        "HIRE NOW",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Bottom Action Bar
+            _buildBottomBar(context, isDark, cardColor),
           ],
         ),
       ),
     );
   }
 
-  // ---------- 🔥 Header card (ID Style) ----------
-  Widget _buildHeaderCard(
-      BuildContext context,
-      String ratingText,
-      String displayPrice,
-      bool isDark,
-      Color cardColor,
-      Color textColor,
-      ) {
-    final hasImg = worker.image.trim().isNotEmpty;
+  // ------------------------------------------
+  // 🔥 MODERN HEADER DESIGN (MATCHING PROFILE)
+  // ------------------------------------------
+  Widget _buildModernHeader(BuildContext context, bool isDark, Color cardColor, Color textColor) {
+    // Price Logic
+    String displayPrice = worker.priceText.trim().isNotEmpty
+        ? worker.priceText
+        : (worker.price != null ? "${worker.price!.toInt()}" : "Negotiable");
     final bool isNegotiable = displayPrice.toLowerCase().contains('negotiable');
 
+    // Status Logic
+    final bool isVerified = worker.kycCompleted;
+    final bool isTopRated = worker.rating >= 4.8;
+    final bool isTrusted = worker.completedCount >= 50 && worker.rating >= 4.5;
+
+    // Cover Gradient (Soft Blue/Purple)
+    const Gradient coverGradient = LinearGradient(
+      colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          )
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
         ],
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
         children: [
-          // 🖼️ Squircle Image (ID Style)
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: isDark ? Colors.white24 : Colors.grey.shade300,
-                  width: 2
+          // 1. Cover & Avatar
+          Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                height: 100,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: coverGradient,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
               ),
-              color: Colors.grey[200],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: hasImg
-                  ? CachedNetworkImage(
-                imageUrl: worker.image,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => const Icon(Icons.person, color: Colors.grey),
-              )
-                  : const Icon(Icons.person, size: 40, color: Colors.grey),
-            ),
+              Positioned(
+                bottom: -40,
+                child: Container(
+                  width: 90, height: 90,
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cardColor, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      )
+                    ],
+                  ),
+                  child: ClipOval(child: _buildProfileImage()),
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(height: 50),
 
-          Expanded(
+          // 2. Info Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 🔹 Name & FINDUS Stamp
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        worker.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                          color: textColor,
-                        ),
-                      ),
-                    ),
-                    // FINDUS Stamp
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.brandMain.withOpacity(0.4)),
-                        borderRadius: BorderRadius.circular(4),
-                        color: AppColors.brandMain.withOpacity(0.05),
-                      ),
-                      child: Text(
-                        "FINDUS",
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                          fontStyle: FontStyle.italic,
-                          color: AppColors.brandMain,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
+                // Name
                 Text(
-                  _roleLabel.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.brandMain,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.1,
+                  worker.name.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                    letterSpacing: 0.5,
                   ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
 
                 const SizedBox(height: 6),
 
-                // Location
+                // Role & Status Icons
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
+                    Text(
+                      _roleLabel.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandMain,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    if (isVerified || isTopRated || isTrusted) ...[
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 12, color: Colors.grey.shade400),
+                      const SizedBox(width: 8),
+                      if (isVerified) _statusIcon(Icons.verified, Colors.blue),
+                      if (isTopRated) _statusIcon(Icons.star, Colors.orange),
+                      if (isTrusted) _statusIcon(Icons.shield, Colors.green),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+
+                // 3. Stats & Price Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Rating Box
+                    _buildStatBox(
+                        "RATING",
+                        worker.rating.toStringAsFixed(1),
+                        Icons.star_rounded,
+                        Colors.amber,
+                        isDark
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Price Box (Highlighted)
                     Expanded(
-                      child: Text(
-                        worker.location,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      flex: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandMain.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.brandMain.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              "PRICE",
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandMain.withOpacity(0.8),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (!isNegotiable)
+                                  Text("৳", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.brandMain)),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    displayPrice,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.brandMain,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
 
                 const SizedBox(height: 10),
-
-                // Rating & Reviews
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          const SizedBox(width: 4),
-                          Text(
-                            ratingText,
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    // 💰 Fixed Taka Icon Logic
-                    Row(
-                      children: [
-                        if (!isNegotiable)
-                          Text("৳ ", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppColors.brandMain)),
-                        Text(
-                          displayPrice,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.brandMain,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -364,15 +288,59 @@ class WorkerJobDetailsScreen extends StatelessWidget {
     );
   }
 
-  // ---------- Job info card ----------
-  Widget _buildJobInfoCard(
-      String title,
-      String description,
-      Color cardColor,
-      Color textColor,
-      Color subtitleColor,
-      bool isDark,
-      ) {
+  // 🖼️ Helper: Profile Image
+  Widget _buildProfileImage() {
+    if (worker.image.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: worker.image,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey)),
+      );
+    }
+    return Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey));
+  }
+
+  // 📦 Helper: Stat Box
+  Widget _buildStatBox(String label, String value, IconData icon, Color color, bool isDark) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50],
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(fontSize: 9, color: isDark ? Colors.white54 : Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statusIcon(IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Icon(icon, size: 16, color: color),
+    );
+  }
+
+  // 📝 Job Info Card
+  Widget _buildJobInfoCard(String title, String description, Color cardColor, Color textColor, Color subtitleColor, bool isDark) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -393,26 +361,64 @@ class WorkerJobDetailsScreen extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.description_outlined, color: AppColors.brandMain, size: 20),
+              Icon(Icons.info_outline_rounded, color: AppColors.brandMain, size: 20),
               const SizedBox(width: 8),
               Text(
                 title.toUpperCase(),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 0.5,
-                  color: textColor,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5, color: textColor),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 14,
-              color: subtitleColor,
-              height: 1.6,
+          Text(description, style: TextStyle(fontSize: 14, color: subtitleColor, height: 1.6)),
+        ],
+      ),
+    );
+  }
+
+  // 👇 Bottom Action Bar
+  Widget _buildBottomBar(BuildContext context, bool isDark, Color cardColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, -4))],
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                if (worker.uid.isEmpty) return;
+                final cid = await FirestoreChatService.getOrCreateConversation(otherUserId: worker.uid);
+                if (!context.mounted) return;
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(conversationId: cid, userName: worker.name, userRole: worker.userRole, userImage: worker.image)));
+              },
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.brandMain),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: const Size.fromHeight(50),
+                backgroundColor: isDark ? Colors.transparent : Colors.white,
+                foregroundColor: AppColors.brandMain,
+              ),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text("CHAT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => HireRequestScreen(worker: worker)));
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandMain,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: const Size.fromHeight(50),
+                elevation: 4,
+              ),
+              child: const Text("HIRE NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
             ),
           ),
         ],

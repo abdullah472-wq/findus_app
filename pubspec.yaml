@@ -53,6 +53,9 @@ dependencies:
   dash_chat_2: ^0.0.21
 
   # ========== FILE & MEDIA ==========
+  pdf: ^3.10.4
+  printing: ^5.11.0
+  path_provider: ^2.1.1
   image_picker: ^1.1.2
   file_picker: ^8.1.2
   flutter_image_compress: ^2.1.0

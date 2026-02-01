@@ -50,6 +50,8 @@ class AchievementService {
   }
 
   /// রিওয়ার্ড (XP) ক্লেইম করা
+  /// রিওয়ার্ড (XP) ক্লেইম করা
+  /// রিওয়ার্ড (XP) ক্লেইম করা
   static Future<void> claim(String id) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -61,16 +63,29 @@ class AchievementService {
 
     debugPrint("Claiming reward for: $id");
 
-    // ✅ ১) আগে লোকালি claimed করে দেই, যাতে বারবার claim না করা যায়
+    // ১) ব্যাজ লেভেল আপ চেক করার জন্য বর্তমান লেভেল রাখা
+    final oldLevel = BadgeService.badgeNotifier.value.level;
+
+    // ২) লোকালি আপডেট করা
     final updatedState = state.copyWith(claimed: true);
     _stateById[id] = updatedState;
     await _saveAll();
+
+    // ৩) XP যোগ করা
     await BadgeService.addPoints(state.def.xpReward);
 
+    // ৪) নতুন লেভেল চেক করা
+    final newLevel = BadgeService.badgeNotifier.value.level;
+    if (BadgeService.hasLeveledUp(oldLevel, newLevel)) {
+      // TODO: এখানে লেভেল আপ নোটিফিকেশন বা ইভেন্ট ট্রিগার করতে পারেন
+      debugPrint("🎉 LEVEL UP! $oldLevel -> $newLevel");
+    }
+
     try {
-      // ✅ ২) তারপর Firestore এ আপডেট করার চেষ্টা
+      // ৫) ফায়ারবেসে আপডেট
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'xpPoints': FieldValue.increment(state.def.xpReward),
+        'user_badge_points': FieldValue.increment(state.def.xpReward), // ব্যাকওয়ার্ড কম্প্যাটিবিলিটি
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -88,8 +103,6 @@ class AchievementService {
       debugPrint("Successfully claimed reward for: $id");
     } catch (e) {
       debugPrint("Error claiming reward (remote only): $e");
-      // ইচ্ছে করলে এখানে rollback লজিকও রাখতে পারো,
-      // কিন্তু প্রথমে Rules ঠিক করাই ভালো।
     }
   }
 

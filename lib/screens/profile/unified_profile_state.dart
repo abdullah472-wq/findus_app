@@ -65,11 +65,12 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   final GlobalKey<RefreshIndicatorState> _refreshKey = GlobalKey<RefreshIndicatorState>();
 
+  // 🎨 Theme Gradients (Same as BottomSheet)
   final List<List<Color>> _themeGradients = const [
-    [Color(0xFFB2EBF2), Color(0xFFFFFFFF)], // Teal
-    [Color(0xFFFFCC80), Color(0xFFFFFFFF)], // Orange
-    [Color(0xFFC5CAE9), Color(0xFFFFFFFF)], // Indigo
-    [Color(0xFFF8BBD0), Color(0xFFFFFFFF)], // Pink
+    [Color(0xFFE0F7FA), Color(0xFFFFFFFF)], // Teal (Light)
+    [Color(0xFFFFF3E0), Color(0xFFFFFFFF)], // Orange (Light)
+    [Color(0xFFE8EAF6), Color(0xFFFFFFFF)], // Indigo (Light)
+    [Color(0xFFFCE4EC), Color(0xFFFFFFFF)], // Pink (Light)
   ];
 
   @override
@@ -374,119 +375,466 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
-  // --- Header Card (Fixed Spacing & Dark Mode) ---
+  // 🏞️ Final Fixed Header: Social Left, Status Right (Gray/Color Mode)
+  // 🏞️ Header with Dynamic Theme Support
   Widget _buildHeaderCard(String roleLabel, bool isDark) {
+    // ১. ডাটা পার্সিং
     final int xp = int.tryParse(userData['user_badge_points']?.toString() ?? '0') ?? 0;
     final double rating = double.tryParse(userData['rating']?.toString() ?? '0.0') ?? 0.0;
     final int completed = int.tryParse(userData['completedCount']?.toString() ?? '0') ?? 0;
-    final int reviews = int.tryParse(userData['reviewsCount']?.toString() ?? '0') ?? 0;
     final badge = AchievementService.getBadgeLevelByPoints(xp);
 
-    final colors = _themeGradients[_cardThemeIndex.clamp(0, _themeGradients.length - 1)];
-    // ডার্ক মোডে গ্রেডিয়েন্ট অ্যাডজাস্টমেন্ট
-    final adjustedColors = isDark
-        ? [colors[0].withOpacity(0.8), colors[1].withOpacity(0.1)]
-        : colors;
+    // ২. থিম কালার সিলেকশন লজিক
+    // ইউজার যে থিম ইনডেক্স সিলেক্ট করেছে (Default 0)
+    final int themeIdx = _cardThemeIndex.clamp(0, _themeGradients.length - 1);
+    final List<Color> selectedTheme = _themeGradients[themeIdx];
+
+    // ব্যাকগ্রাউন্ড লজিক:
+    // যদি ডার্ক মোড হয় কিন্তু ইউজার কাস্টম থিম চায়, আমরা থিম দেখাবো তবে একটু ডার্ক করে।
+    // অথবা সিম্পলি লাইট থিম দেখাবো (নিচের লজিকটি লাইট থিম দেখাবে)।
+
+    // টেক্সট কালার: ব্যাকগ্রাউন্ড যেহেতু লাইট প্যাস্টেল, তাই টেক্সট কালো হবে।
+    // তবে যদি ডিফল্ট ডার্ক মোড (কোনো থিম ছাড়া) চান, সেটার লজিক আলাদা হতে পারে।
+    // এখানে থিম প্রায়োরিটি পাচ্ছে।
+    final textColor = Colors.black87;
+
+    final coverGradient = _getBadgeGradient(badge);
+    final badgeColor = _getBadgeColor(badge);
+    final isNewbie = xp < 1000;
+
+    // ৩. স্ট্যাটাস লজিক
+    final bool isVerified = userData['kyc_completed'] == true;
+    final bool isTopRated = rating >= 4.8;
+    final bool isTrusted = completed >= 50 && rating >= 4.5;
 
     return Container(
-      // ✅ উপরের স্পেস কমানো হয়েছে (8px)
-      margin: const EdgeInsets.only(top: 8, left: 16, right: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [adjustedColors[0], adjustedColors[1]], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))],
+        // 🔥🔥 DYNAMIC THEME BACKGROUND APPLIED HERE
+        gradient: LinearGradient(
+          colors: isDark
+              ? [selectedTheme[0].withOpacity(0.8), const Color(0xFF1E1E1E)] // ডার্ক মোডে মিক্স
+              : selectedTheme, // লাইট মোডে পিওর থিম
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        // বর্ডার দেওয়া হলো যাতে ব্যাকগ্রাউন্ড লাইট হলে কার্ড বোঝা যায়
+        border: Border.all(color: Colors.black.withOpacity(0.05), width: 1),
       ),
       child: Column(
         children: [
-          const SizedBox(height: 10),
-          _buildBadgeSection(badge),
-          const SizedBox(height: 10),
-          _buildStatusPills(rating, completed),
-          const SizedBox(height: 20),
-          _buildProfileImageWithOnline(),
-          const SizedBox(height: 12),
-          _buildUserInfo(roleLabel, isDark),
-          const SizedBox(height: 20),
-          _buildStatsRow(rating, completed, reviews, isDark),
-          Divider(height: 30, color: isDark ? Colors.white24 : Colors.grey.shade300),
-          _buildEngagementRow(_followersCountLive, _followingCountLive, isDark),
+          // 🏞️ Cover Section
+          Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                height: 130,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: coverGradient,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(top: -30, left: -30, child: CircleAvatar(radius: 70, backgroundColor: Colors.white.withOpacity(0.1))),
+
+                    // Badge (Top Right)
+                    Positioned(
+                      top: 20, right: 20,
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.black.withOpacity(0.25),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isNewbie ? Colors.white.withOpacity(0.3) : badgeColor.withOpacity(0.6),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                )
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.workspace_premium,
+                              size: 48,
+                              color: isNewbie ? Colors.white : badgeColor,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                                badge.name.toUpperCase(),
+                                style: TextStyle(
+                                    color: isNewbie ? Colors.white : badgeColor,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2
+                                )
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Avatar
+              Positioned(
+                bottom: -55,
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      width: 110, height: 110,
+                      decoration: BoxDecoration(
+                        // 🔥 Avatar Border color matches Theme
+                          color: selectedTheme[0],
+                          shape: BoxShape.circle,
+                          border: Border.all(color: selectedTheme[0], width: 5),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 5))]
+                      ),
+                      child: ClipOval(child: _buildCoverProfileImage()),
+                    ),
+                    if (isOnline)
+                      Container(
+                          margin: const EdgeInsets.all(6),
+                          width: 20, height: 20,
+                          decoration: BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3)
+                          )
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 65),
+
+          // 📝 Info Section
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                // Name & Icons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _getSafeString(userData['name']).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: textColor, // ব্যবহার করা হচ্ছে ডার্ক টেক্সট
+                          letterSpacing: 0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (userData['accountLocked'] == true)
+                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 18, color: Colors.redAccent)),
+                    if (userData['workPaused'] == true)
+                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.pause_circle_outline, size: 18, color: Colors.amber)),
+                    if (userData['profileHidden'] == true)
+                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.visibility_off_outlined, size: 18, color: Colors.grey)),
+                  ],
+                ),
+
+                const SizedBox(height: 4),
+                Text(
+                  roleLabel.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandMain,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                // Social & Status Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.5), // Glassy white
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.05)),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildStylishSocialBtn(
+                              count: _followersCountLive,
+                              label: "Followers",
+                              icon: Icons.people_alt_rounded,
+                              color: Colors.blueAccent,
+                              isDark: false, // Force Light mode style inside theme
+                              onTap: _showFollowersList
+                          ),
+                          Container(height: 20, width: 1, color: Colors.grey.withOpacity(0.3), margin: const EdgeInsets.symmetric(horizontal: 12)),
+                          _buildStylishSocialBtn(
+                              count: _followingCountLive,
+                              label: "Following",
+                              icon: Icons.person_add_alt_1_rounded,
+                              color: Colors.purpleAccent,
+                              isDark: false,
+                              onTap: _showFollowingList
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    Row(
+                      children: [
+                        _buildStatusIcon(Icons.verified, isVerified, Colors.blue, "Verified", false),
+                        const SizedBox(width: 5),
+                        _buildStatusIcon(Icons.star, isTopRated, Colors.orange, "Top Rated", false),
+                        const SizedBox(width: 5),
+                        _buildStatusIcon(Icons.shield, isTrusted, Colors.green, "Trusted", false),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 25),
+
+                // Stats Boxes (Transparent background to blend with theme)
+                Row(
+                  children: [
+                    _buildFloatingStatBox("RATING", rating.toStringAsFixed(1), Icons.star_rounded, Colors.amber, false),
+                    const SizedBox(width: 12),
+                    _buildFloatingStatBox(_isWorkerRole() ? "JOBS" : "HIRED", "$completed", _isWorkerRole() ? Icons.work_outline : Icons.handshake_rounded, Colors.blue, false),
+                    const SizedBox(width: 12),
+                    _buildFloatingStatBox("XP", _formatNumber(xp), Icons.bolt, Colors.purple, false),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatsRow(double rating, int completed, int reviews, bool isDark) {
-    final textColor = isDark ? Colors.white : Colors.black87;
-    final labelColor = isDark ? Colors.white60 : Colors.grey;
+  // ---------------- HELPER METHODS ----------------
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _statItem(
-          'Rating',
-          rating.toStringAsFixed(1),
-          Icons.star_border,
-          textColor,
-          labelColor,
-          onTap: _openRatingHistory, // ✅ Rating tap
-        ),
-        _statItem(
-          'Completed',
-          completed.toString(),
-          Icons.check_circle_outline,
-          textColor,
-          labelColor,
-        ),
-        _statItem(
-          'Reviews',
-          reviews.toString(),
-          Icons.rate_review_outlined,
-          textColor,
-          labelColor,
-          onTap: _openRatingHistory, // ✅ Reviews tap
-        ),
-      ],
-    );
-  }
+  // ✨ Helper: Stylish Glassy Social Button
+  // ✨ Helper: Stylish Glassy Social Button (Count Highlighted)
+  Widget _buildStylishSocialBtn({
+    required int count,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+    required VoidCallback onTap
+  }) {
+    // ডার্ক মোড এবং লাইট মোডের জন্য ব্যাকগ্রাউন্ড কালার
+    final bgColor = isDark ? color.withOpacity(0.15) : color.withOpacity(0.08);
+    final borderColor = isDark ? color.withOpacity(0.3) : color.withOpacity(0.2);
 
-  Widget _statItem(
-      String label,
-      String value,
-      IconData icon,
-      Color textColor,
-      Color labelColor, {
-        VoidCallback? onTap,
-      }) {
-    final child = Column(
-      children: [
-        Icon(icon, size: 20.0, color: AppColors.brandMain),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: textColor,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: labelColor,
-          ),
-        ),
-      ],
-    );
-
-    if (onTap == null) return child;
-
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: child,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12), // একটু চারকোনা পিল শেপ (Squircle)
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ১. আইকন
+            Icon(icon, size: 16, color: color),
+
+            const SizedBox(width: 8),
+
+            // ২. কলাম (উপরে সংখ্যা, নিচে টেক্সট)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // কাউন্ট (বড় এবং রঙিন)
+                Text(
+                  _formatNumber(count),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900, // এক্সট্রা বোল্ড
+                    color: isDark ? Colors.white : Colors.black87,
+                    height: 1.0,
+                  ),
+                ),
+                // লেবেল (ছোট)
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white60 : Colors.grey[600],
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  // 👉 Helper: Status Icon (Color if Active, Gray if Inactive)
+  // 👉 Helper: Status Icon (Bigger & Bolder)
+  Widget _buildStatusIcon(IconData icon, bool isActive, Color activeColor, String tooltip, bool isDark) {
+    // কালার এবং ব্যাকগ্রাউন্ড লজিক
+    final color = isActive ? activeColor : (isDark ? Colors.white24 : Colors.grey.shade300);
+    final bgColor = isActive
+        ? activeColor.withOpacity(0.1)
+        : (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100);
+
+    return Tooltip(
+      message: isActive ? tooltip : "Not $tooltip yet",
+      child: Container(
+        width: 44, // ✅ সাইজ বাড়ানো হয়েছে (আগে 36 ছিল)
+        height: 44, // ✅ সাইজ বাড়ানো হয়েছে
+        decoration: BoxDecoration(
+          color: bgColor,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isActive ? activeColor.withOpacity(0.4) : Colors.transparent,
+            width: 2, // বর্ডার একটু মোটা করা হয়েছে
+          ),
+          boxShadow: isActive ? [
+            BoxShadow(
+                color: activeColor.withOpacity(0.25),
+                blurRadius: 8,
+                offset: const Offset(0, 3)
+            )
+          ] : null,
+        ),
+        child: Icon(
+          icon,
+          size: 22, // ✅ আইকন সাইজ বড় করা হয়েছে (আগে 18 ছিল)
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  // 🎨 Helper: Badge Gradient
+  LinearGradient _getBadgeGradient(BadgeLevel level) {
+    switch (level) {
+      case BadgeLevel.newbie:
+        return const LinearGradient(colors: [Color(0xFF4B79A1), Color(0xFF283E51)]); // Blue-Grey
+      case BadgeLevel.bronze:
+        return const LinearGradient(colors: [Color(0xFFE65C00), Color(0xFFF9D423)]);
+      case BadgeLevel.silver:
+        return const LinearGradient(colors: [Color(0xFF232526), Color(0xFF414345)]);
+      case BadgeLevel.gold:
+        return const LinearGradient(colors: [Color(0xFFF2994A), Color(0xFFF2C94C)]);
+      case BadgeLevel.platinum:
+        return const LinearGradient(colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)]);
+      case BadgeLevel.diamond:
+        return const LinearGradient(colors: [Color(0xFF00C6FF), Color(0xFF0072FF)]);
+      default:
+        return const LinearGradient(colors: [Color(0xFF606c88), Color(0xFF3f4c6b)]);
+    }
+  }
+
+  // 🎨 Helper: Badge Color (For Icon)
+  // 🎨 Helper: Badge Color
+  Color _getBadgeColor(BadgeLevel level) {
+    switch (level) {
+    // ✅ ব্রোঞ্জের জন্য অরেঞ্জ টাইপের কালার
+      case BadgeLevel.bronze: return const Color(0xFFFFB74D);
+      case BadgeLevel.silver: return const Color(0xFFE0E0E0);
+      case BadgeLevel.gold: return const Color(0xFFFFD700);
+      case BadgeLevel.platinum: return const Color(0xFF00E5FF);
+      case BadgeLevel.diamond: return const Color(0xFFB388FF);
+      default: return Colors.white; // Newbie
+    }
+  }
+
+  // 🖼️ Helper: Profile Image
+  Widget _buildCoverProfileImage() {
+    final imageUrl = _getSafeString(userData['image'], defaultValue: '');
+    if (imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey)),
+      );
+    }
+    return Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey));
+  }
+
+  // 📦 Helper: Stat Box
+  Widget _buildFloatingStatBox(String label, String value, IconData icon, Color iconColor, bool isDark) {
+    final boxBg = isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50];
+    final borderColor = isDark ? Colors.white10 : Colors.grey[200];
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: boxBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor!),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white54 : Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
 
   // --- Action Buttons (Equal Size) ---
   // এই মেথডটি আপডেট করুন
@@ -862,9 +1210,108 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   bool _isWorkerRole() { final role = (userData['userRole'] ?? 'finder').toString().toLowerCase(); return role == 'finder'; }
   String _getSafeString(dynamic value, {String defaultValue = 'N/A'}) { if (value == null) return defaultValue; if (value is String && value.isEmpty) return defaultValue; return value.toString(); }
   Future<void> _launchUrl(String url) async { try { if (await canLaunchUrl(Uri.parse(url))) { await launchUrl(Uri.parse(url)); } } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot open link'))); } }
-  List<PopupMenuEntry<ProfileMenuOwner>> _buildOwnerMenuItems(String subscriptionType) { final bool isFreeUser = subscriptionType == 'free'; Widget menuRow(IconData icon, String text, Color color, {bool showLock = false}) { return Row(children: [Icon(icon, size: 20, color: color), const SizedBox(width: 12), Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))), if (showLock) const Icon(Icons.lock_outline, size: 16, color: Colors.grey)]); } return [PopupMenuItem(value: ProfileMenuOwner.edit, child: menuRow(Icons.edit_rounded, 'Edit Profile', Colors.blue)), PopupMenuItem(value: ProfileMenuOwner.shareProfile, child: menuRow(Icons.share_rounded, 'Share Profile', Colors.green)), PopupMenuItem(value: ProfileMenuOwner.previewPublicCard, child: menuRow(Icons.visibility_rounded, 'Preview Card', Colors.purple)), const PopupMenuDivider(), PopupMenuItem(value: ProfileMenuOwner.lockAccount, child: menuRow(Icons.privacy_tip_rounded, 'Lock Account', Colors.redAccent, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.theme, child: menuRow(Icons.palette_rounded, 'Theme', Colors.orange, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.hideProfile, child: menuRow(Icons.visibility_off_rounded, 'Hide Profile', Colors.grey, showLock: isFreeUser)), PopupMenuItem(value: ProfileMenuOwner.pauseWork, child: menuRow(Icons.pause_circle_filled_rounded, 'Pause Work', Colors.amber.shade800, showLock: isFreeUser))]; }
+  // 📋 Updated Menu Items (Dynamic Text)
+  List<PopupMenuEntry<ProfileMenuOwner>> _buildOwnerMenuItems(String subscriptionType) {
+    final bool isFreeUser = subscriptionType == 'free';
+
+    // বর্তমান স্টেট চেক করা
+    final bool isLocked = userData['accountLocked'] == true;
+    final bool isPaused = userData['workPaused'] == true;
+    final bool isHidden = userData['profileHidden'] == true;
+
+    Widget menuRow(IconData icon, String text, Color color, {bool showLock = false}) {
+      return Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))),
+          if (showLock) const Icon(Icons.lock, size: 16, color: Colors.grey),
+        ],
+      );
+    }
+
+    return [
+      PopupMenuItem(
+        value: ProfileMenuOwner.edit,
+        child: menuRow(Icons.edit_rounded, 'Edit Profile', Colors.blue),
+      ),
+      PopupMenuItem(
+        value: ProfileMenuOwner.shareProfile,
+        child: menuRow(Icons.share_rounded, 'Share Profile', Colors.green),
+      ),
+      PopupMenuItem(
+        value: ProfileMenuOwner.previewPublicCard,
+        child: menuRow(Icons.visibility_rounded, 'Preview Card', Colors.purple),
+      ),
+      const PopupMenuDivider(),
+
+      // 🔒 Lock / Unlock
+      PopupMenuItem(
+        value: ProfileMenuOwner.lockAccount,
+        child: menuRow(
+            isLocked ? Icons.lock_open_rounded : Icons.lock_outline,
+            isLocked ? 'Unlock Profile' : 'Lock Profile',
+            Colors.redAccent,
+            showLock: isFreeUser
+        ),
+      ),
+
+      // 🎨 Theme
+      PopupMenuItem(
+        value: ProfileMenuOwner.theme,
+        child: menuRow(Icons.palette_rounded, 'Change Theme', Colors.orange, showLock: isFreeUser),
+      ),
+
+      // 👁️ Hide / Unhide
+      PopupMenuItem(
+        value: ProfileMenuOwner.hideProfile,
+        child: menuRow(
+            isHidden ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+            isHidden ? 'Unhide Profile' : 'Hide Profile',
+            Colors.grey,
+            showLock: isFreeUser
+        ),
+      ),
+
+      // ⏸️ Pause / Resume
+      PopupMenuItem(
+        value: ProfileMenuOwner.pauseWork,
+        child: menuRow(
+            isPaused ? Icons.play_circle_outline : Icons.pause_circle_outline,
+            isPaused ? 'Resume Work' : 'Pause Work',
+            Colors.amber.shade800,
+            showLock: isFreeUser
+        ),
+      ),
+    ];
+  }
   void _handleOwnerMenu(ProfileMenuOwner value) { final subscriptionType = userData['subscription_type']?.toString() ?? 'free'; final bool isFreeUser = subscriptionType == 'free'; switch (value) { case ProfileMenuOwner.edit: Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileEditScreen(uid: widget.uid))); break; case ProfileMenuOwner.shareProfile: _shareProfile(); break; case ProfileMenuOwner.previewPublicCard: _showPublicCardPreviewBottomSheet(); break; case ProfileMenuOwner.lockAccount: case ProfileMenuOwner.hideProfile: case ProfileMenuOwner.pauseWork: if (isFreeUser) { _showUpgradeToPremiumPopup(); } else { _handlePremiumFeature(value); } break; case ProfileMenuOwner.theme: _showCardThemeBottomSheet(); break; } }
-  void _handlePremiumFeature(ProfileMenuOwner value) async { if (value == ProfileMenuOwner.lockAccount) { _setAccountLocked(!(userData['accountLocked'] ?? false)); } else if (value == ProfileMenuOwner.hideProfile) { _setProfileHidden(!(userData['profileHidden'] ?? false)); } else if (value == ProfileMenuOwner.pauseWork) { _setWorkPaused(!(userData['workPaused'] ?? false)); } }
+  void _handlePremiumFeature(ProfileMenuOwner value) async {
+    // বর্তমান ভ্যালু টগল করা (True -> False, False -> True)
+    if (value == ProfileMenuOwner.lockAccount) {
+      final current = userData['accountLocked'] == true;
+      await _setAccountLocked(!current);
+      // লোকাল স্টেট আপডেট যাতে সাথে সাথে UI চেইঞ্জ হয়
+      setState(() {
+        userData['accountLocked'] = !current;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(current ? "Profile Unlocked" : "Profile Locked")));
+    }
+    else if (value == ProfileMenuOwner.hideProfile) {
+      final current = userData['profileHidden'] == true;
+      await _setProfileHidden(!current);
+      setState(() {
+        userData['profileHidden'] = !current;
+      });
+    }
+    else if (value == ProfileMenuOwner.pauseWork) {
+      final current = userData['workPaused'] == true;
+      await _setWorkPaused(!current);
+      setState(() {
+        userData['workPaused'] = !current;
+      });
+    }
+  }
   Future<void> _shareProfile() async { final userName = _getSafeString(userData['name'], defaultValue: 'FindUs User'); final profileLink = 'https://findus.app/profile/${widget.uid}'; await Share.share('Check out $userName on FindUs!\n$profileLink'); }
   void _showUpgradeToPremiumPopup() { showDialog(context: context, builder: (context) => AlertDialog(title: const Text('Upgrade to Premium'), content: const Text('Unlock exclusive features like Locking Account, Custom Themes, and more!'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')), ElevatedButton(onPressed: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen())); }, child: const Text('Upgrade'))])); }
   void _showUpgradeToBusinessPopup() { showDialog(context: context, builder: (context) => AlertDialog(title: const Text('Upgrade to Business'), content: const Text('Unlock Team Management and other business features!'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')), ElevatedButton(onPressed: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen())); }, child: const Text('Upgrade'))])); }
@@ -891,7 +1338,11 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildShimmerLoading() { return Shimmer.fromColors(baseColor: Colors.grey[300]!, highlightColor: Colors.grey[100]!, child: ListView(shrinkWrap: true, children: [Container(height: 200, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white)])); }
   // ✅ Fix for UnifiedProfileState.dart
 
+  // 👁️ Preview Public Card
+  // 👁️ Preview Public Card (Updated for Hired Label)
   void _showPublicCardPreviewBottomSheet() {
+    final bool isWorker = _isWorkerRole();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -902,27 +1353,45 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                "PUBLIC VIEW PREVIEW",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    shadows: [Shadow(color: Colors.black, blurRadius: 10)]
+                ),
+              ),
+              const SizedBox(height: 15),
+
               UniversalWorkerCard(
-                // ✅ Null Safety Added Here
                 id: widget.uid,
                 name: (userData['name'] ?? 'User').toString(),
-                role: _isWorkerRole() ? "Worker" : "Supporter",
+                role: isWorker ? "Worker" : "Supporter",
                 imageUrl: (userData['image'] ?? '').toString(),
                 address: (userData['location'] ?? 'Location not set').toString(),
-
-                // ✅ Numeric values converted safely
                 rating: (userData['rating'] ?? 0).toString(),
                 completed: (userData['completedCount'] ?? 0).toString(),
                 reviews: (userData['reviewsCount'] ?? 0).toString(),
-
                 price: (userData['priceText'] ?? userData['priceLabel'] ?? 'Negotiable').toString(),
                 isVerifiedWorker: userData['kyc_completed'] == true,
+                colorIndex: _cardThemeIndex,
 
-                // Optional: Prevent tap action in preview
+                // 🔥🔥 UPDATE HERE
+                // ১. সাপোর্টার হলেও এখন স্ট্যাটস দেখাবে (Hired সংখ্যা দেখানোর জন্য)
+                showStats: true,
+
+                // ২. যদি ওয়ার্কার হয় তবে "JOBS", আর সাপোর্টার হলে "HIRED"
+                jobLabel: isWorker ? "JOBS" : "HIRED",
+
+                showActionButtons: false,
                 onTap: () {},
               ),
-              const SizedBox(height: 20),
+
+              const SizedBox(height: 30),
+
               CircleAvatar(
+                radius: 25,
                 backgroundColor: Colors.white,
                 child: IconButton(
                   icon: const Icon(Icons.close, color: Colors.black),
@@ -992,6 +1461,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                   showActionButtons: true,
                   primaryButtonText: "View Job Details",
 
+
                   // ✅ ফিক্স করা অংশ:
                   onViewProfileTap: () {
                     // ১. সঠিক প্যারামিটার দিয়ে Worker অবজেক্ট তৈরি
@@ -1042,12 +1512,14 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   Widget _buildSimilarStream(bool isWorker, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
+      // ✅ Stream যোগ করা হয়েছে
       stream: FirebaseFirestore.instance
           .collection('users')
           .where('userRole', isEqualTo: isWorker ? 'finder' : 'maker')
           .where('kyc_completed', isEqualTo: true)
-          .limit(2)
+          .limit(5) // Limit একটু বাড়ানো হলো
           .snapshots(),
+
       builder: (context, snap) {
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return SizedBox(
@@ -1065,19 +1537,19 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         if (docs.isEmpty) return const SizedBox.shrink();
 
         return SizedBox(
-          height: 200,
+          height: 260, // ✅ হাইট ফিক্সড
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: docs.length,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             itemBuilder: (context, index) {
-              final d = docs[index].data() as Map<String, dynamic>; // ✅ Cast to Map
+              final d = docs[index].data() as Map<String, dynamic>;
 
               return Container(
                 width: 200,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 child: UniversalWorkerCard(
                   id: docs[index].id,
-                  // ✅ Null Safety Added
                   name: (d['name'] ?? 'User').toString(),
                   role: (d['userRole'] ?? 'worker').toString(),
                   imageUrl: (d['image'] ?? '').toString(),
@@ -1085,6 +1557,12 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                   rating: (d['rating'] ?? 0).toString(),
                   completed: "0",
                   reviews: "0",
+                  onTap: () {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: docs[index].id, isOwner: false, showBack: true))
+                    );
+                  },
                 ),
               );
             },
@@ -1096,11 +1574,13 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   Widget _buildSuggestionStream(String role, String tag, Color col, bool isDark) {
     return StreamBuilder<QuerySnapshot>(
+      // ✅ Stream যোগ করা হয়েছে
       stream: FirebaseFirestore.instance
           .collection('users')
           .where('userRole', isEqualTo: role == 'worker' ? 'finder' : 'maker')
           .limit(1)
           .snapshots(),
+
       builder: (context, snap) {
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return SizedBox(
@@ -1115,10 +1595,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         }
 
         final doc = snap.data!.docs.first;
-        final d = doc.data() as Map<String, dynamic>; // ✅ Cast to Map
+        final d = doc.data() as Map<String, dynamic>;
 
         return SizedBox(
-          height: 288,
+          height: 320, // ✅ হাইট ফিক্সড
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1127,20 +1607,28 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 padding: const EdgeInsets.only(left: 16, bottom: 8),
                 child: Text(
                     tag,
-                    style: TextStyle(fontSize: 10, color: col, fontWeight: FontWeight.bold)
+                    style: TextStyle(fontSize: 12, color: col, fontWeight: FontWeight.bold)
                 ),
               ),
               Expanded(
-                child: UniversalWorkerCard(
-                  id: doc.id,
-                  // ✅ Null Safety Added
-                  name: (d['name'] ?? 'User').toString(),
-                  role: (d['userRole'] ?? role).toString(),
-                  imageUrl: (d['image'] ?? '').toString(),
-                  address: (d['location'] ?? 'Location not set').toString(),
-                  rating: (d['rating'] ?? 0).toString(),
-                  completed: "0",
-                  reviews: "0",
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: UniversalWorkerCard(
+                    id: doc.id,
+                    name: (d['name'] ?? 'User').toString(),
+                    role: (d['userRole'] ?? role).toString(),
+                    imageUrl: (d['image'] ?? '').toString(),
+                    address: (d['location'] ?? 'Location not set').toString(),
+                    rating: (d['rating'] ?? 0).toString(),
+                    completed: "0",
+                    reviews: "0",
+                    onTap: () {
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: doc.id, isOwner: false, showBack: true))
+                      );
+                    },
+                  ),
                 ),
               ),
             ],

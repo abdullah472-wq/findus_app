@@ -17,6 +17,7 @@ import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+import 'package:findus_app/screens/ads/ad_display_screen.dart'; // ✅ অ্যাড পেজ ইমপোর্ট
 
 class EarnPostScreen extends StatefulWidget {
   const EarnPostScreen({super.key});
@@ -62,7 +63,6 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     super.dispose();
   }
 
-  // --- Location Logic (Same as before) ---
   Future<void> _initLocation() async {
     if (!_useCurrentLocation) return;
     await _determineInitialPosition();
@@ -85,10 +85,7 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         return;
       }
 
-      final p = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
+      final p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       final latLng = LatLng(p.latitude, p.longitude);
 
       if (mounted) {
@@ -97,8 +94,6 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
           _locationName = "Getting address...";
         });
       }
-
-      // ✅ LatLng থেকে আসল address বের করি
       await _updateLocationNameFromLatLng(latLng);
     } catch (_) {
       if (mounted) setState(() => _locationName = "Location not found");
@@ -115,53 +110,36 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
       setState(() {
         _selectedLatLng = picked;
         _useCurrentLocation = false;
-        _locationName = "Getting address..."; // সাময়িক টেক্সট
+        _locationName = "Getting address...";
       });
-
-      // ✅ LatLng থেকে readable address আনো
       await _updateLocationNameFromLatLng(picked);
     }
   }
+
   Future<void> _updateLocationNameFromLatLng(LatLng latLng) async {
     try {
-      final placemarks = await geo.placemarkFromCoordinates(
-        latLng.latitude,
-        latLng.longitude,
-      );
-
+      final placemarks = await geo.placemarkFromCoordinates(latLng.latitude, latLng.longitude);
       if (!mounted) return;
       if (placemarks.isEmpty) {
-        setState(() {
-          _locationName = "Selected Location";
-        });
+        setState(() => _locationName = "Selected Location");
         return;
       }
 
       final place = placemarks.first;
-
-      // দরকারমতো অংশগুলো জোড়া দিচ্ছি
       final parts = <String>[];
       if ((place.street ?? '').isNotEmpty) parts.add(place.street!);
       if ((place.subLocality ?? '').isNotEmpty) parts.add(place.subLocality!);
       if ((place.locality ?? '').isNotEmpty) parts.add(place.locality!);
-      if ((place.administrativeArea ?? '').isNotEmpty) {
-        parts.add(place.administrativeArea!);
-      }
+      if ((place.administrativeArea ?? '').isNotEmpty) parts.add(place.administrativeArea!);
 
       final addressStr = parts.join(', ');
-
-      setState(() {
-        _locationName = addressStr.isNotEmpty ? addressStr : "Selected Location";
-      });
+      setState(() => _locationName = addressStr.isNotEmpty ? addressStr : "Selected Location");
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _locationName = "Selected Location";
-      });
+      setState(() => _locationName = "Selected Location");
     }
   }
 
-  // --- Helpers ---
   void _showSnack(String msg, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
@@ -205,14 +183,51 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     }
   }
 
+  // ✅ আপডেটেড পোস্ট লজিক (অ্যাড সিস্টেম সহ)
   Future<void> _handleDropPin() async {
     if (_isSaving) return;
-    if (AppConfigService.isPostingDisabled) { _showSnack("Posting disabled", Colors.redAccent); return; }
-    if (_serviceTypeController.text.trim().isEmpty) { _showSnack("Enter title", Colors.redAccent); return; }
-    if (_selectedLatLng == null) { _showSnack("Pick location", Colors.redAccent); return; }
+    if (AppConfigService.isPostingDisabled) {
+      _showSnack("Posting disabled", Colors.redAccent);
+      return;
+    }
+    if (_serviceTypeController.text.trim().isEmpty) {
+      _showSnack("Enter title", Colors.redAccent);
+      return;
+    }
+    if (_selectedLatLng == null) {
+      _showSnack("Pick location", Colors.redAccent);
+      return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) { _showSnack("Not logged in", Colors.redAccent); return; }
+    if (user == null) {
+      _showSnack("Not logged in", Colors.redAccent);
+      return;
+    }
+
+    // --- অ্যাড লজিক শুরু ---
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final subscription = (userDoc.data()?['subscription_type'] ?? 'free').toString();
+      final bool isPremium = subscription == 'pro' || subscription == 'business';
+
+      if (!isPremium && mounted) {
+        // ফ্রি ইউজার হলে অ্যাড দেখাবে
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AdDisplayScreen(
+              onAdDismissed: () {
+                // অ্যাড শেষ হলে ফিরে আসবে এবং নিচের কোড রান করবে
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Ad check error: $e");
+    }
+    // --- অ্যাড লজিক শেষ ---
 
     setState(() => _isSaving = true);
 
@@ -317,7 +332,6 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;

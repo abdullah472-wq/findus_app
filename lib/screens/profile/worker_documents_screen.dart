@@ -411,6 +411,8 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         builder: (_) => WorkerCVCreateScreen(worker: worker),
       ),
     );
+    // ফিরে আসার পর ডাটা রিফ্রেশ করুন
+    _loadDocuments();
   }
 
   // ---------- BUILD (FloatingScaffold) ----------
@@ -583,6 +585,9 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
+    // চেক করুন সিভি আছে কি না (ফায়ারবেস ডাটা থেকে)
+    final bool hasDigitalCv = (_userData['has_created_cv'] ?? false) == true;
+
     return Card(
       color: cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -593,36 +598,43 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
           children: [
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(
-                Icons.edit_document,
-                color: AppColors.brandMain,
+              leading: Icon(
+                hasDigitalCv ? Icons.check_circle : Icons.edit_document,
+                color: hasDigitalCv ? Colors.green : AppColors.brandMain,
               ),
               title: Text(
-                'Digital CV',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
+                hasDigitalCv ? 'Digital CV Created' : 'Create Digital CV',
+                style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
               ),
               subtitle: Text(
-                widget.isOwner
-                    ? 'Create or edit your in-app CV.'
-                    : 'This user can create an in-app CV.',
+                hasDigitalCv
+                    ? 'Last updated: ${_formatDate(_userData['cv_updated_at'])}'
+                    : 'Create a professional CV within the app.',
                 style: TextStyle(
                   fontSize: 12,
                   color: isDark ? Colors.white60 : Colors.grey[600],
                 ),
               ),
+              // প্রিভিউ বাটন (যদি সিভি থাকে)
+              trailing: hasDigitalCv
+                  ? IconButton(
+                icon: const Icon(Icons.visibility, color: AppColors.brandMain),
+                onPressed: () {
+                  // TODO: ডিজিটাল সিভি ভিউয়ার পেজ ওপেন করুন
+                  // Navigator.push(context, MaterialPageRoute(builder: (_) => DigitalCvViewerScreen(uid: widget.uid)));
+                },
+              )
+                  : null,
             ),
             if (widget.isOwner)
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: _openDigitalCvEditor,
-                  icon: const Icon(Icons.edit, color: AppColors.brandMain),
-                  label: const Text(
-                    'Create / Edit Digital CV',
-                    style: TextStyle(color: AppColors.brandMain),
+                  icon: const Icon(Icons.edit, size: 18, color: AppColors.brandMain),
+                  label: Text(
+                    hasDigitalCv ? 'Edit CV' : 'Create Now',
+                    style: const TextStyle(color: AppColors.brandMain),
                   ),
                 ),
               ),
@@ -630,6 +642,12 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDate(Timestamp? timestamp) {
+    if (timestamp == null) return 'N/A';
+    final date = timestamp.toDate();
+    return "${date.day}/${date.month}/${date.year}";
   }
 
   Widget _buildPortfolioSection(bool isDark) {

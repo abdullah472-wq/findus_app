@@ -1,145 +1,145 @@
 // lib/achievement/achievements_config.dart
 
-// ✅ সঠিক ইম্পোর্ট
-import 'package:findus_app/achievement/achievement_models.dart';
+import 'achievement_models.dart';
 
 class AchievementsConfig {
-  /// সব achievements / quests
-  static const List<AchievementDefinition> all = [
-    // ---------- COMMON / DAILY ----------
-    AchievementDefinition(
-      id: 'daily_open_app',
-      title: 'Daily Check‑in',
-      description: 'Open FINDUS today to collect XP.',
-      xpReward: 20,
-      type: AchievementType.oneTime,
+  static List<AchievementDef> get all => [
+    // ==================================================
+    // 🏅 LEVEL 1: NEWBIE TO BRONZE (Target: 1,000 XP)
+    // ==================================================
+
+    // 1. Daily Engagement (Easy XP)
+    const AchievementDef(
+      id: 'daily_login',
+      title: 'Daily Check-in',
+      description: 'Open the app daily to earn points.',
       target: 1,
+      xpReward: 50, // 20 days = 1000 XP
       resetPeriod: ResetPeriod.daily,
+      minPoints: 0,
     ),
-
-    AchievementDefinition(
-      id: 'daily_view_map',
-      title: 'Explore the map',
-      description: 'Open the Explore map and move around.',
-      xpReward: 30,
-      type: AchievementType.oneTime,
+    const AchievementDef(
+      id: 'explore_map',
+      title: 'Explorer',
+      description: 'Browse the map for finding workers.',
       target: 1,
+      xpReward: 50,
       resetPeriod: ResetPeriod.daily,
+      minPoints: 0,
     ),
 
-    // ---------- KYC / PROFILE ----------
-    AchievementDefinition(
-      id: 'kyc_verification',
-      title: 'KYC Verified',
-      description: 'Complete KYC verification to earn extra trust & XP.',
-      xpReward: 1000,
-      type: AchievementType.oneTime,
+    // 2. Profile Setup (One-time Boost)
+    const AchievementDef(
+      id: 'setup_profile',
+      title: 'Identity Verified',
+      description: 'Add profile picture and bio.',
       target: 1,
-      resetPeriod: ResetPeriod.none,
+      xpReward: 500, // Instant half-way to Bronze
+      minPoints: 0,
     ),
 
-    AchievementDefinition(
-      id: 'driving_license_upload',
-      title: 'Driving License',
-      description: 'Upload your driving license as an extra ID document.',
-      xpReward: 500,
-      type: AchievementType.oneTime,
+    // ==================================================
+    // 🥉 LEVEL 2: BRONZE TO SILVER (Target: 10,000 XP)
+    // ==================================================
+
+    // 1. First Job Success
+    const AchievementDef(
+      id: 'first_job',
+      title: 'First Earnings',
+      description: 'Complete your first job successfully.',
       target: 1,
-      resetPeriod: ResetPeriod.none,
+      xpReward: 2000, // Big jump
+      workerOnly: true,
+      minPoints: 1000, // Bronze badge required
     ),
 
-    AchievementDefinition(
-      id: 'create_cv',
-      title: 'Create your CV',
-      description: 'Fill up your digital CV inside FINDUS.',
-      xpReward: 300,
-      type: AchievementType.oneTime,
+    // 2. Consistent Daily (Increased Reward)
+    const AchievementDef(
+      id: 'daily_share',
+      title: 'Social Bee',
+      description: 'Share your profile on social media.',
       target: 1,
-      resetPeriod: ResetPeriod.none,
-    ),
-
-    // ---------- WORKER / EARNER ----------
-    AchievementDefinition(
-      id: 'worker_first_job',
-      title: 'First Job Completed',
-      description: 'Complete your first job as a worker/earner.',
       xpReward: 200,
-      type: AchievementType.oneTime,
+      resetPeriod: ResetPeriod.daily,
+      minPoints: 1000,
+    ),
+
+    // 3. Post Creation
+    const AchievementDef(
+      id: 'create_post',
+      title: 'Job Poster',
+      description: 'Post a job requirement or gig.',
       target: 1,
-      resetPeriod: ResetPeriod.none,
-      workerOnly: true,
+      xpReward: 1000,
+      minPoints: 1000,
     ),
 
-    AchievementDefinition(
-      id: 'worker_complete_10_jobs',
-      title: '10 Jobs Completed',
-      description: 'Complete 10 total jobs as a worker.',
-      xpReward: 600,
-      type: AchievementType.incremental,
+    // ==================================================
+    // 🥈 LEVEL 3: SILVER TO GOLD (Target: 50,000 XP)
+    // ==================================================
+    // Note: No Documents Required Yet
+
+    const AchievementDef(
+      id: 'ten_jobs',
+      title: 'Rising Star',
+      description: 'Complete 10 jobs with 4+ rating.',
       target: 10,
-      resetPeriod: ResetPeriod.none,
+      xpReward: 15000, // Massive boost
       workerOnly: true,
+      minPoints: 10000,
     ),
 
-    AchievementDefinition(
-      id: 'worker_complete_50_jobs',
-      title: '50 Jobs Completed',
-      description: 'Complete 50 total jobs as a worker.',
-      xpReward: 2000,
-      type: AchievementType.incremental,
-      target: 50,
-      resetPeriod: ResetPeriod.none,
-      workerOnly: true,
-      minPoints: 2000,
-    ),
-
-    // ---------- SUPPORTER / MAKER ----------
-    AchievementDefinition(
-      id: 'supporter_first_post',
-      title: 'First Job Posted',
-      description: 'Post your first support/job request.',
-      xpReward: 150,
-      type: AchievementType.oneTime,
+    const AchievementDef(
+      id: 'refer_friend',
+      title: 'Community Leader',
+      description: 'Refer a friend to join FindUs.',
       target: 1,
-      supporterOnly: true,
+      xpReward: 5000, // Per referral
+      resetPeriod: ResetPeriod.weekly, // Once a week
+      minPoints: 10000,
     ),
 
-    AchievementDefinition(
-      id: 'supporter_hire_10_workers',
-      title: 'Hire 10 Workers',
-      description: 'Successfully hire workers for 10 jobs.',
-      xpReward: 700,
-      type: AchievementType.incremental,
-      target: 10,
-      supporterOnly: true,
+    // ==================================================
+    // 🥇 LEVEL 4: GOLD TO PLATINUM (Target: 100,000 XP)
+    // ==================================================
+    // 🔥 MANDATORY DOCUMENTS HERE 🔥
+
+    const AchievementDef(
+      id: 'kyc_verify',
+      title: 'KYC Verified',
+      description: 'Upload NID/Passport for verification.',
+      target: 1,
+      xpReward: 20000, // Huge reward for trust
+      minPoints: 50000,
     ),
 
-    // ---------- REVIEW / TRUST ----------
-    AchievementDefinition(
-      id: 'give_5_reviews',
-      title: 'Helpful Reviewer',
-      description: 'Give 5 rating & review to workers/supporters.',
-      xpReward: 500,
-      type: AchievementType.incremental,
-      target: 5,
-      resetPeriod: ResetPeriod.none,
+    const AchievementDef(
+      id: 'driving_license',
+      title: 'Licensed Pro',
+      description: 'Upload valid Driving License.',
+      target: 1,
+      xpReward: 15000,
+      minPoints: 50000,
     ),
 
-    AchievementDefinition(
-      id: 'give_20_reviews',
-      title: 'Top Reviewer',
-      description: 'Give 20 detailed reviews (4★ or higher).',
-      xpReward: 1500,
-      type: AchievementType.incremental,
-      target: 20,
-      resetPeriod: ResetPeriod.none,
-      minPoints: 2000,
+    // ==================================================
+    // 💎 LEVEL 5: PLATINUM TO DIAMOND (Target: 1,000,000 XP)
+    // ==================================================
+
+    const AchievementDef(
+      id: 'top_rated_100',
+      title: 'Legendary Worker',
+      description: 'Complete 100 jobs with 5-star rating.',
+      target: 100,
+      xpReward: 100000, // The ultimate prize
+      workerOnly: true,
+      minPoints: 100000,
     ),
   ];
 
-  static AchievementDefinition? byId(String id) {
+  static AchievementDef? byId(String id) {
     try {
-      return all.firstWhere((a) => a.id == id);
+      return all.firstWhere((e) => e.id == id);
     } catch (_) {
       return null;
     }

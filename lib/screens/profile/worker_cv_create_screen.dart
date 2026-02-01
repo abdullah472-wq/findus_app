@@ -1,8 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:findus_app/models/worker_model.dart';
-import 'package:findus_app/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class WorkerCVCreateScreen extends StatefulWidget {
@@ -16,7 +22,6 @@ class WorkerCVCreateScreen extends StatefulWidget {
 class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers
   final _summaryController = TextEditingController();
   final List<TextEditingController> _experienceControllers = [TextEditingController()];
   final List<TextEditingController> _educationControllers = [TextEditingController()];
@@ -27,45 +32,92 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
   @override
   void dispose() {
     _summaryController.dispose();
-    for (var c in _experienceControllers) {
-      c.dispose();
-    }
-    for (var c in _educationControllers) {
-      c.dispose();
-    }
-    for (var c in _skillControllers) {
-      c.dispose();
-    }
+    for (var c in _experienceControllers) c.dispose();
+    for (var c in _educationControllers) c.dispose();
+    for (var c in _skillControllers) c.dispose();
     super.dispose();
   }
 
-  // সিভি সেভ করার লজিক
-  Future<void> _saveCV() async {
+  // ✅ পিডিএফ জেনারেট এবং সেভ ফাংশন
+  Future<void> _generateAndSavePDF() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isSaving = true);
 
     try {
+      final pdf = pw.Document();
+
+      // পিডিএফ ডিজাইন
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // হেডার (নাম ও রোল)
+                pw.Header(
+                  level: 0,
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(widget.worker.name, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+                      pw.Text(widget.worker.userRole.toUpperCase(), style: const pw.TextStyle(fontSize: 14, color: PdfColors.grey)),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // সামারি সেকশন
+                pw.Text("Professional Summary", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                pw.Text(_summaryController.text, style: const pw.TextStyle(fontSize: 12)),
+                pw.SizedBox(height: 20),
+
+                // এক্সপেরিয়েন্স সেকশন
+                pw.Text("Experience", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                ..._experienceControllers.map((c) => pw.Bullet(text: c.text)),
+                pw.SizedBox(height: 20),
+
+                // এডুকেশন সেকশন
+                pw.Text("Education", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                ..._educationControllers.map((c) => pw.Bullet(text: c.text)),
+                pw.SizedBox(height: 20),
+
+                // স্কিলস সেকশন
+                pw.Text("Skills", style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.Divider(),
+                ..._skillControllers.map((c) => pw.Bullet(text: c.text)),
+              ],
+            );
+          },
+        ),
+      );
+
+      // ১. ফাইল সেভ করা (লোকাল স্টোরেজ)
+      final output = await getApplicationDocumentsDirectory();
+      final file = File("${output.path}/my_cv.pdf");
+      await file.writeAsBytes(await pdf.save());
+
+      // ২. ফায়ারবেস আপডেট (অপশনাল: শুধু স্ট্যাটাস আপডেট)
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
-
-      final cvData = {
-        'summary': _summaryController.text.trim(),
-        'experiences': _experienceControllers.map((c) => c.text.trim()).toList(),
-        'education': _educationControllers.map((c) => c.text.trim()).toList(),
-        'skills': _skillControllers.map((c) => c.text.trim()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      // ফায়ারবেসে ইউজারের ডকুমেন্টে cv_data হিসেবে সেভ হবে
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'cv_data': cvData,
-        'has_created_cv': true,
-      }, SetOptions(merge: true));
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'has_created_cv': true,
+          'cv_updated_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("CV Created & Saved Successfully!"), backgroundColor: Colors.green));
-      Navigator.pop(context);
+
+      // ৩. প্রিভিউ বা শেয়ার অপশন দেখানো
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'My_Professional_CV',
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("CV Generated Successfully!"), backgroundColor: Colors.green));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     } finally {
@@ -75,12 +127,10 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
-    final subTextColor = isDark ? Colors.grey.shade400 : Colors.black87;
 
     return FloatingScaffold(
       title: "CREATE PROFESSIONAL CV",
@@ -111,16 +161,17 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
             SizedBox(
               width: double.infinity,
               height: 50,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _saveCV,
+              child: ElevatedButton.icon(
+                onPressed: _isSaving ? null : _generateAndSavePDF,
+                icon: _isSaving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.picture_as_pdf, color: Colors.white),
+                label: const Text("GENERATE & SAVE PDF", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brandMain,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 2,
                 ),
-                child: _isSaving
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text("SAVE CV", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
             const SizedBox(height: 30),
@@ -130,7 +181,6 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
     );
   }
 
-  // সেকশন টাইটেল উইজেট
   Widget _buildSectionTitle(String title, Color textColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -138,7 +188,6 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
     );
   }
 
-  // টেক্সট ফিল্ড হেল্পার
   Widget _buildTextField(TextEditingController controller, String hint, bool isDark, Color fillColor, Color textColor, {int maxLines = 1}) {
     return TextFormField(
       controller: controller,
@@ -155,7 +204,6 @@ class _WorkerCVCreateScreenState extends State<WorkerCVCreateScreen> {
     );
   }
 
-  // ডায়নামিক লিস্ট সেকশন
   Widget _buildDynamicSection(String title, List<TextEditingController> controllers, String hint, Color textColor, Color cardColor, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

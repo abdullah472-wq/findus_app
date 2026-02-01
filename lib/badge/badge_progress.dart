@@ -29,13 +29,14 @@ class BadgeProgress {
 
   String get formattedPoints => totalPoints.toStringAsFixed(0);
 
-  // এই getter টি যোগ করুন
+  // গেটার: প্রগ্রেস পার্সেন্টেজ
   double get percentToNext => progressPercentage;
 
+  // ✅ কালার আপডেটেড: Newbie এখন সাদা
   Color get levelColor {
     switch (level) {
       case BadgeLevel.newbie:
-        return Colors.grey;
+        return Colors.white; // ✅ আগে গ্রে ছিল, এখন সাদা
       case BadgeLevel.bronze:
         return const Color(0xFFCD7F32); // Bronze color
       case BadgeLevel.silver:

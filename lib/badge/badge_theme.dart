@@ -6,12 +6,12 @@ class AppBadgeTheme {
   static const IconData baseIcon = Icons.workspace_premium;
 
   // Colors
-  static const Color newbie   = Colors.blueGrey; // Newbie যোগ করা হলো
-  static const Color bronze   = Colors.brown;
-  static const Color silver   = Colors.grey;
-  static const Color gold     = Colors.amber;
+  static const Color newbie   = Colors.white; // ✅ সাদা কালার
+  static const Color bronze   = Color(0xFFCD7F32); // Better Bronze
+  static const Color silver   = Color(0xFFC0C0C0); // Better Silver
+  static const Color gold     = Color(0xFFFFD700); // Better Gold
   static const Color platinum = Color(0xFFE5E4E2);
-  static const Color diamond  = Colors.blue;
+  static const Color diamond  = Color(0xFF00E5FF); // Cyan Diamond
 
   static Color colorForLevel(BadgeLevel level) {
     switch (level) {

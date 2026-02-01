@@ -381,9 +381,10 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   // 🔥 Quest Card
+  // 🔥 Quest Card with Action Button
   Widget _buildQuestCard(AchievementState st, bool isDark) {
-    final isCompleted = st.isCompleted;     // => progress >= def.target
-    final canClaim = isCompleted && !st.claimed;
+    final isCompleted = st.isCompleted; // টাস্ক শেষ হয়েছে কিনা
+    final canClaim = isCompleted && !st.claimed; // ক্লেইম করা বাকি কিনা
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final borderColor = canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200);
 
@@ -399,70 +400,156 @@ class _AchievementsTabState extends State<AchievementsTab> {
           BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              canClaim ? Icons.redeem : Icons.emoji_events_rounded,
-              color: canClaim ? Colors.green : (isDark ? Colors.grey : AppColors.brandMain),
-              size: 24,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  canClaim ? Icons.redeem : Icons.emoji_events_rounded,
+                  color: canClaim ? Colors.green : (isDark ? Colors.grey : AppColors.brandMain),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(st.def.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
+                    const SizedBox(height: 4),
+                    Text(st.def.description, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey.shade600)),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (st.progress / st.def.target).clamp(0.0, 1.0),
+                        minHeight: 4,
+                        backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
+                        valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(st.def.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
-                const SizedBox(height: 4),
-                Text(st.def.description, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey.shade600)),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (st.progress / st.def.target).clamp(0.0, 1.0),
-                    minHeight: 4,
-                    backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                    valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.orange),
+
+          const SizedBox(height: 12),
+
+          // 🔥 Action Buttons Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // 1. Progress Text
+              if (!canClaim && !st.claimed)
+                Text(
+                    "${st.progress}/${st.def.target}",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey)
+                ),
+
+              const Spacer(),
+
+              // 2. Action Button (Upload/Post) - যদি টাস্ক কমপ্লিট না হয়
+              if (!isCompleted)
+                ElevatedButton.icon(
+                  onPressed: () => _navigateToTask(st.def.id), // নেভিগেশন লজিক
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandMain.withOpacity(0.1),
+                    foregroundColor: AppColors.brandMain,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  icon: const Icon(Icons.arrow_forward, size: 14),
+                  label: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+
+              // 3. Claim Button - যদি টাস্ক কমপ্লিট হয় কিন্তু ক্লেইম না করা হয়
+              if (canClaim)
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    HapticFeedback.heavyImpact();
+                    _confettiController.play();
+                    await AchievementService.claim(st.def.id);
+                    if (mounted) setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    elevation: 2,
+                  ),
+                  icon: const Icon(Icons.check, size: 16),
+                  label: Text("CLAIM +${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                ),
+
+              // 4. Completed Status - যদি ক্লেইম করা হয়ে থাকে
+              if (st.claimed)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 14, color: Colors.green),
+                      SizedBox(width: 4),
+                      Text("COMPLETED", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
-          const SizedBox(width: 10),
-          if (canClaim)
-            ElevatedButton(
-              onPressed: () async {
-                HapticFeedback.heavyImpact();
-                _confettiController.play();
-                await AchievementService.claim(st.def.id);
-                if (mounted) setState(() {});
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                elevation: 2,
-              ),
-              child: Text("+${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-            )
-          else if (st.claimed)
-            const Icon(Icons.check_circle_rounded, color: Colors.green)
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-              child: Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey)),
-            ),
         ],
       ),
     );
+  }
+
+  // 🚀 Helper: Get Button Label based on ID
+  String _getButtonLabel(String id) {
+    if (id.contains('portfolio') || id.contains('cv')) return "Upload Now";
+    if (id.contains('job')) return "Post Job";
+    if (id.contains('earn')) return "Create Pin";
+    if (id.contains('profile')) return "Edit Profile";
+    return "Go Now";
+  }
+
+  // 🚀 Helper: Navigation Logic
+  void _navigateToTask(String id) {
+    // এখানে আপনার অ্যাপের রাউট অনুযায়ী পেজ ওপেন করুন
+    // উদাহরণস্বরূপ:
+
+    // 1. Upload CV/Portfolio
+    if (id.contains('portfolio') || id.contains('cv')) {
+      // Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerDocumentsScreen()));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Documents...")));
+    }
+    // 2. Post a Job
+    else if (id.contains('job')) {
+      // Navigator.push(context, MaterialPageRoute(builder: (_) => const PostJobScreen()));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Post Job...")));
+    }
+    // 3. Earn Post (Pin)
+    else if (id.contains('earn')) {
+      // Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Earn Post...")));
+    }
+    // 4. Edit Profile
+    else if (id.contains('profile')) {
+      // Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Profile...")));
+    }
+    else {
+      // Default
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Action not available")));
+    }
   }
 
   // --- Helpers ---

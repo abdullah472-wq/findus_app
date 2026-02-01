@@ -14,8 +14,6 @@ import 'package:findus_app/services/firestore_chat_service.dart';
 
 import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
-
-// ✅ লগইন স্ক্রিন ইম্পোর্ট
 import 'package:findus_app/screens/auth/login_screen.dart';
 
 Future<void> showWorkerProfileBottomSheet({
@@ -26,8 +24,6 @@ Future<void> showWorkerProfileBottomSheet({
   required Worker workerModel,
 }) async {
   bool isSaved = SavedService.isSaved(data);
-  final bool viewerIsWorker = isWorker;
-
   final NavigatorState rootNav = Navigator.of(context, rootNavigator: true);
 
   // ✅ লগইন চেক হেল্পার
@@ -47,12 +43,9 @@ Future<void> showWorkerProfileBottomSheet({
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(dialogCtx); // ডায়ালগ বন্ধ
-                Navigator.pop(ctx);       // বটম শিট বন্ধ
-                Navigator.push(
-                  ctx,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
+                Navigator.pop(dialogCtx);
+                Navigator.pop(ctx);
+                Navigator.push(ctx, MaterialPageRoute(builder: (_) => const LoginScreen()));
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandMain,
@@ -68,17 +61,18 @@ Future<void> showWorkerProfileBottomSheet({
     return true;
   }
 
+  // ✅ Suggestion Logic Fixed: current worker বাদে বাকিদের দেখাবে
+  // allWorkers লিস্ট থেকে বর্তমান আইডি বাদ দিয়ে ফিল্টার করা হচ্ছে
+  final currentId = (data['ownerId'] ?? data['id'] ?? workerModel.uid).toString();
+
   final suggestions = allWorkers.where((w) {
-    final wid = (w['ownerId'] ?? w['id'] ?? '').toString();
-    final did = (data['ownerId'] ?? data['id'] ?? '').toString();
-    if (wid.isNotEmpty && did.isNotEmpty && wid == did) return false;
-    return w['verified'] == true || w['isVerified'] == true;
+    final wId = (w['ownerId'] ?? w['id'] ?? '').toString();
+    return wId.isNotEmpty && wId != currentId; // বর্তমান কার্ড বাদ
   }).take(5).toList();
 
   Future<void> openProfile() async {
     if (!checkLogin(context)) return;
-
-    Navigator.pop(context); // close sheet
+    Navigator.pop(context);
 
     final uid = workerModel.uid.trim();
     if (uid.isEmpty) return;
@@ -93,11 +87,7 @@ Future<void> showWorkerProfileBottomSheet({
 
     rootNav.push(
       MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(
-          uid: uid,
-          isOwner: false,
-          showBack: true,
-        ),
+        builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: false, showBack: true),
       ),
     );
   }
@@ -105,44 +95,34 @@ Future<void> showWorkerProfileBottomSheet({
   Future<void> openJobDetails() async {
     if (!checkLogin(context)) return;
 
-    showDialog(
-      context: rootNav.context,
-      barrierDismissible: false,
-      builder: (dialogCtx) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (Navigator.of(dialogCtx).canPop()) Navigator.of(dialogCtx).pop();
-        });
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          content: const Row(
-            children: [
-              CircularProgressIndicator(strokeWidth: 2),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Loading details...",
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    // লোডিং ডায়ালগ দেখানো
+    if (context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          Future.delayed(const Duration(seconds: 1), () {
+            if (ctx.mounted && Navigator.canPop(ctx)) Navigator.pop(ctx);
+          });
+          return const Center(child: CircularProgressIndicator());
+        },
+      );
+    }
 
     await Future.delayed(const Duration(seconds: 1));
-    if (Navigator.canPop(context)) Navigator.pop(context);
 
-    if (isWorker) {
+    // বটম শিট বন্ধ করা
+    if (context.mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+
+    // পেজে যাওয়া
+    if (context.mounted) {
       rootNav.push(
         MaterialPageRoute(
-          builder: (_) => JobPostGateScreen(worker: workerModel),
-        ),
-      );
-    } else {
-      rootNav.push(
-        MaterialPageRoute(
-          builder: (_) => WorkerJobDetailsScreen(worker: workerModel),
+          builder: (_) => isWorker
+              ? JobPostGateScreen(worker: workerModel)
+              : WorkerJobDetailsScreen(worker: workerModel),
         ),
       );
     }
@@ -200,7 +180,7 @@ Future<void> showWorkerProfileBottomSheet({
                       ),
                     ),
 
-                    // 🔹 মেইন কার্ড: কার্ডে ট্যাপ = প্রোফাইল, বাটনে ট্যাপ = Job Details
+                    // 🔹 মেইন কার্ড
                     UniversalWorkerCard(
                       id: workerModel.uid,
                       name: (data['name'] ?? 'Unknown').toString(),
@@ -219,11 +199,12 @@ Future<void> showWorkerProfileBottomSheet({
                       isTopRated: isTopRated,
                       isSaved: isSaved,
 
-                      // কার্ডে ট্যাপ → প্রোফাইল
+                      // কার্ডে ট্যাপ = প্রোফাইল
                       onTap: openProfile,
 
-                      // নিচের primary বাটন → Job Details
+                      // "View Job Details" বাটন অ্যাকশন
                       onViewProfileTap: openJobDetails,
+                      showActionButtons: true, // ✅ বাটন দেখাবে
 
                       onSaveTap: () async {
                         if (!checkLogin(context)) return;
@@ -234,37 +215,17 @@ Future<void> showWorkerProfileBottomSheet({
                       onChatTap: () async {
                         if (!checkLogin(context)) return;
 
-                        showDialog(
-                          context: rootNav.context,
-                          barrierDismissible: false,
-                          builder: (_) => const Center(
-                            child: CircularProgressIndicator(color: AppColors.brandMain),
-                          ),
-                        );
-
+                        // চ্যাট লজিক...
                         final otherUid = workerModel.uid.trim();
-                        final convId = await FirestoreChatService.getOrCreateConversation(
-                          otherUserId: otherUid,
-                        );
-
+                        final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUid);
                         if (rootNav.canPop()) rootNav.pop();
-
-                        rootNav.push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              conversationId: convId,
-                              userName: workerModel.name,
-                              userRole: workerModel.userRole,
-                              userImage: workerModel.image,
-                            ),
-                          ),
-                        );
+                        rootNav.push(MaterialPageRoute(builder: (_) => ChatScreen(conversationId: convId, userName: workerModel.name, userRole: workerModel.userRole, userImage: workerModel.image)));
                       },
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 25),
 
-                    // 🔹 Suggestions Section
+                    // 🔹 Suggestions Section (Fix: Always Shows)
                     if (suggestions.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 15, bottom: 10),
@@ -297,14 +258,14 @@ Future<void> showWorkerProfileBottomSheet({
                               time: "Available now",
                               isVerifiedWorker: true,
 
-                              // suggestion কার্ডে শুধু ট্যাপ → নতুন bottom sheet
+                              // ✅ Suggestion Tap Fix: Recursive Call with Full List
                               onTap: () {
-                                Navigator.pop(sheetCtx);
+                                Navigator.pop(sheetCtx); // বর্তমান শিট বন্ধ
                                 showWorkerProfileBottomSheet(
                                   context: rootNav.context,
                                   data: s,
                                   isWorker: isWorker,
-                                  allWorkers: allWorkers,
+                                  allWorkers: allWorkers, // ✅ পুরো লিস্ট পাস করা হচ্ছে যাতে চেইন চলতে থাকে
                                   workerModel: Worker(
                                     uid: (s['ownerId'] ?? s['id'] ?? '').toString(),
                                     postId: (s['id'] ?? '').toString(),
@@ -319,8 +280,7 @@ Future<void> showWorkerProfileBottomSheet({
                                 );
                               },
 
-                              // এখানে action buttons লাগবে না, dead button এড়াতে
-                              showActionButtons: false,
+                              showActionButtons: false, // সাজেশনে বাটন দেখাবে না
                             ),
                           );
                         }).toList(),

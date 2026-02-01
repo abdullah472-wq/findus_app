@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 enum BadgeLevel {
-  newbie,   // এটা শুধু শুরুর স্টেট (No Badge)
-  bronze,   // এটাই হবে প্রথম ব্যাজ
+  newbie,   // ✅ এখন এটি 'Starter Badge' (সাদা রঙের)
+  bronze,   // পরবর্তী লেভেল
   silver,
   gold,
   platinum,
@@ -24,9 +24,11 @@ class BadgeProgress {
     this.progressPercentage = 0.0,
   });
 
+  // প্রগ্রেস ক্যালকুলেশন হেল্পার
   double get percentToNext {
     if (progressPercentage > 0.0) return progressPercentage;
-    if (nextLevelPoints <= 0) return 1.0;
+    if (nextLevelPoints <= 0) return 1.0; // ম্যাক্স লেভেল
+
     final ratio = totalPoints / nextLevelPoints;
     return ratio.clamp(0.0, 1.0);
   }

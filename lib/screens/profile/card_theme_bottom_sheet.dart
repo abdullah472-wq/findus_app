@@ -150,7 +150,11 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
   Widget _buildColorCircle(int index, bool isSelected, bool canSelect, bool isDark) {
     final colors = _gradients[index];
     final isLocked = !canSelect;
-    final textColor = isDark ? Colors.white70 : Colors.black87;
+
+    // ✅ টেক্সট কালার লজিক
+    final textColor = isLocked
+        ? Colors.grey
+        : (isDark ? Colors.white70 : Colors.black87);
 
     return GestureDetector(
       onTap: () => _onSelect(index),
@@ -160,8 +164,8 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
             alignment: Alignment.center,
             children: [
               Container(
-                width: 70,
-                height: 70,
+                width: 60, // সাইজ একটু ছোট করা হয়েছে যাতে গ্রিডে সুন্দর দেখায়
+                height: 60,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: colors,
@@ -170,25 +174,26 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                   ),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected ? (isDark ? Colors.white : Colors.black) : Colors.grey.shade300,
+                    // সিলেকশন বর্ডার কালার
+                    color: isSelected ? (isDark ? Colors.white : AppColors.brandMain) : Colors.grey.shade300,
                     width: isSelected ? 3 : 1,
                   ),
                   boxShadow: [
                     if (isSelected)
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2),
                       ),
                   ],
                 ),
                 child: isLocked
                     ? Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.lock, size: 24, color: Colors.white),
+                  child: const Icon(Icons.lock, size: 20, color: Colors.white),
                 )
                     : null,
               ),
@@ -197,44 +202,27 @@ class _CardThemeBottomSheetState extends State<CardThemeBottomSheet> {
                   bottom: 0,
                   right: 0,
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white : Colors.black,
+                      color: AppColors.brandMain,
                       shape: BoxShape.circle,
-                      border: Border.all(color: isDark ? Colors.black : Colors.white, width: 2),
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
-                    child: Icon(Icons.check, size: 14, color: isDark ? Colors.black : Colors.white),
+                    child: const Icon(Icons.check, size: 12, color: Colors.white),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             _gradientNames[index],
             style: TextStyle(
-              fontSize: 12,
-              color: isLocked ? Colors.grey : textColor,
+              fontSize: 11,
+              color: textColor,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-          if (isSelected && !isLocked)
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.brandMain.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'Current',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: AppColors.brandMain,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
         ],
       ),
     );

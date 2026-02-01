@@ -226,17 +226,34 @@ class ThemeSettingsScreen extends StatelessWidget {
                 const SizedBox(height: 30),
 
                 // রিসেট বাটন (সবার জন্য কাজ করবে এখন, যেহেতু ডার্ক মোড ফ্রি)
+                // রিসেট বাটন (Confirmation Dialog সহ)
                 Center(
                   child: TextButton.icon(
                     onPressed: () {
-                      ThemeService.updateThemeSetting(
-                        isDarkMode: false,
-                        isAutoTheme: true,
-                        isHighContrast: false,
-                        isReducedMotion: false,
-                        fontSize: 1.0,
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Reset Settings?"),
+                          content: const Text("This will restore default theme settings."),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cancel")),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                ThemeService.updateThemeSetting(
+                                  isDarkMode: false,
+                                  isAutoTheme: true,
+                                  isHighContrast: false,
+                                  isReducedMotion: false,
+                                  fontSize: 1.0,
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Theme reset to default")));
+                              },
+                              child: const Text("Reset", style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
                       );
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Theme reset to default")));
                     },
                     icon: Icon(Icons.refresh, color: subTextColor),
                     label: Text("Reset to Default", style: TextStyle(color: subTextColor)),

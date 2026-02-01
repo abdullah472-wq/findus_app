@@ -18,9 +18,8 @@ class BadgeIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ১. ওভাররাইড লেভেল চেক (Newbie হলে কিছুই দেখাবে না)
+    // ১. ওভাররাইড লেভেল চেক
     if (overrideLevel != null) {
-      if (overrideLevel == BadgeLevel.newbie) return const SizedBox.shrink();
       return _buildBadge(
         level: overrideLevel!,
         percentToNext: overridePercentToNext ?? 1.0,
@@ -31,11 +30,6 @@ class BadgeIcon extends StatelessWidget {
     return ValueListenableBuilder<BadgeProgress>(
       valueListenable: BadgeService.badgeNotifier,
       builder: (context, progress, _) {
-        // ✅ Newbie হলে কোনো উইজেট রেন্ডার হবে না
-        if (progress.level == BadgeLevel.newbie) {
-          return const SizedBox.shrink();
-        }
-
         return _buildBadge(
           level: progress.level,
           percentToNext: progress.progressPercentage,
@@ -52,11 +46,12 @@ class BadgeIcon extends StatelessWidget {
     Color color;
     String label;
 
-    // Exhaustive switch (সব লেভেল হ্যান্ডেল করা হয়েছে)
     switch (level) {
       case BadgeLevel.newbie:
-      // এটি প্র্যাকটিক্যালি কল হবে না উপরের চেকের কারণে, তাও সেফটির জন্য রাখা
-        return const SizedBox.shrink();
+        icon = Icons.emoji_people; // অথবা Icons.star_border
+        color = Colors.white; // ✅ সাদা কালার
+        label = "Newbie";
+        break;
 
       case BadgeLevel.bronze:
         icon = Icons.military_tech;
@@ -96,7 +91,27 @@ class BadgeIcon extends StatelessWidget {
           alignment: Alignment.bottomCenter,
           clipBehavior: Clip.none,
           children: [
-            Icon(icon, size: size, color: color),
+            // গ্লো ইফেক্ট (সাদা ব্যাজের জন্য ডার্ক ব্যাকগ্রাউন্ডে দরকার হতে পারে)
+            if (level == BadgeLevel.newbie)
+              Positioned.fill(
+                child: Icon(
+                  icon,
+                  size: size,
+                  color: Colors.black.withOpacity(0.2), // হালকা শ্যাডো যাতে সাদার ওপর বোঝা যায়
+                ),
+              ),
+
+            Icon(
+              icon,
+              size: size,
+              color: color,
+              // যদি আইকনটি সলিড না হয়, তবে সাদা রঙ ব্যাকগ্রাউন্ডে মিশে যেতে পারে।
+              // তাই প্রয়োজনে shadows প্রপার্টি ব্যবহার করা যেতে পারে।
+              shadows: level == BadgeLevel.newbie
+                  ? [Shadow(color: Colors.black26, blurRadius: 4)]
+                  : null,
+            ),
+
             Positioned(
               bottom: -4,
               left: 0,
