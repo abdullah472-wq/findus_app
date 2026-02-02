@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:shimmer/shimmer.dart'; // লোডিং ইফেক্টের জন্য
 
 class PerformanceCard extends StatelessWidget {
   final String userId;
@@ -9,7 +10,6 @@ class PerformanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
@@ -17,14 +17,21 @@ class PerformanceCard extends StatelessWidget {
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('user_stats')
+          .collection('user_stats') // ১. প্রথমে স্ট্যাটস চেক
           .doc(userId)
           .snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildShimmerLoading(cardColor);
+        }
+
         Map<String, dynamic> data = {};
 
+        // ২. যদি স্ট্যাটস না থাকে, তবে ইউজার ডকুমেন্ট থেকে ডাটা নেওয়ার চেষ্টা (অপশনাল)
         if (snapshot.hasData && snapshot.data!.exists) {
           data = snapshot.data!.data() as Map<String, dynamic>;
+        } else {
+          // Fallback logic could be added here if needed
         }
 
         final impressions = data['impressions'] ?? 0;
@@ -43,36 +50,68 @@ class PerformanceCard extends StatelessWidget {
                 offset: const Offset(0, 4),
               )
             ],
+            border: Border.all(
+              color: isDark ? Colors.white10 : Colors.grey.shade200,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.insights_rounded, color: AppColors.brandMain, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Profile Performance",
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: textColor
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandMain.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.insights_rounded, color: AppColors.brandMain, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "Performance",
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: textColor
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Trend Indicator (Optional)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.trending_up, color: Colors.green, size: 14),
+                        SizedBox(width: 4),
+                        Text("+12%", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
+                      ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                "Overview of how users are interacting with you",
-                style: TextStyle(fontSize: 12, color: subTextColor),
-              ),
+
               const SizedBox(height: 20),
+
+              // Stats Row
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
                   _perfItem("Impressions", _format(impressions), Icons.visibility_outlined, Colors.blue, textColor, subTextColor),
-                  _perfItem("Views", _format(views), Icons.person_search_outlined, Colors.green, textColor, subTextColor),
-                  _perfItem("Hires", _format(hires), Icons.handshake_outlined, Colors.orange, textColor, subTextColor),
+                  _verticalDivider(isDark),
+                  _perfItem("Profile Views", _format(views), Icons.person_search_outlined, Colors.purple, textColor, subTextColor),
+                  _verticalDivider(isDark),
+                  _perfItem("Total Hires", _format(hires), Icons.handshake_outlined, Colors.orange, textColor, subTextColor),
                 ],
               ),
             ],
@@ -89,27 +128,28 @@ class PerformanceCard extends StatelessWidget {
     return n.toString();
   }
 
+  Widget _verticalDivider(bool isDark) {
+    return Container(
+      height: 40,
+      width: 1,
+      color: isDark ? Colors.white10 : Colors.grey.shade200,
+    );
+  }
+
   Widget _perfItem(String label, String val, IconData icon, Color iconColor, Color textColor, Color subTextColor) {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: iconColor, size: 22),
-        ),
+        Icon(icon, color: iconColor, size: 24),
         const SizedBox(height: 8),
         Text(
             val,
             style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
                 color: textColor
             )
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
             label,
             style: TextStyle(
@@ -119,6 +159,22 @@ class PerformanceCard extends StatelessWidget {
             )
         ),
       ],
+    );
+  }
+
+  // লোডিং ইফেক্ট (Shimmer)
+  Widget _buildShimmerLoading(Color cardColor) {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: Container(
+        height: 150,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
     );
   }
 }

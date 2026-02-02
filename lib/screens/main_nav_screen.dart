@@ -1,16 +1,16 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
-// ✅ Achievement service ইম্পোর্ট
-import 'package:findus_app/achievement/achievement_service.dart';
-
-// Screens
+// Screens ও অন্যান্য ইম্পোর্ট (আপনার ফাইল পাথ অনুযায়ী ঠিক রাখুন)
 import 'home_feed_screen.dart';
 import 'explore/explore_screen.dart';
-import 'tabs/conversation_tab.dart'; // ✅ Conversation Tab ইম্পোর্ট
+import 'tabs/conversation_tab.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/auth/log_in_chacker_screen.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class MainNavScreen extends StatefulWidget {
   const MainNavScreen({super.key});
@@ -19,7 +19,7 @@ class MainNavScreen extends StatefulWidget {
 
   static void goToHomeTab() => navKey.currentState?._goToTab(0);
   static void goToExploreTab() => navKey.currentState?._goToTab(1);
-  static void goToMessagesTab() => navKey.currentState?._goToTab(2); // ✅ নাম পরিবর্তন
+  static void goToMessagesTab() => navKey.currentState?._goToTab(2);
   static void goToProfileTab() => navKey.currentState?._goToTab(3);
 
   @override
@@ -29,14 +29,14 @@ class MainNavScreen extends StatefulWidget {
 class _MainNavScreenState extends State<MainNavScreen> {
   int _currentIndex = 1;
   final PageController _pageController = PageController(initialPage: 1);
+  int unreadMessagesCount = 0; // এটি সার্ভিস থেকে আপডেট করবেন
 
   @override
   void initState() {
     super.initState();
-    _handleDailyCheckIn(); // ✅ এখানে কল
+    _handleDailyCheckIn();
   }
 
-  /// ✅ Daily Check‑in progress বাড়ানো
   Future<void> _handleDailyCheckIn() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
@@ -46,15 +46,20 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
   void _goToTab(int index) {
     if (_currentIndex == index) return;
+    HapticFeedback.lightImpact();
     setState(() => _currentIndex = index);
-    _pageController.jumpToPage(index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOutQuart,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
+    final bgColor = isDark ? const Color(0xFF0F0F0F) : AppColors.bgBlue;
 
     return PopScope(
       canPop: _currentIndex == 1,
@@ -70,83 +75,48 @@ class _MainNavScreenState extends State<MainNavScreen> {
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            // 0. HOME TAB (Login Check)
             uid != null
                 ? HomeFeedScreen(key: HomeFeedScreen.feedKey)
                 : const ProfileNotLoggedIn(title: "Home Feed", showBackButton: false),
-
-            // 1. EXPLORE TAB (Public)
             const ExploreScreen(),
-
-            // 2. MESSAGES TAB
             const ConversationTab(),
-
-            // 3. PROFILE TAB (Login Check)
             uid != null
                 ? UnifiedProfileScreen(uid: uid, isOwner: true, showBack: false)
                 : const ProfileNotLoggedIn(title: "Your Profile", showBackButton: false),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: _buildModernNavBar(isDark),
-        ),
+        bottomNavigationBar: _buildModernNavBar(isDark),
       ),
     );
   }
 
   Widget _buildModernNavBar(bool isDark) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-      height: 70,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+      margin: const EdgeInsets.fromLTRB(15, 0, 15, 25),
+      height: 75,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? Colors.black.withOpacity(0.7) : Colors.white.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                color: isDark ? Colors.white10 : Colors.black12,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _NavItem(index: 0, currentIndex: _currentIndex, activeIcon: Icons.home_rounded, inactiveIcon: Icons.home_outlined, label: 'Home', onTap: _goToTab),
+                _NavItem(index: 1, currentIndex: _currentIndex, activeIcon: Icons.explore_rounded, inactiveIcon: Icons.explore_outlined, label: 'Explore', onTap: _goToTab),
+                _NavItem(index: 2, currentIndex: _currentIndex, activeIcon: Icons.chat_bubble_rounded, inactiveIcon: Icons.chat_bubble_outline, label: 'Chat', badgeCount: unreadMessagesCount, onTap: _goToTab),
+                _NavItem(index: 3, currentIndex: _currentIndex, activeIcon: Icons.person_rounded, inactiveIcon: Icons.person_outline, label: 'Profile', onTap: _goToTab),
+              ],
+            ),
           ),
-        ],
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _NavItem(
-            index: 0,
-            currentIndex: _currentIndex,
-            activeIcon: Icons.home_rounded,
-            inactiveIcon: Icons.home_outlined,
-            label: 'HOME',
-            onTap: _goToTab,
-          ),
-          _NavItem(
-            index: 1,
-            currentIndex: _currentIndex,
-            activeIcon: Icons.explore_rounded,
-            inactiveIcon: Icons.explore_outlined,
-            label: 'EXPLORE',
-            onTap: _goToTab,
-          ),
-          _NavItem(
-            index: 2,
-            currentIndex: _currentIndex,
-            activeIcon: Icons.chat_bubble_rounded,
-            inactiveIcon: Icons.chat_bubble_outline,
-            label: 'MESSAGES',
-            onTap: _goToTab,
-          ),
-          _NavItem(
-            index: 3,
-            currentIndex: _currentIndex,
-            activeIcon: Icons.person_rounded,
-            inactiveIcon: Icons.person_outline,
-            label: 'PROFILE',
-            onTap: _goToTab,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -159,6 +129,7 @@ class _NavItem extends StatelessWidget {
   final IconData inactiveIcon;
   final String label;
   final Function(int) onTap;
+  final int badgeCount;
 
   const _NavItem({
     required this.index,
@@ -167,44 +138,72 @@ class _NavItem extends StatelessWidget {
     required this.inactiveIcon,
     required this.label,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
   Widget build(BuildContext context) {
     final isSelected = currentIndex == index;
-    const activeColor = AppColors.brandMain;
+    const activeColor = AppColors.brandMain; // হাইলাইট কালার
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // ইন-অ্যাক্টিভ কালার সেট করা হয়েছে (ডার্ক মোডে হালকা সাদাটে, লাইট মোডে হালকা কালোটে)
+    final inactiveColor = isDark ? Colors.white54 : Colors.black45;
 
     return Expanded(
-      child: InkWell(
+      child: GestureDetector(
         onTap: () => onTap(index),
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
+        behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              color: isSelected ? activeColor : Colors.grey.shade400,
-              size: isSelected ? 26 : 22,
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  isSelected ? activeIcon : inactiveIcon,
+                  color: isSelected ? activeColor : inactiveColor,
+                  size: 24,
+                ),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: -4,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: isDark ? Colors.black : Colors.white, width: 1.5),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                      child: Center(
+                        child: Text(
+                          badgeCount > 9 ? '9+' : '$badgeCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: const EdgeInsets.only(top: 4),
-              height: 4,
-              width: isSelected ? 4 : 0,
-              decoration: const BoxDecoration(
-                color: activeColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
+            // টেক্সট এখন সবসময় দেখা যাবে, শুধু কালার পরিবর্তন হবে
             Text(
               label,
               style: TextStyle(
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? activeColor : Colors.grey.shade400,
+                color: isSelected ? activeColor : inactiveColor,
               ),
+            ),
+            // সিলেক্টেড ট্যাবের নিচে ছোট ডট ইন্ডিকেটর
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.only(top: 4),
+              height: 3,
+              width: isSelected ? 3 : 0,
+              decoration: const BoxDecoration(color: activeColor, shape: BoxShape.circle),
             ),
           ],
         ),

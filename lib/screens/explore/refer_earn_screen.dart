@@ -4,6 +4,7 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:findus_app/services/referral_service.dart';
 
 class ReferEarnScreen extends StatefulWidget {
   const ReferEarnScreen({super.key});
@@ -17,12 +18,15 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   static const String _downloadBaseUrl = "https://findus.app/download";
 
+  final TextEditingController _enterCodeController = TextEditingController();
+
   bool _isLoading = true;
   String _referralCode = "";
   int _invited = 0;
   int _joined = 0;
   int _totalRewards = 0;
   int _pendingRewards = 0;
+  bool _hasReferrer = false;
   String? _error;
 
   String get _referralLink => _referralCode.isNotEmpty ? "$_downloadBaseUrl?ref=$_referralCode" : "";
@@ -31,6 +35,12 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
   void initState() {
     super.initState();
     _loadReferralData();
+  }
+
+  @override
+  void dispose() {
+    _enterCodeController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadReferralData() async {
@@ -51,6 +61,7 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
       if (snap.exists) data = snap.data() as Map<String, dynamic>;
 
       String code = (data['referralCode'] ?? "") as String;
+
       if (code.trim().isEmpty) {
         code = _generateReferralCode(user.uid);
         await userDocRef.set({
@@ -69,6 +80,9 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
         _joined = (data['referralJoinedCount'] ?? 0) is int ? (data['referralJoinedCount'] ?? 0) as int : (data['referralJoinedCount'] ?? 0 as num).toInt();
         _totalRewards = (data['referralTotalRewards'] ?? 0) is int ? (data['referralTotalRewards'] ?? 0) as int : (data['referralTotalRewards'] ?? 0 as num).toInt();
         _pendingRewards = (data['referralPendingRewards'] ?? 0) is int ? (data['referralPendingRewards'] ?? 0) as int : (data['referralPendingRewards'] ?? 0 as num).toInt();
+
+        _hasReferrer = data['referredBy'] != null && data['referredBy'].toString().isNotEmpty;
+
         _isLoading = false;
       });
     } catch (e) {
@@ -90,6 +104,80 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage)));
+  }
+
+  Future<void> _applyCode() async {
+    final code = _enterCodeController.text.trim();
+    if (code.isEmpty) return;
+
+    if (code == _referralCode) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("You cannot use your own code!"), backgroundColor: Colors.red));
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    await ReferralService.applyReferralCode(
+        newUserId: _auth.currentUser!.uid,
+        code: code
+    );
+
+    await _loadReferralData();
+
+    if(mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Referral code applied successfully!"), backgroundColor: Colors.green));
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // 💰 Payout Request Logic (Minimum 100 BDT)
+  Future<void> _requestPayout() async {
+    if (_totalRewards < 100) {
+      _showErrorDialog("You need minimum 100 BDT to withdraw. Keep inviting!");
+      return;
+    }
+
+    try {
+      setState(() => _isLoading = true);
+      final uid = _auth.currentUser!.uid;
+
+      // ১. রিকোয়েস্ট তৈরি করা
+      await _db.collection('payout_requests').add({
+        'userId': uid,
+        'amount': _totalRewards,
+        'status': 'pending',
+        'requestedAt': FieldValue.serverTimestamp(),
+        'method': 'Manual Review',
+      });
+
+      setState(() => _isLoading = false);
+      _showSuccessDialog("Payout request sent! We will review and transfer the amount shortly.");
+    } catch (e) {
+      setState(() => _isLoading = false);
+      _showErrorDialog("Failed to send request. Try again later.");
+    }
+  }
+
+  void _showErrorDialog(String msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Notice"),
+        content: Text(msg),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
+      ),
+    );
+  }
+
+  void _showSuccessDialog(String msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Success"),
+        content: Text(msg),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("GREAT"))],
+      ),
+    );
   }
 
   @override
@@ -117,9 +205,18 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
           : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (!_hasReferrer)
+            _buildEnterCodeCard(context, cardColor, textColor, isDark),
+
+          if (!_hasReferrer)
+            const SizedBox(height: 16),
+
           _buildHeaderCard(context, cardColor, textColor, subTextColor),
           const SizedBox(height: 16),
+
+          // 🔥 Stats & Withdraw Button
           _buildStatsCard(isDark),
+
           const SizedBox(height: 16),
           _buildReferralCodeCard(context, cardColor, textColor, subTextColor, isDark),
           const SizedBox(height: 16),
@@ -129,6 +226,61 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
           const SizedBox(height: 20),
           _buildHowItWorksSection(cardColor, textColor, subTextColor),
           const SizedBox(height: 50),
+        ],
+      ),
+    );
+  }
+
+  // ✅ New Widget: Enter Code Card
+  Widget _buildEnterCodeCard(BuildContext context, Color cardColor, Color textColor, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.brandMain.withOpacity(0.3), width: 1.5),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.volunteer_activism, color: AppColors.brandMain, size: 20),
+              const SizedBox(width: 8),
+              Text("Have a referral code?", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _enterCodeController,
+                  style: TextStyle(color: textColor),
+                  decoration: InputDecoration(
+                    hintText: "Enter code here",
+                    hintStyle: TextStyle(color: isDark ? Colors.white30 : Colors.grey),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    filled: true,
+                    fillColor: isDark ? Colors.black26 : Colors.grey.shade100,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton(
+                onPressed: _applyCode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
+                child: const Text("APPLY"),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -144,13 +296,16 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
         children: [
           Text("Invite friends, earn rewards", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: textColor)),
           const SizedBox(height: 6),
-          Text("Share FINDUS with your friends. When they join and start using the app, both of you can get rewards.", style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4)),
+          Text("Share FINDUS with your friends. Get ৳5 for every successful referral!", style: TextStyle(fontSize: 13, color: subTextColor, height: 1.4)),
         ],
       ),
     );
   }
 
+  // 🔥 Stats & Withdraw Card
   Widget _buildStatsCard(bool isDark) {
+    final canWithdraw = _totalRewards >= 100;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -166,7 +321,37 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
           const SizedBox(height: 10),
           Row(children: [_statItem("Invited", _invited.toString(), Icons.person_add_alt, isDark), _statItem("Joined", _joined.toString(), Icons.group_outlined, isDark)]),
           const SizedBox(height: 8),
-          Row(children: [_statItem("Total rewards", "৳$_totalRewards", Icons.card_giftcard_outlined, isDark), _statItem("Pending", "৳$_pendingRewards", Icons.hourglass_bottom_outlined, isDark)]),
+          Row(children: [_statItem("Total Earned", "৳$_totalRewards", Icons.account_balance_wallet, isDark), _statItem("Pending", "৳$_pendingRewards", Icons.hourglass_bottom_outlined, isDark)]),
+
+          const SizedBox(height: 16),
+
+          // 💸 Withdraw Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _requestPayout,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: canWithdraw ? Colors.green : Colors.grey,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                elevation: canWithdraw ? 2 : 0,
+              ),
+              icon: const Icon(Icons.money),
+              label: const Text("REQUEST PAYOUT", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+
+          if (!canWithdraw)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Center(
+                child: Text(
+                  "Reach ৳100 to withdraw",
+                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -279,8 +464,8 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
       Text("How it works", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor)),
       const SizedBox(height: 8),
       _HowItWorksItem(step: "1", text: "Share your referral link or QR code with your friends.", color: subTextColor),
-      _HowItWorksItem(step: "2", text: "They download FINDUS and sign up using your link.", color: subTextColor),
-      _HowItWorksItem(step: "3", text: "When they complete their first job / hiring, both of you get rewards.", color: subTextColor),
+      _HowItWorksItem(step: "2", text: "They sign up using your link or code.", color: subTextColor),
+      _HowItWorksItem(step: "3", text: "When they complete their first job, you get ৳5 reward!", color: subTextColor),
     ]));
   }
 }

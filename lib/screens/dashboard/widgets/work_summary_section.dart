@@ -1,12 +1,12 @@
+// lib/screens/dashboard/widgets/work_summary_section.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:findus_app/screens/dashboard/utils/dashboard_constants.dart';
 import 'package:findus_app/screens/dashboard/widgets/pending_jobs_screen.dart';
 import 'package:findus_app/screens/dashboard/widgets/stat_card.dart';
 import 'package:findus_app/screens/rating_history_screen.dart';
-import 'package:findus_app/screens/tabs/completed_work_tab.dart';
-
-import '../../home_feed_screen.dart';
+import 'package:findus_app/screens/tabs/completed_work_tab.dart'; // Direct import
 
 class WorkSummarySection extends StatefulWidget {
   final String userId;
@@ -40,6 +40,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
       final snapshot = await query.count().get();
       return snapshot.count ?? 0;
     } catch (e) {
+      // Fallback if count() fails (e.g. index issue)
       try {
         final snapshot = await query.get();
         return snapshot.docs.length;
@@ -56,33 +57,25 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
     }
 
     try {
-      // ১. কমপ্লিটেড জব কাউন্ট
+      // 1. Completed Jobs
       final doneQuery = FirebaseFirestore.instance
           .collection('completed_jobs')
           .where('participants', arrayContains: uid);
       final int doneCount = await _fetchCountSafe(doneQuery);
 
-      // ২. পেন্ডিং জব কাউন্ট
+      // 2. Pending Jobs
       final pendingQuery = FirebaseFirestore.instance
           .collection('hire_requests')
           .where('receiverId', isEqualTo: uid)
           .where('status', isEqualTo: DashboardConstants.pendingStatus);
       final int pendingCount = await _fetchCountSafe(pendingQuery);
 
-      // ৩. গড় রেটিং এবং রেসপন্স রেট (user_stats থেকে)
+      // 3. User Stats
       final userStatsDoc = await FirebaseFirestore.instance.collection('user_stats').doc(uid).get();
       final statsData = userStatsDoc.data() ?? {};
 
-      // Avg Rating
-      final double avgRating = (statsData['avgRating'] is num)
-          ? (statsData['avgRating'] as num).toDouble()
-          : 0.0;
-
-      // Response Rate (Calculated or Fetched)
-      // যদি user_stats এ responseRate থাকে তবে সেটি নিন, নাহলে ডিফল্ট লজিক
-      final double responseRate = (statsData['responseRate'] is num)
-          ? (statsData['responseRate'] as num).toDouble()
-          : 95.0; // ডিফল্ট বা ক্যালকুলেটেড ভ্যালু
+      final double avgRating = (statsData['avgRating'] is num) ? (statsData['avgRating'] as num).toDouble() : 0.0;
+      final double responseRate = (statsData['responseRate'] is num) ? (statsData['responseRate'] as num).toDouble() : 95.0;
 
       return _WorkSummaryData(
         doneCount: doneCount,
@@ -92,7 +85,8 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
       );
     } catch (e) {
       debugPrint('WorkSummary _load error: $e');
-      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '0.0', responseRateLabel: 'N/A');
+      // Return empty/default data on error instead of throwing
+      return _WorkSummaryData(doneCount: 0, pendingCount: 0, avgRatingLabel: '-', responseRateLabel: '-');
     }
   }
 
@@ -117,10 +111,18 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
         FutureBuilder<_WorkSummaryData>(
           future: _future,
           builder: (context, snap) {
-            if (!snap.hasData) {
+            if (snap.connectionState == ConnectionState.waiting) {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              );
+            }
+
+            if (snap.hasError) {
+              return _ErrorBox(
+                  message: "Failed to load summary",
+                  onRetry: () => setState(() => _future = _load()),
+                  isDark: isDark
               );
             }
 
@@ -131,16 +133,17 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                 Row(
                   children: [
                     Expanded(
-                      child: // DashboardScreen.dart ফাইলের StatCard অংশে
-
-                      StatCard(
+                      child: StatCard(
                         title: "Jobs Done",
                         value: data.doneCount.toString(),
                         icon: Icons.assignment_turned_in,
                         color: Colors.blue,
                         onTap: () {
-                          // ✅ সরাসরি Completed Tab এ নিয়ে যাবে
-                          HomeFeedScreen.goToTab(2); // 2 হলো CompletedWorkTab এর ইনডেক্স
+                          // ✅ নিরাপদ ন্যাভিগেশন: সরাসরি CompletedWorkTab স্ক্রিনে
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CompletedWorkTab())
+                          );
                         },
                       ),
                     ),
@@ -187,7 +190,7 @@ class _WorkSummarySectionState extends State<WorkSummarySection> {
                         color: Colors.teal,
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Response rate is calculated based on reply time.')),
+                            const SnackBar(content: Text('Based on average reply time.')),
                           );
                         },
                       ),
@@ -234,18 +237,13 @@ class _ErrorBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.red.shade100),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Notice', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
-          const SizedBox(height: 6),
-          Text(message, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-          const SizedBox(height: 10),
-          TextButton.icon(
+          Text(message, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          IconButton(
             onPressed: onRetry,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Retry'),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            icon: const Icon(Icons.refresh, color: Colors.redAccent),
           ),
         ],
       ),

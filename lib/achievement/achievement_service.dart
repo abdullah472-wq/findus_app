@@ -1,18 +1,17 @@
 // lib/services/achievement_service.dart
-
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// ✅ শুধু এই ইম্পোর্টগুলো রাখুন
+
 import 'package:findus_app/achievement/achievements_config.dart';
 import 'package:findus_app/achievement/achievement_models.dart';
 import 'package:findus_app/badge/badge_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
 
 class AchievementService {
-  static const String _prefsKey = 'achievements_state_v1';
+  static const String _prefsKey = 'achievements_state_v2';
 
   static final ValueNotifier<List<AchievementState>> achievementsNotifier =
   ValueNotifier<List<AchievementState>>([]);
@@ -26,6 +25,7 @@ class AchievementService {
 
     _stateById.clear();
 
+    // ১. লোকাল স্টোরেজ থেকে লোড করা
     for (final raw in listJson) {
       try {
         final map = jsonDecode(raw) as Map<String, dynamic>;
@@ -36,12 +36,11 @@ class AchievementService {
         if (def == null) continue;
 
         final st = AchievementState.fromJson(def, map);
-        // ✅ ডেইলি/উইকলি চেক করে রিসেট করা
         _stateById[id] = _resetIfNeeded(st);
       } catch (_) {}
     }
 
-    // নতুন কোনো টাস্ক থাকলে ডিফল্ট স্টেট যোগ করা
+    // ২. নতুন বা মিসিং টাস্কগুলো কনফিগ থেকে যোগ করা
     for (final def in AchievementsConfig.all) {
       _stateById.putIfAbsent(def.id, () => AchievementState(def: def));
     }
@@ -49,9 +48,51 @@ class AchievementService {
     _publish();
   }
 
-  /// রিওয়ার্ড (XP) ক্লেইম করা
-  /// রিওয়ার্ড (XP) ক্লেইম করা
-  /// রিওয়ার্ড (XP) ক্লেইম করা
+  /// ✅ Updated: Get all achievements for user
+  static List<AchievementState> getAllForUser({
+    required bool isWorker,
+    required int currentPoints,
+  }) {
+    return _stateById.values.where((st) {
+      final def = st.def;
+
+      // ১. রোলের ভিত্তিতে ফিল্টার
+      if (def.workerOnly && !isWorker) return false;
+      if (def.supporterOnly && isWorker) return false;
+
+      // ২. আনলকড ফিল্টার (অপশনাল)
+      // if (currentPoints < def.minPoints) return false;
+
+      return true;
+    }).toList()
+      ..sort((a, b) {
+        if (a.claimed != b.claimed) return a.claimed ? 1 : -1;
+        if (a.isCompleted != b.isCompleted) return a.isCompleted ? -1 : 1;
+        return a.def.minPoints.compareTo(b.def.minPoints);
+      });
+  }
+
+  /// ✅ Get active achievements
+  static List<AchievementState> getActiveAchievements({
+    required bool isWorker,
+    required int currentPoints,
+  }) {
+    return getAllForUser(isWorker: isWorker, currentPoints: currentPoints)
+        .where((st) => !st.claimed)
+        .toList();
+  }
+
+  /// ✅ Get completed achievements
+  static List<AchievementState> getCompletedAchievements({
+    required bool isWorker,
+    required int currentPoints,
+  }) {
+    return getAllForUser(isWorker: isWorker, currentPoints: currentPoints)
+        .where((st) => st.claimed)
+        .toList();
+  }
+
+  /// 🔥 REWARD CLAIM METHOD (Role Based XP)
   static Future<void> claim(String id) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -63,32 +104,48 @@ class AchievementService {
 
     debugPrint("Claiming reward for: $id");
 
-    // ১) ব্যাজ লেভেল আপ চেক করার জন্য বর্তমান লেভেল রাখা
-    final oldLevel = BadgeService.badgeNotifier.value.level;
-
-    // ২) লোকালি আপডেট করা
+    // ১. লোকালি আপডেট
     final updatedState = state.copyWith(claimed: true);
     _stateById[id] = updatedState;
     await _saveAll();
 
-    // ৩) XP যোগ করা
-    await BadgeService.addPoints(state.def.xpReward);
+    // ২. রোল চেক করা (Worker/Supporter)
+    // টাস্কটি কোন রোলের জন্য, সেই অনুযায়ী ফিল্ড ঠিক করা
+    String specificXpField = '';
 
-    // ৪) নতুন লেভেল চেক করা
-    final newLevel = BadgeService.badgeNotifier.value.level;
-    if (BadgeService.hasLeveledUp(oldLevel, newLevel)) {
-      // TODO: এখানে লেভেল আপ নোটিফিকেশন বা ইভেন্ট ট্রিগার করতে পারেন
-      debugPrint("🎉 LEVEL UP! $oldLevel -> $newLevel");
+    if (state.def.workerOnly) {
+      specificXpField = 'worker_xp';
+    } else if (state.def.supporterOnly) {
+      specificXpField = 'supporter_xp';
+    } else {
+      // কমন টাস্ক হলে দুটি ফিল্ডেই পয়েন্ট যোগ করা যেতে পারে বা মেইন 'xpPoints' এ রাখা যেতে পারে
+      // আপাতত আমরা কমন টাস্কের পয়েন্ট মেইন 'xpPoints' এ রাখছি
+      specificXpField = 'xpPoints';
     }
 
-    try {
-      // ৫) ফায়ারবেসে আপডেট
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'xpPoints': FieldValue.increment(state.def.xpReward),
-        'user_badge_points': FieldValue.increment(state.def.xpReward), // ব্যাকওয়ার্ড কম্প্যাটিবিলিটি
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    // ৩. লোকাল সার্ভিসে XP যোগ করা (যাতে UI সাথে সাথে আপডেট হয়)
+    await BadgeService.addPoints(state.def.xpReward);
 
+    try {
+      // ৪. ফায়ারবেসে নির্দিষ্ট ফিল্ডে আপডেট
+      final Map<String, dynamic> updateData = {
+        'updatedAt': FieldValue.serverTimestamp(),
+        // মেইন XP সবসময় বাড়বে (Total XP)
+        'xpPoints': FieldValue.increment(state.def.xpReward),
+        // ব্যাকওয়ার্ড কম্প্যাটিবিলিটি
+        'user_badge_points': FieldValue.increment(state.def.xpReward),
+      };
+
+      // স্পেসিফিক রোলের XP ফিল্ড আপডেট (যদি থাকে)
+      if (specificXpField == 'worker_xp') {
+        updateData['worker_xp'] = FieldValue.increment(state.def.xpReward);
+      } else if (specificXpField == 'supporter_xp') {
+        updateData['supporter_xp'] = FieldValue.increment(state.def.xpReward);
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).update(updateData);
+
+      // ৫. ক্লেইম হিস্ট্রি সেভ করা
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -98,6 +155,7 @@ class AchievementService {
         'claimedAt': FieldValue.serverTimestamp(),
         'xpEarned': state.def.xpReward,
         'period': state.def.resetPeriod.toString(),
+        'type': state.def.workerOnly ? 'worker' : (state.def.supporterOnly ? 'supporter' : 'common'),
       });
 
       debugPrint("Successfully claimed reward for: $id");
@@ -106,7 +164,7 @@ class AchievementService {
     }
   }
 
-  /// প্রগ্রেস বাড়ানো (যেমন: ১টি কাজ শেষ করলে কল হবে)
+  /// প্রগ্রেস বাড়ানো
   static Future<void> incrementProgress(String achievementId, {int amount = 1}) async {
     final def = AchievementsConfig.byId(achievementId);
     if (def == null) return;
@@ -114,7 +172,6 @@ class AchievementService {
     final current = _stateById[achievementId] ?? AchievementState(def: def);
     final st = _resetIfNeeded(current);
 
-    // যদি ওয়ান-টাইম টাস্ক হয় এবং অলরেডি ক্লেইমড হয়, তবে আর বাড়বে না
     if (st.def.resetPeriod == ResetPeriod.none && st.claimed) return;
 
     final updated = st.copyWith(
@@ -126,7 +183,6 @@ class AchievementService {
     await _saveAll();
   }
 
-  /// ডাটা পাবলিশ ও সেভ করা
   static Future<void> _saveAll() async {
     final prefs = await SharedPreferences.getInstance();
     final listJson = _stateById.values.map((st) => jsonEncode(st.toJson())).toList();
@@ -139,7 +195,6 @@ class AchievementService {
       ..sort((a, b) => a.def.id.compareTo(b.def.id));
   }
 
-  /// ✅ ডেইলি/উইকলি রিসেট লজিক (ইম্প্রুভড)
   static AchievementState _resetIfNeeded(AchievementState st) {
     if (st.def.resetPeriod == ResetPeriod.none || st.lastUpdated == null) return st;
 
@@ -148,34 +203,15 @@ class AchievementService {
     bool needReset = false;
 
     if (st.def.resetPeriod == ResetPeriod.daily) {
-      // যদি তারিখ বদলে যায়
       needReset = last.day != now.day || last.month != now.month || last.year != now.year;
     } else if (st.def.resetPeriod == ResetPeriod.weekly) {
-      // যদি ৭ দিনের বেশি হয়ে যায়
       needReset = now.difference(last).inDays >= 7;
     }
 
-    // রিসেট হলে প্রগ্রেস ০ এবং ক্লেইমড ফলস হয়ে যাবে
     if (needReset) {
-      debugPrint("Resetting task: ${st.def.title}");
       return AchievementState(def: st.def);
     }
-
     return st;
-  }
-
-  static List<AchievementState> getAllForUser({
-    required bool isWorker,
-    required int currentPoints,
-  }) {
-    return _stateById.values.where((st) {
-      final def = st.def;
-      if (def.workerOnly && !isWorker) return false;
-      if (def.supporterOnly && isWorker) return false;
-      if (currentPoints < def.minPoints) return false;
-      return true;
-    }).toList()
-      ..sort((a, b) => a.def.id.compareTo(b.def.id));
   }
 
   // --- হেল্পার্স ---
@@ -196,6 +232,7 @@ class AchievementService {
     if (totalPoints >= BadgeService.platinumThreshold) return BadgeLevel.platinum;
     if (totalPoints >= BadgeService.goldThreshold) return BadgeLevel.gold;
     if (totalPoints >= BadgeService.silverThreshold) return BadgeLevel.silver;
-    return BadgeLevel.bronze;
+    if (totalPoints >= BadgeService.bronzeThreshold) return BadgeLevel.bronze;
+    return BadgeLevel.newbie;
   }
 }

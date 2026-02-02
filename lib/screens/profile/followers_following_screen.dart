@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
@@ -23,6 +24,7 @@ class FollowersFollowingScreen extends StatefulWidget {
 
 class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
   Stream<QuerySnapshot>? _userStream;
+  final String _currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   @override
   void initState() {
@@ -41,6 +43,60 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
         .collection(collectionName)
         .orderBy('followedAt', descending: true)
         .snapshots();
+  }
+
+  // ✅ Unfollow or Remove Follower Logic
+  Future<void> _handleUnfollowOrRemove(String targetUserId, String targetUserName) async {
+    final bool isMyProfile = widget.userId == _currentUid;
+    if (!isMyProfile) return; // অন্য কারো প্রোফাইল দেখলে রিমুভ করা যাবে না
+
+    final action = widget.listType == FollowListType.following ? "Unfollow" : "Remove";
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("$action $targetUserName?"),
+        content: Text("Are you sure you want to $action this user?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("CANCEL")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(action.toUpperCase(), style: const TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+
+      // রেফারেন্সগুলো
+      final meRef = FirebaseFirestore.instance.collection('users').doc(_currentUid);
+      final targetRef = FirebaseFirestore.instance.collection('users').doc(targetUserId);
+
+      if (widget.listType == FollowListType.following) {
+        // আমি তাকে আনফলো করছি
+        batch.delete(meRef.collection('following').doc(targetUserId));
+        batch.delete(targetRef.collection('followers').doc(_currentUid));
+
+        batch.update(meRef, {'followingCount': FieldValue.increment(-1)});
+        batch.update(targetRef, {'followersCount': FieldValue.increment(-1)});
+      } else {
+        // আমি আমার ফলোয়ার রিমুভ করছি
+        batch.delete(meRef.collection('followers').doc(targetUserId));
+        batch.delete(targetRef.collection('following').doc(_currentUid));
+
+        batch.update(meRef, {'followersCount': FieldValue.increment(-1)});
+        batch.update(targetRef, {'followingCount': FieldValue.increment(-1)});
+      }
+
+      await batch.commit();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("User ${action}ed successfully")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    }
   }
 
   @override
@@ -104,29 +160,14 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
               color: isDark ? Colors.white : Colors.black54,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            widget.listType == FollowListType.followers
-                ? 'People who follow you will appear here.'
-                : 'Profiles you follow will appear here.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade500),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildUserItem(DocumentSnapshot userDoc, bool isDark) {
-    final followData = userDoc.data() as Map<String, dynamic>? ?? {};
-
-    // Followers/Following সাবকালেকশনে সাধারণত শুধু uid সেভ থাকে
-    // অথবা মিনিমাম ইনফো থাকে। এখানে আমরা ধরে নিচ্ছি ডকের ID টাই হলো টার্গেট ইউজার ID
     final targetUserId = userDoc.id;
-
-    final followedAt = followData['followedAt'] != null
-        ? (followData['followedAt'] as Timestamp).toDate()
-        : DateTime.now();
+    final bool isMyProfileList = widget.userId == _currentUid; // আমি আমার লিস্ট দেখছি কি না
 
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('users').doc(targetUserId).get(),
@@ -135,113 +176,79 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
 
         final userProfile = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         final userName = userProfile['name'] ?? 'Unknown User';
-        final userRole = (userProfile['userRole'] ?? 'finder').toString().toUpperCase();
+        final userRole = (userProfile['userRole'] ?? 'finder').toString().toLowerCase();
         final profileImage = userProfile['image'] ?? '';
-        // final isVerified = userProfile['kyc_completed'] == true;
+        final roleLabel = userRole == 'finder' ? 'Worker' : 'Supporter';
+        final roleColor = userRole == 'finder' ? Colors.blue : Colors.orange;
 
         final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
         final textColor = isDark ? Colors.white : Colors.black87;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: cardColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Row(
-            children: [
-              // Profile Image
-              CircleAvatar(
-                radius: 28,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: GestureDetector(
+              onTap: () => _viewProfile(targetUserId),
+              child: CircleAvatar(
+                radius: 24,
                 backgroundColor: AppColors.brandLight,
                 backgroundImage: profileImage.isNotEmpty ? NetworkImage(profileImage) : null,
-                child: profileImage.isEmpty
-                    ? const Icon(Icons.person, color: AppColors.brandDark)
-                    : null,
+                child: profileImage.isEmpty ? const Icon(Icons.person, color: AppColors.brandDark) : null,
               ),
-              const SizedBox(width: 14),
-
-              // User Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      userName,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: textColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.brandMain.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            userRole == 'MAKER' ? 'SUPPORTER' : 'WORKER',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.brandMain,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _formatDate(followedAt),
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                        ),
-                      ],
-                    ),
-                  ],
+            ),
+            title: Text(
+              userName,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: roleColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    roleLabel.toUpperCase(),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: roleColor),
+                  ),
                 ),
+              ],
+            ),
+            trailing: isMyProfileList
+                ? OutlinedButton(
+              onPressed: () => _handleUnfollowOrRemove(targetUserId, userName),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: Colors.grey.shade300),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               ),
-
-              // View Profile Button
-              IconButton(
-                onPressed: () => _viewProfile(targetUserId),
-                icon: const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Colors.grey,
-                  size: 18,
-                ),
+              child: Text(
+                widget.listType == FollowListType.following ? "Unfollow" : "Remove",
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54),
               ),
-            ],
+            )
+                : null,
+            onTap: () => _viewProfile(targetUserId),
           ),
         );
       },
     );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 7) {
-      return DateFormat('MMM d, yyyy').format(date);
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else {
-      return 'Just now';
-    }
   }
 
   void _viewProfile(String userId) {
@@ -250,7 +257,7 @@ class _FollowersFollowingScreenState extends State<FollowersFollowingScreen> {
       MaterialPageRoute(
         builder: (_) => UnifiedProfileScreen(
           uid: userId,
-          isOwner: false, // যেহেতু অন্য কারো প্রোফাইল দেখছে
+          isOwner: userId == _currentUid,
           showBack: true,
         ),
       ),

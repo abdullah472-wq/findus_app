@@ -1,3 +1,4 @@
+// lib/screens/home_feed_screen.dart
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
@@ -5,9 +6,8 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/work_in_progress_tab.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
-import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
-
-import 'dashboard/dashboard_screen.dart';
+import 'package:findus_app/screens/tabs/leaderboard_screen.dart'; // ✅ LeaderboardTab
+import 'package:findus_app/screens/dashboard/dashboard_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -29,13 +29,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
 
-  // ✅ ৫টি ট্যাবের লিস্ট (Message সরিয়ে Dashboard যুক্ত করা হয়েছে)
+  // ✅ ৫টি ট্যাবের লিস্ট
   final List<Widget> _tabViews = const [
-    DashboardScreen(), // ✅ মেসেজের বদলে ড্যাশবোর্ড ট্যাব
+    DashboardScreen(),
     WorkInProgressTab(),
     CompletedWorkTab(),
     AchievementsTab(),
-    LeaderboardScreen(),
+    LeaderboardTab(), // ✅ LeaderboardTab ব্যবহার করুন
   ];
 
   @override
@@ -114,7 +114,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ✅ Dashboard বাটন (Messages এর বদলে)
+                  // Dashboard বাটন
                   _buildTopIcon(Icons.dashboard_rounded, "Dashboard", 0, isDark),
 
                   _buildTopIcon(

@@ -16,26 +16,35 @@ class SaveScreen extends StatefulWidget {
 }
 
 class _SaveScreenState extends State<SaveScreen> {
-  List<Map<String, dynamic>> _getSavedWorkersByRole(List<String> roles) {
+  // ✅ ক্যাটাগরি লিস্ট
+  final List<String> _categories = ["All", "Farmer", "Painter", "Shopper", "Driver", "Others"];
+  String _selectedCategory = "All";
+
+  // ✅ ফিল্টার লজিক
+  List<Map<String, dynamic>> _getFilteredWorkers() {
+    if (_selectedCategory == "All") {
+      return SavedService.savedWorkers;
+    }
+
     return SavedService.savedWorkers.where((worker) {
-      final workerRole = (worker['role'] ?? '').toString().toUpperCase();
-      return roles.any((role) => workerRole.contains(role.toUpperCase()));
+      final role = (worker['role'] ?? '').toString().toUpperCase();
+
+      if (_selectedCategory == "Farmer") return role.contains("FARMER") || role.contains("GARDEN");
+      if (_selectedCategory == "Painter") return role.contains("PAINTER") || role.contains("COLOR");
+      if (_selectedCategory == "Shopper") return role.contains("SHOPPER") || role.contains("BAZAR");
+      if (_selectedCategory == "Driver") return role.contains("DRIVER") || role.contains("RIKSHAW");
+
+      // Others Logic
+      final mainRoles = ['FARMER', 'GARDEN', 'PAINTER', 'COLOR', 'SHOPPER', 'BAZAR', 'DRIVER', 'RIKSHAW'];
+      if (_selectedCategory == "Others") {
+        return !mainRoles.any((r) => role.contains(r));
+      }
+      return true;
     }).toList();
   }
 
   String _getUserId(Map<String, dynamic> data) {
     return (data['userId'] ?? data['id'] ?? '').toString().trim();
-  }
-
-  double _asDouble(dynamic v, {double fallback = 0.0}) {
-    if (v is num) return v.toDouble();
-    return double.tryParse(v?.toString() ?? '') ?? fallback;
-  }
-
-  int _asInt(dynamic v, {int fallback = 0}) {
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    return int.tryParse(v?.toString() ?? '') ?? fallback;
   }
 
   @override
@@ -44,6 +53,8 @@ class _SaveScreenState extends State<SaveScreen> {
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
 
+    final workers = _getFilteredWorkers();
+
     return FloatingScaffold(
       title: 'SAVED PROFILES',
       backgroundColor: bgColor,
@@ -51,124 +62,60 @@ class _SaveScreenState extends State<SaveScreen> {
       iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
-      body: SavedService.savedWorkers.isEmpty
-          ? _buildEmptyState(isDark)
-          : ListView(
-        padding: const EdgeInsets.all(15),
-        physics: const BouncingScrollPhysics(),
+      body: Column(
         children: [
-          _buildCategory(
-            title: "FARMER & GARDENER",
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.cyan.shade50,
-            icon: Icons.agriculture,
-            roles: ['FARMER', 'GARDEN', 'কৃষক'],
-            isDark: isDark,
+          // 🔍 Category Filter
+          _buildCategoryFilter(isDark),
+
+          // 📋 List
+          Expanded(
+            child: workers.isEmpty
+                ? _buildEmptyState(isDark)
+                : ListView.builder(
+              padding: const EdgeInsets.only(bottom: 100, top: 10),
+              physics: const BouncingScrollPhysics(),
+              itemCount: workers.length,
+              itemBuilder: (context, index) {
+                return _buildWorkerCard(workers[index]);
+              },
+            ),
           ),
-          _buildCategory(
-            title: "PAINTERS",
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.orange.shade50,
-            icon: Icons.format_paint,
-            roles: ['PAINTER', 'COLOR', 'রং'],
-            isDark: isDark,
-          ),
-          _buildCategory(
-            title: "SHOPPERS",
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.green.shade50,
-            icon: Icons.shopping_cart,
-            roles: ['SHOPPER', 'BAZAR', 'বাজার', 'DELIVERY'],
-            isDark: isDark,
-          ),
-          _buildCategory(
-            title: "RIKSHAW & DRIVERS",
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.purple.shade50,
-            icon: Icons.directions_bike,
-            roles: ['RICKSHAW', 'DRIVER', 'রিকশা', 'গাড়ি'],
-            isDark: isDark,
-          ),
-          _buildCategory(
-            title: "OTHERS",
-            color: isDark ? const Color(0xFF2C2C2C) : Colors.blueGrey.shade50,
-            icon: Icons.more_horiz,
-            roles: const [],
-            isOther: true,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 100),
         ],
       ),
     );
   }
 
-  Widget _buildCategory({
-    required String title,
-    required Color color,
-    required IconData icon,
-    required List<String> roles,
-    required bool isDark,
-    bool isOther = false,
-  }) {
-    List<Map<String, dynamic>> workers;
-
-    if (isOther) {
-      final usedRoles = ['FARMER', 'GARDEN', 'PAINTER', 'COLOR', 'SHOPPER', 'BAZAR', 'RICKSHAW', 'DRIVER'];
-      workers = SavedService.savedWorkers.where((w) {
-        final r = (w['role'] ?? '').toString().toUpperCase();
-        return !usedRoles.any((ur) => r.contains(ur));
-      }).toList();
-    } else {
-      workers = _getSavedWorkersByRole(roles);
-    }
-
-    if (workers.isEmpty) return const SizedBox.shrink();
-
+  // 🔥 Category Filter Widget
+  Widget _buildCategoryFilter(bool isDark) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.withOpacity(0.1)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          shape: const RoundedRectangleBorder(side: BorderSide.none),
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.brandMain.withOpacity(0.1),
-              shape: BoxShape.circle,
+      height: 60,
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _categories.length,
+        itemBuilder: (context, index) {
+          final cat = _categories[index];
+          final isSelected = _selectedCategory == cat;
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: ChoiceChip(
+              label: Text(cat),
+              selected: isSelected,
+              onSelected: (val) {
+                setState(() => _selectedCategory = cat);
+              },
+              backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+              selectedColor: AppColors.brandMain,
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                fontWeight: FontWeight.bold,
+              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              side: BorderSide.none,
             ),
-            child: Icon(icon, color: AppColors.brandMain, size: 20),
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: isDark ? Colors.white : AppColors.brandDark,
-              letterSpacing: 0.5,
-            ),
-          ),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.brandMain,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              workers.length.toString(),
-              style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          ),
-          children: workers.map((data) => _buildWorkerCard(data)).toList(),
-        ),
+          );
+        },
       ),
     );
   }
@@ -179,87 +126,64 @@ class _SaveScreenState extends State<SaveScreen> {
     final role = (data['role'] ?? 'Worker').toString();
     final image = (data['image'] ?? '').toString();
 
-    return UniversalWorkerCard(
-      id: workerId,
-      name: name,
-      role: role,
-      imageUrl: image,
-      address: (data['location'] ?? 'Bangladesh').toString(),
-      rating: _asDouble(data['rating'], fallback: 4.8).toStringAsFixed(1),
-      completed: _asInt(data['completed']).toString(),
-      reviews: _asInt(data['reviews']).toString(),
-      price: (data['price'] ?? 'Negotiable').toString(),
-      isVerifiedWorker: data['isVerified'] == true,
-      followersCount: _asInt(data['followersCount']),
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: UniversalWorkerCard(
+        id: workerId,
+        name: name,
+        role: role,
+        imageUrl: image,
+        address: (data['location'] ?? 'Bangladesh').toString(),
+        rating: (data['rating'] ?? 0.0).toString(),
+        completed: (data['completed'] ?? 0).toString(),
+        reviews: (data['reviews'] ?? 0).toString(),
+        price: (data['price'] ?? 'Negotiable').toString(),
+        isVerifiedWorker: data['isVerified'] == true,
+        followersCount: data['followersCount'],
+        margin: EdgeInsets.zero,
 
-      // প্রোফাইল ওপেন লজিক
-      onTap: () {
-        if (workerId.isEmpty) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => UnifiedProfileScreen(
-              uid: workerId,
-              isOwner: false,
-              showBack: true,
-            ),
-          ),
-        );
-      },
+        primaryButtonText: "View Profile",
 
-      // ভিউ প্রোফাইল বাটন লজিক
-      onViewProfileTap: () {
-        if (workerId.isEmpty) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => UnifiedProfileScreen(
-              uid: workerId,
-              isOwner: false,
-              showBack: true,
-            ),
-          ),
-        );
-      },
+        // Actions
+        onTap: () => _navigateToProfile(workerId),
+        onViewProfileTap: () => _navigateToProfile(workerId),
+        onChatTap: () => _openChat(workerId, name, role, image),
 
-      // চ্যাট বাটন লজিক
-      onChatTap: () async {
-        if (workerId.isEmpty) return;
-        _showLoading();
-        try {
-          final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: workerId);
-          if (!mounted) return;
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChatScreen(
-                conversationId: convId,
-                userName: name,
-                userRole: role,
-                userImage: image,
-              ),
+        // ❤️ Save/Unsave Logic
+        isSaved: true, // Saved Screen এ সব আইটেমই সেভড থাকে
+        showSaveButton: true,
+        onSaveTap: () async {
+          // ১. আনসেভ করা (লিস্ট থেকে রিমুভ)
+          await SavedService.toggleSave(data);
+
+          // ২. UI আপডেট করা
+          setState(() {
+            // লিস্ট অটো আপডেট হবে কারণ SavedService.savedWorkers আপডেট হয়েছে
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Removed from saved list"),
+              duration: Duration(seconds: 1),
             ),
           );
-        } catch (_) {
-          if (mounted) Navigator.pop(context);
-        }
-      },
-      isSaved: true,
-      onSaveTap: () async {
-        await SavedService.toggleSave(data);
-        setState(() {});
-      },
+        },
+      ),
     );
   }
 
-  void _showLoading() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+  void _navigateToProfile(String uid) {
+    if (uid.isEmpty) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: false, showBack: true)));
+  }
+
+  void _openChat(String uid, String name, String role, String image) async {
+    if (uid.isEmpty) return;
+    try {
+      final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: uid);
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(conversationId: convId, userName: name, userRole: role, userImage: image)));
+    } catch (_) {}
   }
 
   Widget _buildEmptyState(bool isDark) {
@@ -270,12 +194,8 @@ class _SaveScreenState extends State<SaveScreen> {
           Icon(Icons.bookmark_border_rounded, size: 80, color: Colors.grey.withOpacity(0.3)),
           const SizedBox(height: 15),
           Text(
-            "No saved profiles yet",
-            style: TextStyle(
-                color: isDark ? Colors.white54 : Colors.grey,
-                fontSize: 16,
-                fontWeight: FontWeight.bold
-            ),
+            "No saved profiles found",
+            style: TextStyle(color: isDark ? Colors.white54 : Colors.grey, fontSize: 16, fontWeight: FontWeight.bold),
           ),
         ],
       ),

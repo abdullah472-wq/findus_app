@@ -143,7 +143,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget _buildNotificationItem(Map<String, dynamic> data, String id, bool isDark) {
     final title = data['title'] ?? 'New Notification';
     final body = data['body'] ?? '';
-    final type = data['type'] ?? 'info';
+    final type = (data['type'] ?? 'info').toString().toLowerCase(); // ✅ লোয়ারকেস ফিক্স
     final senderId = data['senderId'] ?? '';
     final bool isRead = data['read'] ?? false;
     final Timestamp? ts = data['createdAt'];
@@ -151,26 +151,28 @@ class _NotificationScreenState extends State<NotificationScreen> {
     IconData icon = Icons.notifications;
     Color iconColor = AppColors.brandMain;
 
-    // ✅ আইকন লজিক আপডেট করা হয়েছে
-    if (type == 'admin') {
+    // ✅ আইকন লজিক আপডেট
+    if (type.contains('admin')) {
       icon = Icons.admin_panel_settings;
       iconColor = Colors.redAccent;
-    } else if (type == 'job') {
+    } else if (type.contains('job')) {
       icon = Icons.work;
       iconColor = Colors.orange;
-    } else if (type == 'message') {
+    } else if (type.contains('message') || type.contains('chat')) {
       icon = Icons.chat_bubble;
       iconColor = Colors.blue;
-    } else if (type == 'help_center') { // ✅ Welcome Notification Icon
+    } else if (type.contains('help') || type.contains('welcome')) { // ✅ Welcome/Help ফিক্স
       icon = Icons.support_agent;
       iconColor = Colors.purpleAccent;
-    } else if (type == 'profile_view') {
+    } else if (type.contains('profile')) {
       icon = Icons.visibility;
       iconColor = Colors.teal;
     }
 
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final readColor = isDark ? const Color(0xFF1E1E1E) : Colors.blue.withOpacity(0.05);
+    // ✅ আনরিড কালার ফিক্স (ডার্ক মোডে একটু আলাদা)
+    final unreadBg = isDark ? const Color(0xFF383838) : Colors.blue.withOpacity(0.05);
+
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
 
@@ -196,16 +198,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
       },
       child: InkWell(
         onTap: () {
-          // ✅ Action Logic Updated
-          if (type == 'admin') {
+          // ✅ অ্যাকশন লজিক
+          if (type.contains('admin')) {
             _showAdminNoticeDialog(title, body, isDark);
-          } else if (type == 'help_center') {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen())); // ✅ Navigate to Help
+          } else if (type.contains('help') || type.contains('welcome')) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen()));
           } else if (senderId.isNotEmpty) {
             _navigateToSenderProfile(senderId);
           }
 
-          // Mark as Read
+          // মার্ক অ্যাজ রিড
           if (!isRead) {
             FirebaseFirestore.instance
                 .collection('users')
@@ -219,14 +221,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isRead ? cardColor : readColor,
+            color: isRead ? cardColor : unreadBg, // ✅ রিড হলে কার্ড কালার, আনরিড হলে হাইলাইট
             borderRadius: BorderRadius.circular(16),
-            border: isRead
-                ? Border.all(color: Colors.transparent)
-                : Border.all(color: AppColors.brandMain.withOpacity(0.3)),
+            border: Border.all(
+                color: isRead ? Colors.transparent : AppColors.brandMain.withOpacity(0.3),
+                width: isRead ? 0 : 1
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.3 : 0.03), // ✅ Dark Shadow Fixed
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               )
@@ -235,6 +238,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // আইকন বক্স
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -244,19 +248,22 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 child: Icon(icon, color: iconColor, size: 24),
               ),
               const SizedBox(width: 14),
+
+              // টেক্সট কন্টেন্ট
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
                             title,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: isRead ? FontWeight.w600 : FontWeight.bold,
+                              fontWeight: isRead ? FontWeight.w600 : FontWeight.bold, // আনরিড হলে বোল্ড
                               color: textColor,
                             ),
                             maxLines: 1,
@@ -264,9 +271,16 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           ),
                         ),
                         if (ts != null)
-                          Text(
-                            _formatTime(ts),
-                            style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade500 : Colors.grey.shade600),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Text(
+                              _formatTime(ts),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                                  fontWeight: isRead ? FontWeight.normal : FontWeight.bold // আনরিড হলে বোল্ড টাইম
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -280,6 +294,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   ],
                 ),
               ),
+
+              // আনরিড ইন্ডিকেটর ডট (অপশনাল)
+              if (!isRead)
+                Container(
+                  margin: const EdgeInsets.only(left: 8, top: 5),
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.brandMain,
+                    shape: BoxShape.circle,
+                  ),
+                ),
             ],
           ),
         ),

@@ -20,6 +20,8 @@ import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/services/blocked_user_service.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/services/card_theme_service.dart';
+import 'package:findus_app/badge/badge_service.dart';
+
 
 // Screens & Widgets
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
@@ -67,16 +69,29 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   // 🎨 Theme Gradients (Same as BottomSheet)
   final List<List<Color>> _themeGradients = const [
-    [Color(0xFFE0F7FA), Color(0xFFFFFFFF)], // Teal (Light)
-    [Color(0xFFFFF3E0), Color(0xFFFFFFFF)], // Orange (Light)
-    [Color(0xFFE8EAF6), Color(0xFFFFFFFF)], // Indigo (Light)
-    [Color(0xFFFCE4EC), Color(0xFFFFFFFF)], // Pink (Light)
+    [Color(0xFF00DDFA), Color(0xFFFFFFFF)], // Teal (Light)
+    [Color(0xFFffd966), Color(0xFFFFFFFF)], // Orange (Light)
+    [Color(0xFF6fa8dc), Color(0xFFFFFFFF)], // Indigo (Light)
+    [Color(0xFFf7bcbc), Color(0xFFFFFFFF)], // Pink (Light)
   ];
 
   @override
   void initState() {
     super.initState();
     _initializeData();
+    if (widget.isOwner) {
+      _listenToNotifications();
+    }
+    _badgeListener = () {
+      if (mounted) {
+        setState(() {
+          // যখনই ব্যাজ বা এক্সপি আপডেট হবে, UI রিফ্রেশ হবে
+          // userData['user_badge_points'] আপডেট করার দরকার নেই যদি আমরা সরাসরি সার্ভিস থেকে ডাটা নেই
+        });
+      }
+    };
+    BadgeService.badgeNotifier.addListener(_badgeListener); // লিসেনার অন করা হলো
+
     if (widget.isOwner) {
       _listenToNotifications();
     }
@@ -89,6 +104,8 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     _followersCountSub?.cancel();
     _followingCountSub?.cancel();
     _notifSub?.cancel();
+    BadgeService.badgeNotifier.removeListener(_badgeListener);
+    _userSub?.cancel();
     super.dispose();
   }
 
@@ -106,11 +123,20 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   // --- Listeners ---
 
+  late VoidCallback _badgeListener;
+
   void _listenToUserData() {
     _userSub?.cancel();
     _userSub = FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots().listen((snap) {
       if (!snap.exists || !mounted) return;
       final data = snap.data() ?? {};
+
+      // ✅ সার্ভিসে পয়েন্ট সেট করা (যাতে অ্যাপের সব জায়গায় আপডেট হয়)
+      if (widget.isOwner) {
+        final rawXp = data['user_badge_points'] ?? data['xpPoints'] ?? 0;
+        final int xp = int.tryParse(rawXp.toString()) ?? 0;
+        BadgeService.setPointsFromServer(xp); // এই মেথডটি সার্ভিসে থাকতে হবে
+      }
       final rawIdx = data['cardThemeIndex'];
       final idx = (rawIdx is int) ? rawIdx : int.tryParse(rawIdx?.toString() ?? '') ?? 0;
 
@@ -140,8 +166,19 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     _notifSub?.cancel();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    _notifSub = FirebaseFirestore.instance.collection('notifications').where('toUserId', isEqualTo: uid).where('isRead', isEqualTo: false).snapshots().listen((q) {
-      if (mounted) setState(() => _unreadNotifCount = q.size);
+
+    // ✅ এখানে নিশ্চিত করুন যে 'isRead' ফিল্ডটি বুলিয়ান (true/false) এবং ফায়ারবেসে ঠিক আছে
+    _notifSub = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('toUserId', isEqualTo: uid)
+        .where('isRead', isEqualTo: false) // শুধু আনরেড নোটিফিকেশনগুলো কাউন্ট হবে
+        .snapshots()
+        .listen((q) {
+      if (mounted) {
+        setState(() {
+          _unreadNotifCount = q.docs.length; // ✅ সাইজ আপডেট হচ্ছে
+        });
+      }
     });
   }
 
@@ -295,6 +332,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
             iconColor: titleColor,
 
             // ✅ অ্যাপ বার বাটনগুলোর সাইজ সমান করা হয়েছে
+            // build মেথডের actions অংশে
             actions: widget.isOwner
                 ? [
               _buildActionButton(
@@ -302,9 +340,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 'Notifications',
                     () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen())),
                 isDark,
-                showBadge: true, // ✅ নতুন প্যারামিটার
-                badgeCount: _unreadNotifCount, // ✅ লাইভ কাউন্ট
+                showBadge: true, // ✅ ব্যাজ দেখানো হবে
+                badgeCount: _unreadNotifCount, // ✅ রিয়েল-টাইম কাউন্ট
               ),
+              // ... বাকি বাটনগুলো (Team, Settings, Menu)
               _buildActionButton(Icons.groups_outlined, 'Team', () => _isBusinessUser ? Navigator.push(context, MaterialPageRoute(builder: (_) => TeamManagementScreen(userId: widget.uid))) : _showUpgradeToBusinessPopup(), isDark),
               _buildActionButton(Icons.settings_outlined, 'Settings', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())), isDark),
               _buildMenuButton(subscriptionType, isDark),
@@ -375,28 +414,36 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
-  // 🏞️ Final Fixed Header: Social Left, Status Right (Gray/Color Mode)
   // 🏞️ Header with Dynamic Theme Support
+  // 🏞️ Final Unified Header (Same for Owner & Viewer)
   Widget _buildHeaderCard(String roleLabel, bool isDark) {
-    // ১. ডাটা পার্সিং
-    final int xp = int.tryParse(userData['user_badge_points']?.toString() ?? '0') ?? 0;
+    // ✅ ফিক্স: userData এর বদলে BadgeService থেকে লেভেল এবং পয়েন্ট নেওয়া হচ্ছে
+    // যদি ওনার হয় তবে সার্ভিস থেকে, নাহলে userData থেকে
+    final badgeProgress = BadgeService.badgeNotifier.value;
+
+    int xp;
+    BadgeLevel badge;
+
+    if (widget.isOwner) {
+      // ওনার হলে রিয়েল-টাইম সার্ভিস ডাটা
+      xp = badgeProgress.totalPoints;
+      badge = badgeProgress.level;
+    } else {
+      // ভিজিটর হলে ফায়ারবেস স্ন্যাপশট ডাটা
+      final rawXp = userData['user_badge_points'] ?? userData['xpPoints'] ?? 0;
+      xp = int.tryParse(rawXp.toString()) ?? 0;
+      badge = AchievementService.getBadgeLevelByPoints(xp);
+    }
+
     final double rating = double.tryParse(userData['rating']?.toString() ?? '0.0') ?? 0.0;
     final int completed = int.tryParse(userData['completedCount']?.toString() ?? '0') ?? 0;
-    final badge = AchievementService.getBadgeLevelByPoints(xp);
 
-    // ২. থিম কালার সিলেকশন লজিক
-    // ইউজার যে থিম ইনডেক্স সিলেক্ট করেছে (Default 0)
+    // ২. থিম কালার (Dynamic Theme Support)
     final int themeIdx = _cardThemeIndex.clamp(0, _themeGradients.length - 1);
     final List<Color> selectedTheme = _themeGradients[themeIdx];
 
-    // ব্যাকগ্রাউন্ড লজিক:
-    // যদি ডার্ক মোড হয় কিন্তু ইউজার কাস্টম থিম চায়, আমরা থিম দেখাবো তবে একটু ডার্ক করে।
-    // অথবা সিম্পলি লাইট থিম দেখাবো (নিচের লজিকটি লাইট থিম দেখাবে)।
-
-    // টেক্সট কালার: ব্যাকগ্রাউন্ড যেহেতু লাইট প্যাস্টেল, তাই টেক্সট কালো হবে।
-    // তবে যদি ডিফল্ট ডার্ক মোড (কোনো থিম ছাড়া) চান, সেটার লজিক আলাদা হতে পারে।
-    // এখানে থিম প্রায়োরিটি পাচ্ছে।
-    final textColor = Colors.black87;
+    // টেক্সট কালার লজিক
+    final textColor = isDark ? Colors.white : Colors.black87;
 
     final coverGradient = _getBadgeGradient(badge);
     final badgeColor = _getBadgeColor(badge);
@@ -410,11 +457,11 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        // 🔥🔥 DYNAMIC THEME BACKGROUND APPLIED HERE
+        // থিম গ্রেডিয়েন্ট ব্যবহার করা হয়েছে
         gradient: LinearGradient(
           colors: isDark
-              ? [selectedTheme[0].withOpacity(0.8), const Color(0xFF1E1E1E)] // ডার্ক মোডে মিক্স
-              : selectedTheme, // লাইট মোডে পিওর থিম
+              ? [const Color(0xFF1E1E1E), const Color(0xFF121212)] // ডার্ক মোড ডিফল্ট
+              : selectedTheme, // লাইট মোডে সিলেক্টেড থিম
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -426,7 +473,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
             offset: const Offset(0, 8),
           ),
         ],
-        // বর্ডার দেওয়া হলো যাতে ব্যাকগ্রাউন্ড লাইট হলে কার্ড বোঝা যায়
         border: Border.all(color: Colors.black.withOpacity(0.05), width: 1),
       ),
       child: Column(
@@ -448,47 +494,54 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                     Positioned(top: -30, left: -30, child: CircleAvatar(radius: 70, backgroundColor: Colors.white.withOpacity(0.1))),
 
                     // Badge (Top Right)
+                    // Badge (Top Right)
+                    // Badge (Top Right) with Tap Logic
                     Positioned(
                       top: 20, right: 20,
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.black.withOpacity(0.25),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: isNewbie ? Colors.white.withOpacity(0.3) : badgeColor.withOpacity(0.6),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
-                                )
-                              ],
+                      child: GestureDetector(
+                        onTap: () => _showBadgeDetails(badge, xp), // ✅ এখানে ডায়ালগ কল করা হয়েছে
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black.withOpacity(0.25),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: isNewbie ? Colors.white.withOpacity(0.3) : badgeColor.withOpacity(0.6),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  )
+                                ],
+                              ),
+                              child: Icon(
+                                Icons.workspace_premium,
+                                size: 48,
+                                color: isNewbie ? Colors.white : badgeColor,
+                              ),
                             ),
-                            child: Icon(
-                              Icons.workspace_premium,
-                              size: 48,
-                              color: isNewbie ? Colors.white : badgeColor,
+
+                            const SizedBox(height: 6),
+
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                  badge.name.toUpperCase(),
+                                  style: TextStyle(
+                                      color: isNewbie ? Colors.white : badgeColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2
+                                  )
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.4),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                                badge.name.toUpperCase(),
-                                style: TextStyle(
-                                    color: isNewbie ? Colors.white : badgeColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.2
-                                )
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -504,7 +557,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                     Container(
                       width: 110, height: 110,
                       decoration: BoxDecoration(
-                        // 🔥 Avatar Border color matches Theme
+                        // Avatar Border matches Theme
                           color: selectedTheme[0],
                           shape: BoxShape.circle,
                           border: Border.all(color: selectedTheme[0], width: 5),
@@ -545,7 +598,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
-                          color: textColor, // ব্যবহার করা হচ্ছে ডার্ক টেক্সট
+                          color: textColor,
                           letterSpacing: 0.5,
                         ),
                         maxLines: 1,
@@ -578,10 +631,11 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Social Buttons (Followers/Following)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.5), // Glassy white
+                        color: Colors.white.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.black.withOpacity(0.05)),
                       ),
@@ -592,7 +646,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                               label: "Followers",
                               icon: Icons.people_alt_rounded,
                               color: Colors.blueAccent,
-                              isDark: false, // Force Light mode style inside theme
+                              isDark: isDark,
                               onTap: _showFollowersList
                           ),
                           Container(height: 20, width: 1, color: Colors.grey.withOpacity(0.3), margin: const EdgeInsets.symmetric(horizontal: 12)),
@@ -601,20 +655,21 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                               label: "Following",
                               icon: Icons.person_add_alt_1_rounded,
                               color: Colors.purpleAccent,
-                              isDark: false,
+                              isDark: isDark,
                               onTap: _showFollowingList
                           ),
                         ],
                       ),
                     ),
 
+                    // Status Icons
                     Row(
                       children: [
-                        _buildStatusIcon(Icons.verified, isVerified, Colors.blue, "Verified", false),
+                        _buildCleanStatusIcon(Icons.verified, isVerified, Colors.blue, "Verified"),
                         const SizedBox(width: 5),
-                        _buildStatusIcon(Icons.star, isTopRated, Colors.orange, "Top Rated", false),
+                        _buildCleanStatusIcon(Icons.star, isTopRated, Colors.orange, "Top Rated"),
                         const SizedBox(width: 5),
-                        _buildStatusIcon(Icons.shield, isTrusted, Colors.green, "Trusted", false),
+                        _buildCleanStatusIcon(Icons.shield, isTrusted, Colors.green, "Trusted"),
                       ],
                     ),
                   ],
@@ -622,14 +677,41 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
                 const SizedBox(height: 25),
 
-                // Stats Boxes (Transparent background to blend with theme)
+                // Stats Boxes (Transparent background)
+                // 📊 Stats Boxes
                 Row(
                   children: [
-                    _buildFloatingStatBox("RATING", rating.toStringAsFixed(1), Icons.star_rounded, Colors.amber, false),
+                    // 1. Rating (Now Clickable)
+                    _buildFloatingStatBox(
+                      "RATING",
+                      rating.toStringAsFixed(1),
+                      Icons.star_rounded,
+                      Colors.amber,
+                      isDark,
+                      onTap: _openRatingHistory, // ✅ অ্যাকশন যোগ করা হলো
+                    ),
+
                     const SizedBox(width: 12),
-                    _buildFloatingStatBox(_isWorkerRole() ? "JOBS" : "HIRED", "$completed", _isWorkerRole() ? Icons.work_outline : Icons.handshake_rounded, Colors.blue, false),
+
+                    // 2. Jobs / Hired
+                    _buildFloatingStatBox(
+                        _isWorkerRole() ? "JOBS" : "HIRED",
+                        "$completed",
+                        _isWorkerRole() ? Icons.work_outline : Icons.handshake_rounded,
+                        Colors.blue,
+                        isDark
+                    ),
+
                     const SizedBox(width: 12),
-                    _buildFloatingStatBox("XP", _formatNumber(xp), Icons.bolt, Colors.purple, false),
+
+                    // 3. XP Points
+                    _buildFloatingStatBox(
+                        "XP",
+                        _formatNumber(xp),
+                        Icons.bolt,
+                        Colors.purple,
+                        isDark
+                    ),
                   ],
                 ),
 
@@ -643,6 +725,211 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // ---------------- HELPER METHODS ----------------
+
+// --- Badge Helper Methods ---
+
+  // UnifiedProfileScreenState class-এর ভিতরে, অন্যান্য helper methods-এর পরে যোগ করুন:
+
+// --- Badge Helper Methods ---
+
+  void _showBadgeDetails(BadgeLevel badge, int xp) {
+    final badgeColor = _getBadgeColor(badge);
+    final badgeName = badge.toString().split('.').last.toUpperCase();
+    final nextLevelPoints = _getNextLevelPoints(badge);
+    final progress = _calculateBadgeProgress(badge, xp);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark
+            ? const Color(0xFF2C2C2C)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.workspace_premium,
+              color: badgeColor,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              badgeName,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: badgeColor,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Progress Bar
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey[300],
+              valueColor: AlwaysStoppedAnimation(badgeColor),
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+
+            const SizedBox(height: 8),
+
+            // XP Info
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "$xp XP",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+                Text(
+                  "${(progress * 100).toStringAsFixed(0)}%",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Next Level Info
+            if (badge != BadgeLevel.diamond)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: badgeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: badgeColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.arrow_upward,
+                      color: badgeColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Next Level: ${_getNextLevelName(badge)}",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            "Need ${nextLevelPoints - xp} more XP",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "CLOSE",
+              style: TextStyle(
+                color: isDark ? Colors.white70 : Colors.black54,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+// Helper: Get next level points
+  int _getNextLevelPoints(BadgeLevel currentLevel) {
+    switch (currentLevel) {
+      case BadgeLevel.newbie:
+        return 1000;
+      case BadgeLevel.bronze:
+        return 10000;
+      case BadgeLevel.silver:
+        return 50000;
+      case BadgeLevel.gold:
+        return 100000;
+      case BadgeLevel.platinum:
+        return 1000000;
+      case BadgeLevel.diamond:
+        return 1000000;
+    }
+  }
+
+// Helper: Get next level name
+  String _getNextLevelName(BadgeLevel currentLevel) {
+    switch (currentLevel) {
+      case BadgeLevel.newbie:
+        return "BRONZE";
+      case BadgeLevel.bronze:
+        return "SILVER";
+      case BadgeLevel.silver:
+        return "GOLD";
+      case BadgeLevel.gold:
+        return "PLATINUM";
+      case BadgeLevel.platinum:
+        return "DIAMOND";
+      case BadgeLevel.diamond:
+        return "MAX LEVEL";
+    }
+  }
+
+// Helper: Calculate badge progress
+  double _calculateBadgeProgress(BadgeLevel level, int xp) {
+    final currentThreshold = _getLevelThreshold(level);
+    final nextThreshold = _getNextLevelPoints(level);
+
+    if (level == BadgeLevel.diamond) return 1.0;
+    if (nextThreshold == currentThreshold) return 1.0;
+
+    final progress = (xp - currentThreshold) / (nextThreshold - currentThreshold);
+    return progress.clamp(0.0, 1.0);
+  }
+
+// Helper: Get level threshold
+  int _getLevelThreshold(BadgeLevel level) {
+    switch (level) {
+      case BadgeLevel.newbie:
+        return 0;
+      case BadgeLevel.bronze:
+        return 1000;
+      case BadgeLevel.silver:
+        return 10000;
+      case BadgeLevel.gold:
+        return 50000;
+      case BadgeLevel.platinum:
+        return 100000;
+      case BadgeLevel.diamond:
+        return 1000000;
+    }
+  }
+
 
   // ✨ Helper: Stylish Glassy Social Button
   // ✨ Helper: Stylish Glassy Social Button (Count Highlighted)
@@ -709,38 +996,29 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // 👉 Helper: Status Icon (Color if Active, Gray if Inactive)
-  // 👉 Helper: Status Icon (Bigger & Bolder)
-  Widget _buildStatusIcon(IconData icon, bool isActive, Color activeColor, String tooltip, bool isDark) {
-    // কালার এবং ব্যাকগ্রাউন্ড লজিক
-    final color = isActive ? activeColor : (isDark ? Colors.white24 : Colors.grey.shade300);
-    final bgColor = isActive
-        ? activeColor.withOpacity(0.1)
-        : (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100);
+  // ✨ Helper: Clean Status Icon (Only Icon, No BG)
+  Widget _buildCleanStatusIcon(IconData icon, bool isActive, Color color, String tooltip) {
+    // ইনঅ্যাক্টিভ হলে গ্রে আইকন দেখাবে
+    final iconColor = isActive ? color : Colors.grey.withOpacity(0.3);
 
     return Tooltip(
-      message: isActive ? tooltip : "Not $tooltip yet",
+      message: isActive ? tooltip : "Not $tooltip",
       child: Container(
-        width: 44, // ✅ সাইজ বাড়ানো হয়েছে (আগে 36 ছিল)
-        height: 44, // ✅ সাইজ বাড়ানো হয়েছে
-        decoration: BoxDecoration(
-          color: bgColor,
+        padding: const EdgeInsets.all(4), // একটু টাচ এরিয়া বাড়ানোর জন্য
+        decoration: isActive ? BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(
-            color: isActive ? activeColor.withOpacity(0.4) : Colors.transparent,
-            width: 2, // বর্ডার একটু মোটা করা হয়েছে
-          ),
-          boxShadow: isActive ? [
+          boxShadow: [
             BoxShadow(
-                color: activeColor.withOpacity(0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 3)
+              color: color.withOpacity(0.3), // শুধু অ্যাক্টিভ হলে গ্লো করবে
+              blurRadius: 8,
+              spreadRadius: 1,
             )
-          ] : null,
-        ),
+          ],
+        ) : null,
         child: Icon(
           icon,
-          size: 22, // ✅ আইকন সাইজ বড় করা হয়েছে (আগে 18 ছিল)
-          color: color,
+          size: 22,
+          color: iconColor,
         ),
       ),
     );
@@ -794,41 +1072,53 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // 📦 Helper: Stat Box
-  Widget _buildFloatingStatBox(String label, String value, IconData icon, Color iconColor, bool isDark) {
+  // 📦 Helper: Stat Box with Tap Support
+  Widget _buildFloatingStatBox(
+      String label,
+      String value,
+      IconData icon,
+      Color iconColor,
+      bool isDark,
+      {VoidCallback? onTap} // ✅ onTap প্যারামিটার যোগ করা হলো
+      ) {
     final boxBg = isDark ? Colors.white.withOpacity(0.05) : Colors.grey[50];
     final borderColor = isDark ? Colors.white10 : Colors.grey[200];
     final textColor = isDark ? Colors.white : Colors.black87;
 
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: boxBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor!),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: iconColor, size: 20),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: textColor,
+      child: InkWell( // ✅ Container কে InkWell দিয়ে র্যাপ করা হলো
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: boxBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor!),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: iconColor, size: 20),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: textColor,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white54 : Colors.grey[500],
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white54 : Colors.grey[500],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -838,7 +1128,15 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
   // --- Action Buttons (Equal Size) ---
   // এই মেথডটি আপডেট করুন
-  Widget _buildActionButton(IconData icon, String tooltip, VoidCallback onPressed, bool isDark, {bool showBadge = false, int badgeCount = 0}) {
+  // _buildActionButton মেথডটি আপডেট করুন (নোটিফিকেশন ব্যাজ সাপোর্ট সহ)
+  Widget _buildActionButton(
+      IconData icon,
+      String tooltip,
+      VoidCallback onPressed,
+      bool isDark, {
+        bool showBadge = false, // ✅ নতুন প্যারামিটার
+        int badgeCount = 0,     // ✅ নতুন প্যারামিটার
+      }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       width: 40,
@@ -857,13 +1155,15 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
             padding: EdgeInsets.zero,
             tooltip: tooltip,
           ),
+
+          // 🔴 Red Dot Logic (ExploreScreen এর মতো)
           if (showBadge && badgeCount > 0)
             Positioned(
-              top: 8,
-              right: 8,
+              top: 5,
+              right: 5,
               child: Container(
-                width: 8,
-                height: 8,
+                width: 10,
+                height: 10,
                 decoration: BoxDecoration(
                   color: Colors.red,
                   shape: BoxShape.circle,
@@ -1074,6 +1374,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // --- Visitor Actions ---
+  // 📞 Visitor Action Bar (Fixed Chat & Call)
   Widget _buildVisitorActionBar(bool isDark) {
     final paused = (userData['workPaused'] ?? false) == true;
     final bool isWorker = _isWorkerRole();
@@ -1081,8 +1382,8 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     final barColor = isDark ? const Color(0xFF2C2C2C) : AppColors.brandLight;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8), // আগে all(16) ছিল
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: barColor,
         borderRadius: BorderRadius.circular(25),
@@ -1093,12 +1394,65 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         top: false,
         child: Row(
           children: [
-            _buildVisitorActionButton(icon: Icons.chat_bubble_outline_rounded, label: 'Chat', color: Colors.blue, onPressed: () => _openChat(isWorker ? "Worker" : "Supporter"), isDark: isDark),
+            // 💬 Chat Button (Fixed)
+            _buildVisitorActionButton(
+                icon: Icons.chat_bubble_outline_rounded,
+                label: 'Chat',
+                color: Colors.blue,
+                onPressed: () => _openChat(isWorker ? "Worker" : "Supporter"), // ✅ ওপেন চ্যাট মেথড কল
+                isDark: isDark
+            ),
+
             const SizedBox(width: 12),
-            if (hasPhone && isWorker) _buildVisitorActionButton(icon: Icons.call_outlined, label: 'Call', color: Colors.green, onPressed: _makePhoneCall, isDark: isDark)
-            else if (!isWorker) _buildVisitorActionButton(icon: Icons.email_outlined, label: 'Email', color: Colors.orange, onPressed: _sendEmail, isDark: isDark),
-            if ((hasPhone && isWorker) || !isWorker) const SizedBox(width: 12),
-            Expanded(child: Container(height: 50, decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.brandMain, AppColors.brandMain.withOpacity(0.8)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(15), boxShadow: [BoxShadow(color: AppColors.brandMain.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]), child: Material(color: Colors.transparent, child: InkWell(onTap: paused ? null : () => _handleHireOrRequest(isWorker), borderRadius: BorderRadius.circular(15), child: Center(child: Text(isWorker ? 'HIRE NOW' : 'SEND REQUEST', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14))))))),
+
+            // 📞 Call Button (Always show if phone exists)
+            if (hasPhone)
+              _buildVisitorActionButton(
+                  icon: Icons.call_outlined,
+                  label: 'Call',
+                  color: Colors.green,
+                  onPressed: _makePhoneCall, // ✅ কল মেথড
+                  isDark: isDark
+              )
+            else
+              _buildVisitorActionButton(
+                  icon: Icons.email_outlined,
+                  label: 'Email',
+                  color: Colors.orange,
+                  onPressed: _sendEmail,
+                  isDark: isDark
+              ),
+
+            const SizedBox(width: 12),
+
+            // Hire/Request Button
+            Expanded(
+                child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                            colors: [AppColors.brandMain, AppColors.brandMain.withOpacity(0.8)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight
+                        ),
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [BoxShadow(color: AppColors.brandMain.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
+                    ),
+                    child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                            onTap: paused ? null : () => _handleHireOrRequest(isWorker),
+                            borderRadius: BorderRadius.circular(15),
+                            child: Center(
+                                child: Text(
+                                    isWorker ? 'HIRE NOW' : 'SEND REQUEST',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
+                                )
+                            )
+                        )
+                    )
+                )
+            ),
           ],
         ),
       ),
@@ -1206,7 +1560,47 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
   void _showFollowersList() { Navigator.push(context, MaterialPageRoute(builder: (_) => FollowersFollowingScreen(userId: widget.uid, listType: FollowListType.followers))); }
   void _showFollowingList() { Navigator.push(context, MaterialPageRoute(builder: (_) => FollowersFollowingScreen(userId: widget.uid, listType: FollowListType.following))); }
-  Widget _buildSocialLinks() { final fb = userData['facebookUrl']?.toString() ?? ""; final ig = userData['instagramUrl']?.toString() ?? ""; final linkedin = userData['linkedInUrl']?.toString() ?? ""; final socialLinks = <Widget>[]; if (fb.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.facebook, color: Colors.blue, size: 30), onPressed: () => _launchUrl(fb))); if (ig.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.camera_alt, color: Colors.pink, size: 28), onPressed: () => _launchUrl(ig))); if (linkedin.isNotEmpty) socialLinks.add(IconButton(icon: const Icon(Icons.work, color: Color(0xFF0077B5), size: 28), onPressed: () => _launchUrl(linkedin))); return socialLinks.isEmpty ? const SizedBox.shrink() : Row(mainAxisAlignment: MainAxisAlignment.center, children: socialLinks); }
+  // 🌐 Social Icons (Fixed Layout)
+  Widget _buildSocialLinks() {
+    final fb = userData['facebookUrl']?.toString() ?? "";
+    final ig = userData['instagramUrl']?.toString() ?? "";
+    final linkedin = userData['linkedInUrl']?.toString() ?? "";
+
+    final socialLinks = <Widget>[];
+    if (fb.isNotEmpty) socialLinks.add(_socialBtn(Icons.facebook, Colors.blue, fb));
+    if (ig.isNotEmpty) socialLinks.add(_socialBtn(Icons.camera_alt, Colors.pink, ig));
+    if (linkedin.isNotEmpty) socialLinks.add(_socialBtn(Icons.work, const Color(0xFF0077B5), linkedin));
+
+    if (socialLinks.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: socialLinks,
+      ),
+    );
+  }
+
+  Widget _socialBtn(IconData icon, Color color, String url) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: InkWell(
+        onTap: () => _launchUrl(url),
+        borderRadius: BorderRadius.circular(50),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+      ),
+    );
+  }
+
+
   bool _isWorkerRole() { final role = (userData['userRole'] ?? 'finder').toString().toLowerCase(); return role == 'finder'; }
   String _getSafeString(dynamic value, {String defaultValue = 'N/A'}) { if (value == null) return defaultValue; if (value is String && value.isEmpty) return defaultValue; return value.toString(); }
   Future<void> _launchUrl(String url) async { try { if (await canLaunchUrl(Uri.parse(url))) { await launchUrl(Uri.parse(url)); } } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot open link'))); } }
@@ -1406,7 +1800,26 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
   Widget _buildDynamicBottomSection(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [if (widget.isOwner) _buildOwnerSuggestions(isWorker, isDark) else _buildVisitorContent(isWorker, isDark)]); }
   Widget _buildOwnerSuggestions(bool isWorker, bool isDark) { final target = isWorker ? 'supporter' : 'worker'; return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('Suggested for You', isDark), _buildSuggestionStream(target, 'Sponsored', Colors.amber, isDark), const SizedBox(height: 20), _buildSuggestionStream(target, 'Nearby', Colors.blue, isDark)]); }
-  Widget _buildVisitorContent(bool isWorker, bool isDark) { return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [_sectionTitle('User Posts', isDark), _buildOwnerPostsStream(isDark), const SizedBox(height: 20), _sectionTitle(isWorker ? 'Similar Workers' : 'Similar Supporters', isDark), _buildSimilarStream(isWorker, isDark)]); }
+  Widget _buildVisitorContent(bool isWorker, bool isDark) {
+    // লজিক: যদি প্রোফাইলটি Worker হয়, তবে ভিজিটর সম্ভবত Maker (Supporter)।
+    // তাই Worker এর সিমিলার প্রোফাইল সাজেস্ট করব।
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _sectionTitle('User Posts', isDark),
+        _buildOwnerPostsStream(isDark), // ইউজারের পোস্ট
+
+        const SizedBox(height: 20),
+
+        _sectionTitle(isWorker ? 'Similar Workers' : 'Similar Supporters', isDark),
+        _buildSimilarStream(isWorker, isDark), // সিমিলার প্রোফাইল
+      ],
+    );
+  }
+
+  // 🗂️ User Posts Stream (Fixed Size & Actions)
   Widget _buildOwnerPostsStream(bool isDark) {
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -1420,32 +1833,25 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         if (!snap.hasData || snap.data!.docs.isEmpty) {
           return SizedBox(
             height: 100,
-            child: Center(
-              child: Text(
-                'No active posts',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.black54,
-                ),
-              ),
-            ),
+            child: Center(child: Text('No active posts', style: TextStyle(color: isDark ? Colors.white60 : Colors.black54))),
           );
         }
 
         final docs = snap.data!.docs;
 
         return SizedBox(
-          height: 305,
+          height: 340, // ✅ হাইট বাড়ানো হয়েছে যাতে বাটনসহ পুরো কার্ড ধরে
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: docs.length,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16), // সাইড প্যাডিং
             itemBuilder: (context, index) {
               final d = docs[index];
               final data = d.data() as Map<String, dynamic>;
 
-              return SizedBox(
-                width: screenWidth * 0.85,
+              return Container(
+                width: screenWidth * 0.85, // ✅ রেসপন্সিভ উইডথ
+                margin: const EdgeInsets.only(right: 16, bottom: 10), // কার্ডের মাঝে গ্যাপ
                 child: UniversalWorkerCard(
                   id: d.id,
                   name: data['title'] ?? 'No Title',
@@ -1457,49 +1863,40 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                   reviews: "0",
                   price: data['priceLabel'] ?? 'Negotiable',
 
-                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  // ✅ বাটন এবং চ্যাট এনাবল
                   showActionButtons: true,
                   primaryButtonText: "View Job Details",
 
-
-                  // ✅ ফিক্স করা অংশ:
+                  // ✅ জব ডিটেইলস অ্যাকশন
                   onViewProfileTap: () {
-                    // ১. সঠিক প্যারামিটার দিয়ে Worker অবজেক্ট তৈরি
+                    // Worker object তৈরি করে পাঠানো
                     final workerObj = Worker(
                       uid: widget.uid,
-                      postId: d.id, // ✅ postId এখানে পাস করা হলো
+                      postId: d.id,
                       name: userData['name'] ?? 'User',
                       userRole: userData['userRole'] ?? 'finder',
                       image: userData['image'] ?? '',
-                      about: userData['about'] ?? '', // ✅ about ফিল্ড
+                      about: userData['about'] ?? '',
                       location: userData['location'] ?? 'Unknown',
                       rating: double.tryParse(userData['rating']?.toString() ?? '0') ?? 0.0,
-
-                      // ✅ Price লজিক
-                      priceText: data['priceLabel'] ?? userData['priceText'] ?? 'Negotiable',
+                      priceText: data['priceLabel'] ?? 'Negotiable',
                       price: double.tryParse(userData['price']?.toString() ?? '0'),
-
-                      // ✅ আপনার মডেলে এটি 'kycCompleted', 'kyc_completed' নয়
                       kycCompleted: userData['kyc_completed'] == true,
-
-                      // ✅ আপনার মডেলে এটি 'experience' (double), String নয়
                       experience: double.tryParse(userData['experienceYears']?.toString() ?? '0'),
-
                       phone: userData['phone'],
                     );
 
-                    // ২. সঠিক স্ক্রিনে পাঠানো
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => WorkerJobDetailsScreen(worker: workerObj),
-                      ),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerJobDetailsScreen(worker: workerObj)));
                   },
 
+                  // ✅ কার্ডের চ্যাট বাটন (নিজের পোস্ট হলে চ্যাট ডিজেবল, ভিজিটর হলে এনাবল)
+                  onChatTap: widget.isOwner ? null : () => _openChat("Worker"),
+
                   showSaveButton: false,
-                  showShareButton: false,
-                  onChatTap: null,
+                  showShareButton: true,
+                  onShareTap: () {
+                    // শেয়ার লজিক (অপশনাল)
+                  },
                 ),
               );
             },

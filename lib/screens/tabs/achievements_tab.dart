@@ -1,21 +1,22 @@
 // lib/screens/tabs/achievements_tab.dart
-
+// lib/screens/tabs/achievements_tab.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:confetti/confetti.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/constants/status_theme.dart';
 import 'package:findus_app/badge/badge_service.dart' hide BadgeLevel;
 import 'package:findus_app/badge/badge_model.dart';
-
 import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/achievement/achievement_models.dart';
+import 'package:findus_app/screens/profile/support_post_screen.dart';
+import 'package:findus_app/screens/profile/earn_post_screen.dart';
+import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
+import 'package:findus_app/screens/profile/worker_documents_screen.dart';
 
 class AchievementsTab extends StatefulWidget {
   const AchievementsTab({super.key});
@@ -25,7 +26,8 @@ class AchievementsTab extends StatefulWidget {
 }
 
 class _AchievementsTabState extends State<AchievementsTab> {
-  bool _isCollectPoint = true; // Toggle state
+  int _selectedCategory = 0;
+  bool _showCompleted = false;
   late ConfettiController _confettiController;
   late VoidCallback _badgeListener;
 
@@ -34,21 +36,34 @@ class _AchievementsTabState extends State<AchievementsTab> {
   bool _isVerified = false;
   bool _isTrusted = false;
   bool _isTopRated = false;
+  int _totalXpEarned = 0;
+  int _totalAchievements = 0;
+  int _completedAchievements = 0;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
+
+  final List<Map<String, dynamic>> _categories = [
+    {'id': 'all', 'label': 'All', 'icon': Icons.all_inclusive, 'color': AppColors.brandMain},
+    {'id': 'daily', 'label': 'Daily', 'icon': Icons.today, 'color': Colors.green},
+    {'id': 'weekly', 'label': 'Weekly', 'icon': Icons.date_range, 'color': Colors.blue},
+    {'id': 'onetime', 'label': 'One-time', 'icon': Icons.flag, 'color': Colors.purple},
+  ];
 
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
 
-    // Badge Listener
     _badgeListener = () {
-      if (mounted) setState(() {});
+      if (mounted) {
+        _updateStats();
+        setState(() {});
+      }
     };
     BadgeService.badgeNotifier.addListener(_badgeListener);
 
     _listenUserDoc();
+    _updateStats();
   }
 
   @override
@@ -87,23 +102,41 @@ class _AchievementsTabState extends State<AchievementsTab> {
         _isTrusted = completed >= 50 && rating >= 4.5;
         _isLoading = false;
       });
+
+      _updateStats();
     }, onError: (_) {
       if (mounted) setState(() => _isLoading = false);
     });
   }
 
-  String _formatPoints(int points) => points >= 1000 ? "${(points / 1000).toStringAsFixed(1)}K" : points.toString();
+  void _updateStats() {
+    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
 
-  Color _getLevelColor(BadgeLevel level) {
-    switch (level) {
-      case BadgeLevel.bronze: return const Color(0xFFCD7F32);
-      case BadgeLevel.silver: return const Color(0xFFC0C0C0);
-      case BadgeLevel.gold: return const Color(0xFFFFD700);
-      case BadgeLevel.platinum: return const Color(0xFFE5E4E2);
-      case BadgeLevel.diamond: return const Color(0xFFB9F2FF);
-      default: return Colors.grey;
+    final achievements = AchievementService.getAllForUser(
+      isWorker: _isWorker,
+      currentPoints: currentPoints,
+    );
+
+    int totalXp = 0;
+    int completed = 0;
+
+    for (final achievement in achievements) {
+      if (achievement.claimed) {
+        totalXp += achievement.def.xpReward;
+        completed++;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _totalXpEarned = totalXp;
+        _totalAchievements = achievements.length;
+        _completedAchievements = completed;
+      });
     }
   }
+
+  String _formatPoints(int points) => points >= 1000 ? "${(points / 1000).toStringAsFixed(1)}K" : points.toString();
 
   @override
   Widget build(BuildContext context) {
@@ -118,49 +151,22 @@ class _AchievementsTabState extends State<AchievementsTab> {
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                // 1. Hero Card
-                ValueListenableBuilder<BadgeProgress>(
-                  valueListenable: BadgeService.badgeNotifier,
-                  builder: (context, progress, _) {
-                    return Column(
-                      children: [
-                        _buildHeroCard(progress, isDark),
-                        const SizedBox(height: 20),
-                        _buildNextMilestone(progress, isDark),
-                      ],
-                    );
-                  },
-                ),
+                // 1. Hero Stats Section
+                _buildHeroStats(isDark),
 
-                const SizedBox(height: 25),
+                // 2. Category Selector
+                _buildCategorySelector(isDark),
 
-                // 2. Toggle Buttons
-                _buildToggleButtons(isDark),
+                // 3. Toggle & Stats
+                _buildToggleAndStats(isDark),
 
-                const SizedBox(height: 15),
+                // 4. Achievement Grid
+                _buildAchievementGrid(isDark),
 
-                // 3. Quest List
-                ValueListenableBuilder<List<AchievementState>>(
-                  valueListenable: AchievementService.achievementsNotifier,
-                  builder: (context, achievementsList, __) {
-                    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
-                    final achievements = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: currentPoints);
-
-                    final visible = _isCollectPoint
-                        ? achievements.where((st) => !st.claimed).toList()
-                        : achievements.where((st) => st.claimed).toList();
-
-                    if (visible.isEmpty) return _buildEmptyState(_isCollectPoint, isDark);
-
-                    return Column(
-                      children: visible.map((st) => _buildQuestCard(st, isDark)).toList(),
-                    );
-                  },
-                ),
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -177,164 +183,729 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Hero Section
-  // 🔥 New Hero Section Design
-  Widget _buildHeroCard(BadgeProgress progress, bool isDark) {
-    final levelColor = _getLevelColor(progress.level);
-    final String levelName = progress.level.toString().split('.').last.toUpperCase(); // e.g., GOLD
-
-    // Background Gradient based on Badge Level
-    final gradientColors = isDark
-        ? [const Color(0xFF252525), const Color(0xFF151515)]
-        : [levelColor.withOpacity(0.1), Colors.white];
+  // 🔥 Hero Stats Section
+  Widget _buildHeroStats(bool isDark) {
+    final progress = BadgeService.badgeNotifier.value;
+    final levelColor = progress.levelColor;
+    final levelName = progress.level.toString().split('.').last.toUpperCase();
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: gradientColors,
+          colors: [
+            AppColors.brandMain.withOpacity(0.9),
+            AppColors.brandDark,
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-            color: levelColor.withOpacity(0.5),
-            width: 2
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: levelColor.withOpacity(0.25),
-            blurRadius: 25,
-            offset: const Offset(0, 10),
-            spreadRadius: -5,
-          )
-        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top Row: Rank Name & Big Icon
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            // Title
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "ACHIEVEMENTS",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, color: Colors.white),
+                  onPressed: _showInfoDialog,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Progress Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: Column(
                 children: [
-                  Text(
-                    "CURRENT RANK",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                  // Level & Progress
+                  Row(
+                    children: [
+                      // Level Badge (Updated Logic)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: levelColor.withOpacity(0.2), // ✅ হালকা ব্যাকগ্রাউন্ড
+                          shape: BoxShape.circle,
+                          border: Border.all(color: levelColor, width: 2), // ✅ বর্ডার যোগ করা হয়েছে
+                          boxShadow: [
+                            BoxShadow(
+                              color: levelColor.withOpacity(0.5),
+                              blurRadius: 15,
+                              spreadRadius: 2,
+                            )
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.workspace_premium,
+                          color: levelColor, // ✅ আইকনের কালার লেভেল কালারের মতো হবে
+                          size: 24,
+                        ),
+                      ),
+
+                      const SizedBox(width: 16),
+
+                      // Level Info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "CURRENT LEVEL",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withOpacity(0.8),
+                              ),
+                            ),
+                            Text(
+                              levelName,
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              "${_formatPoints(progress.totalPoints)} XP",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Next Level
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            "NEXT LEVEL",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                          Text(
+                            _formatPoints(progress.nextLevelPoints),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Progress Bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: progress.progressPercentage.clamp(0.0, 1.0),
+                      minHeight: 10,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      valueColor: AlwaysStoppedAnimation(levelColor),
                     ),
                   ),
+
                   const SizedBox(height: 8),
-                  Text(
-                    levelName,
-                    style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: levelColor,
-                        letterSpacing: 1.5,
-                        shadows: [
-                          Shadow(
-                            color: levelColor.withOpacity(0.5),
-                            blurRadius: 15,
-                          )
-                        ]
+
+                  // Progress Text
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "${_formatPoints(progress.totalPoints)} XP",
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        "${_formatPoints(progress.nextLevelPoints - progress.totalPoints)} XP to go",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Stats Row
+            _buildStatsRow(isDark),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsRow(bool isDark) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildStatItem("Total XP", _formatPoints(_totalXpEarned), Icons.emoji_events, Colors.amber),
+        _buildStatItem("Completed", "$_completedAchievements/$_totalAchievements", Icons.check_circle, Colors.green),
+        _buildStatItem("Active", "${_totalAchievements - _completedAchievements}", Icons.timeline, Colors.blue),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.8),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🔥 Category Selector
+  Widget _buildCategorySelector(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(_categories.length, (index) {
+            final category = _categories[index];
+            final isSelected = _selectedCategory == index;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: GestureDetector(
+                onTap: () => setState(() => _selectedCategory = index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: isSelected ? category['color'] : (isDark ? Colors.white10 : Colors.grey[100]),
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(
+                      color: isSelected ? category['color'] : Colors.transparent,
+                      width: 2,
+                    ),
+                    boxShadow: isSelected ? [
+                      BoxShadow(
+                        color: (category['color'] as Color).withOpacity(0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      )
+                    ] : [],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        category['icon'] as IconData,
+                        size: 18,
+                        color: isSelected ? Colors.white : (isDark ? Colors.white60 : Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        category['label'] as String,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isSelected ? Colors.white : (isDark ? Colors.white60 : Colors.grey[600]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  // 🔥 Toggle & Stats
+  Widget _buildToggleAndStats(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          // Toggle Button
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showCompleted = false),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: !_showCompleted ? AppColors.brandMain : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          "Active Quests",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: !_showCompleted ? Colors.white : (isDark ? Colors.white60 : Colors.grey),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: levelColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      "${_formatPoints(progress.totalPoints)} XP",
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black87,
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showCompleted = true),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: _showCompleted ? AppColors.brandMain : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          "Completed",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: _showCompleted ? Colors.white : (isDark ? Colors.white60 : Colors.grey),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-
-              // Big Badge Icon with Glow
-              Container(
-                height: 80,
-                width: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: levelColor.withOpacity(0.1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: levelColor.withOpacity(0.4),
-                      blurRadius: 30,
-                      spreadRadius: 5,
-                    )
-                  ],
-                ),
-                child: Icon(
-                  Icons.workspace_premium, // অথবা আপনার কাস্টম ব্যাজ আইকন
-                  size: 45,
-                  color: levelColor,
-                ),
-              ),
-            ],
+            ),
           ),
 
-          const SizedBox(height: 25),
-          Divider(color: isDark ? Colors.white10 : Colors.grey.shade300),
-          const SizedBox(height: 15),
+          const SizedBox(width: 12),
 
-          // Bottom Row: Status Chips
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildStatusChip("Top Rated", _isTopRated, StatusTheme.topRatedColor, isDark),
-              _buildStatusChip("Trusted", _isTrusted, StatusTheme.trustedColor, isDark),
-              _buildStatusChip("Verified", _isVerified, StatusTheme.verifiedColor, isDark),
-            ],
+          // Filter Button
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white10 : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isDark ? Colors.white10 : Colors.grey[200]!),
+            ),
+            child: Icon(
+              Icons.filter_list,
+              color: isDark ? Colors.white60 : Colors.grey[600],
+              size: 20,
+            ),
           ),
         ],
       ),
     );
   }
 
-  // Helper Widget for Status Chips
-  Widget _buildStatusChip(String label, bool isActive, Color color, bool isDark) {
-    return Opacity(
-      opacity: isActive ? 1.0 : 0.4,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? color.withOpacity(0.15) : (isDark ? Colors.white10 : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isActive ? color.withOpacity(0.5) : Colors.transparent,
-          ),
+  // 🔥 Achievement Grid
+  Widget _buildAchievementGrid(bool isDark) {
+    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
+
+    // ✅ Synchronous method ব্যবহার করুন
+    final achievements = _showCompleted
+        ? AchievementService.getCompletedAchievements(
+      isWorker: _isWorker,
+      currentPoints: currentPoints,
+    )
+        : AchievementService.getActiveAchievements(
+      isWorker: _isWorker,
+      currentPoints: currentPoints,
+    );
+
+    // Filter by selected category
+    List<AchievementState> filtered = achievements.where((st) {
+      if (_selectedCategory == 0) return true;
+
+      final categoryId = _categories[_selectedCategory]['id'];
+      if (categoryId == 'daily') return st.def.resetPeriod == ResetPeriod.daily;
+      if (categoryId == 'weekly') return st.def.resetPeriod == ResetPeriod.weekly;
+      if (categoryId == 'onetime') return st.def.resetPeriod == ResetPeriod.none;
+      return true;
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return _buildEmptyState(isDark);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.85,
         ),
-        child: Row(
+        itemCount: filtered.length,
+        itemBuilder: (context, index) {
+          return _buildAchievementCard(filtered[index], isDark);
+        },
+      ),
+    );
+  }
+
+  // 🔥 Achievement Card
+  Widget _buildAchievementCard(AchievementState st, bool isDark) {
+    final isLocked = BadgeService.badgeNotifier.value.totalPoints < st.def.minPoints;
+    final isCompleted = st.isCompleted;
+    final canClaim = isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final Color borderColor = canClaim // ✅ FIXED: non-nullable Color
+        ? Colors.green
+        : (isDark ? Colors.white10 : Colors.grey[200]!);
+
+    if (isLocked) {
+      return _buildLockedCard(st, isDark);
+    }
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor, width: canClaim ? 2 : 1), // ✅ FIXED
+          boxShadow: [
+            if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 15, spreadRadius: 1),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Stack(
           children: [
-            Icon(
-              isActive ? Icons.check_circle : Icons.circle_outlined,
-              size: 14,
-              color: isActive ? color : Colors.grey,
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icon & XP
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          canClaim ? Icons.redeem : Icons.emoji_events_rounded,
+                          color: canClaim ? Colors.green : AppColors.brandMain,
+                          size: 24,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.bolt, color: Colors.amber, size: 12),
+                            const SizedBox(width: 4),
+                            Text(
+                              "+${st.def.xpReward}",
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Title
+                  Text(
+                    st.def.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  // Description
+                  Text(
+                    st.def.description,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Progress Bar
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Progress",
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white60 : Colors.grey,
+                            ),
+                          ),
+                          Text(
+                            "${st.progress}/${st.def.target}",
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white60 : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (st.progress / st.def.target).clamp(0.0, 1.0),
+                          minHeight: 6,
+                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
+                          valueColor: AlwaysStoppedAnimation(
+                            canClaim ? Colors.green : AppColors.brandMain,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Action Button
+                  if (!st.claimed)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _navigateToTask(st.def.id),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandMain.withOpacity(0.1),
+                          foregroundColor: AppColors.brandMain,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.arrow_forward, size: 14),
+                        label: Text(
+                          _getButtonLabel(st.def.id),
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+
+                  if (canClaim)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          HapticFeedback.heavyImpact();
+                          _confettiController.play();
+                          await AchievementService.claim(st.def.id);
+                          if (mounted) setState(() {});
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          elevation: 2,
+                        ),
+                        icon: const Icon(Icons.check, size: 16),
+                        label: const Text(
+                          "CLAIM REWARD",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ),
+
+                  if (st.claimed)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle, size: 14, color: Colors.green),
+                          SizedBox(width: 4),
+                          Text("COMPLETED", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
-            const SizedBox(width: 6),
+
+            // Badge for reset period
+            if (st.def.resetPeriod != ResetPeriod.none)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: st.def.resetPeriod == ResetPeriod.daily ? Colors.green : Colors.blue,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    st.def.resetPeriod == ResetPeriod.daily ? "DAILY" : "WEEKLY",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLockedCard(AchievementState st, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.lock_outline, color: Colors.grey, size: 24),
+            ),
+            const SizedBox(height: 12),
             Text(
-              label,
+              st.def.title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Unlocks at ${st.def.minPoints} XP",
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: isActive ? color : (isDark ? Colors.grey : Colors.grey.shade600),
+                color: Colors.grey.shade500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock, color: Colors.grey, size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    "LOCKED",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -343,36 +914,33 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Next Level Progress Bar
-  Widget _buildNextMilestone(BadgeProgress progress, bool isDark) {
-    final nextLevel = BadgeService.getLevelByPoints(progress.totalPoints + 1);
-    final targetColor = _getLevelColor(nextLevel);
-    final needed = (progress.nextLevelPoints - progress.totalPoints).clamp(0, 999999);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
+  Widget _buildEmptyState(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.all(32),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("NEXT: ${BadgeService.getFormattedLevelName(nextLevel)}", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.grey.shade800)),
-              Text("$needed XP LEFT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: targetColor)),
-            ],
+          Icon(
+            _showCompleted ? Icons.emoji_events_outlined : Icons.rocket_launch,
+            size: 80,
+            color: Colors.grey.withOpacity(0.3),
           ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: LinearProgressIndicator(
-              value: progress.progressPercentage.clamp(0.0, 1.0),
-              minHeight: 8,
-              backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
-              valueColor: AlwaysStoppedAnimation(targetColor),
+          const SizedBox(height: 16),
+          Text(
+            _showCompleted ? "No achievements yet!" : "All quests completed!",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white60 : Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _showCompleted
+                ? "Complete tasks to earn achievements"
+                : "Great job! You've completed all available quests",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isDark ? Colors.white38 : Colors.grey[500],
             ),
           ),
         ],
@@ -380,223 +948,466 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Quest Card
-  // 🔥 Quest Card with Action Button
-  Widget _buildQuestCard(AchievementState st, bool isDark) {
-    final isCompleted = st.isCompleted; // টাস্ক শেষ হয়েছে কিনা
-    final canClaim = isCompleted && !st.claimed; // ক্লেইম করা বাকি কিনা
-    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final borderColor = canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor, width: canClaim ? 1.5 : 1),
-        boxShadow: [
-          if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 12, spreadRadius: 1),
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 5, offset: const Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  canClaim ? Icons.redeem : Icons.emoji_events_rounded,
-                  color: canClaim ? Colors.green : (isDark ? Colors.grey : AppColors.brandMain),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(st.def.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDark ? Colors.white : Colors.black87)),
-                    const SizedBox(height: 4),
-                    Text(st.def.description, style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey.shade600)),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: (st.progress / st.def.target).clamp(0.0, 1.0),
-                        minHeight: 4,
-                        backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                        valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.orange),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          // 🔥 Action Buttons Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              // 1. Progress Text
-              if (!canClaim && !st.claimed)
-                Text(
-                    "${st.progress}/${st.def.target}",
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey)
-                ),
-
-              const Spacer(),
-
-              // 2. Action Button (Upload/Post) - যদি টাস্ক কমপ্লিট না হয়
-              if (!isCompleted)
-                ElevatedButton.icon(
-                  onPressed: () => _navigateToTask(st.def.id), // নেভিগেশন লজিক
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandMain.withOpacity(0.1),
-                    foregroundColor: AppColors.brandMain,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  icon: const Icon(Icons.arrow_forward, size: 14),
-                  label: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                ),
-
-              // 3. Claim Button - যদি টাস্ক কমপ্লিট হয় কিন্তু ক্লেইম না করা হয়
-              if (canClaim)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    HapticFeedback.heavyImpact();
-                    _confettiController.play();
-                    await AchievementService.claim(st.def.id);
-                    if (mounted) setState(() {});
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    elevation: 2,
-                  ),
-                  icon: const Icon(Icons.check, size: 16),
-                  label: Text("CLAIM +${st.def.xpReward} XP", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                ),
-
-              // 4. Completed Status - যদি ক্লেইম করা হয়ে থাকে
-              if (st.claimed)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.check_circle, size: 14, color: Colors.green),
-                      SizedBox(width: 4),
-                      Text("COMPLETED", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 🚀 Helper: Get Button Label based on ID
+  // 🚀 Helper Methods
   String _getButtonLabel(String id) {
     if (id.contains('portfolio') || id.contains('cv')) return "Upload Now";
     if (id.contains('job')) return "Post Job";
     if (id.contains('earn')) return "Create Pin";
     if (id.contains('profile')) return "Edit Profile";
-    return "Go Now";
+    if (id.contains('login')) return "Check In";
+    if (id.contains('share')) return "Share Now";
+    return "Start Now";
   }
 
-  // 🚀 Helper: Navigation Logic
   void _navigateToTask(String id) {
-    // এখানে আপনার অ্যাপের রাউট অনুযায়ী পেজ ওপেন করুন
-    // উদাহরণস্বরূপ:
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-    // 1. Upload CV/Portfolio
-    if (id.contains('portfolio') || id.contains('cv')) {
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => const WorkerDocumentsScreen()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Documents...")));
-    }
-    // 2. Post a Job
-    else if (id.contains('job')) {
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => const PostJobScreen()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Post Job...")));
-    }
-    // 3. Earn Post (Pin)
-    else if (id.contains('earn')) {
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Earn Post...")));
-    }
-    // 4. Edit Profile
-    else if (id.contains('profile')) {
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Redirecting to Profile...")));
-    }
-    else {
-      // Default
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Action not available")));
+    if (id.contains('portfolio') || id.contains('cv') || id.contains('upload')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WorkerDocumentsScreen(uid: uid, isOwner: true),
+        ),
+      );
+    } else if (id.contains('job') || id.contains('post')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SupportPostScreen()),
+      );
+    } else if (id.contains('earn') || id.contains('pin')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const EarnPostScreen()),
+      );
+    } else if (id.contains('profile')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UnifiedProfileEditScreen(uid: uid),
+        ),
+      );
+    } else if (id.contains('login')) {
+      // Daily login - already handled by opening app
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Daily check-in recorded!")),
+      );
+    } else if (id.contains('share')) {
+      // Share functionality
+      _shareProfile();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Action not available")),
+      );
     }
   }
 
-  // --- Helpers ---
+  void _shareProfile() {
+    // Implement share functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Share feature coming soon!")),
+    );
+  }
 
-  Widget _buildToggleButtons(bool isDark) {
+  void _showAchievementDetails(AchievementState st) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _buildAchievementDetails(st),
+    );
+  }
+
+  Widget _buildAchievementDetails(AchievementState st) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLocked = BadgeService.badgeNotifier.value.totalPoints < st.def.minPoints;
+    final canClaim = st.isCompleted && !st.claimed;
+
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.transparent : Colors.grey.shade200),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(30),
+          topRight: Radius.circular(30),
+        ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _toggleBtn("Active Quests", _isCollectPoint, () => setState(() => _isCollectPoint = true), isDark),
-          _toggleBtn("Completed", !_isCollectPoint, () => setState(() => _isCollectPoint = false), isDark),
+          // Drag handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Achievement Icon
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              canClaim ? Icons.redeem :
+              isLocked ? Icons.lock_outline :
+              Icons.emoji_events_rounded,
+              size: 40,
+              color: canClaim ? Colors.green : AppColors.brandMain,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+      // Title
+      Text(
+        st.def.title,
+        style: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : Colors.black,
+        ),
+        textAlign: TextAlign.center,
+      ),
+
+      const SizedBox(height: 10),
+
+      // Description
+      Text(
+        st.def.description,
+        style: TextStyle(
+          fontSize: 16,
+          color: isDark ? Colors.white60 : Colors.grey[600],
+        ),
+        textAlign: TextAlign.center,
+      ),
+
+      const SizedBox(height: 20),
+
+      // Stats
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white10 : Colors.grey[50],
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildDetailStat("XP Reward", "+${st.def.xpReward}", Icons.bolt),
+            _buildDetailStat("Progress", "${st.progress}/${st.def.target}", Icons.timeline),
+            _buildDetailStat("Type",
+              st.def.resetPeriod == ResetPeriod.daily ? "Daily" :
+              st.def.resetPeriod == ResetPeriod.weekly ? "Weekly" : "One-time",
+              Icons.schedule,
+            ),
+          ],
+        ),
+      ),
+
+      const SizedBox(height: 20),
+
+      // Progress Bar
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+        Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+        Text(
+        "Progress",
+        style: TextStyle(
+          fontSize: 14,
+          color: isDark ? Colors.white60 : Colors.grey[600],
+        ),
+      ),
+      Text(
+        "${((st.progress / st.def.target) * 100).toStringAsFixed(0)}%",
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: isDark ? Colors.white : Colors.black,
+        ),
+      ),
+        ],
+        ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: (st.progress / st.def.target).clamp(0.0, 1.0),
+              minHeight: 12,
+              backgroundColor: isDark ? Colors.white10 : Colors.grey[200],
+              valueColor: AlwaysStoppedAnimation(
+                canClaim ? Colors.green : AppColors.brandMain,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "${st.progress} completed",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : Colors.grey[600],
+                ),
+              ),
+              Text(
+                "${st.def.target - st.progress} remaining",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+          const SizedBox(height: 20),
+
+          // Requirements
+          if (st.def.minPoints > 0)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : Colors.grey[50],
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lock_outline,
+                    color: isLocked ? Colors.orange : Colors.green,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isLocked
+                          ? "Requires ${st.def.minPoints} XP to unlock"
+                          : "Unlocked at ${st.def.minPoints} XP",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark ? Colors.white70 : Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 20),
+
+          // Action Buttons
+          if (isLocked)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Navigate to XP earning tasks
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.withOpacity(0.1),
+                  foregroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                icon: const Icon(Icons.bolt),
+                label: const Text(
+                  "EARN MORE XP TO UNLOCK",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            )
+          else if (canClaim)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  HapticFeedback.heavyImpact();
+                  _confettiController.play();
+                  await AchievementService.claim(st.def.id);
+                  if (mounted) setState(() {});
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                icon: const Icon(Icons.check),
+                label: Text(
+                  "CLAIM ${st.def.xpReward} XP REWARD", // ✅ const সরিয়ে দিন
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            )
+          else if (!st.claimed)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _navigateToTask(st.def.id);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandMain,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                  icon: const Icon(Icons.arrow_forward),
+                  label: Text(
+                    _getButtonLabel(st.def.id),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.green.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text(
+                      "ACHIEVEMENT COMPLETED",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+          const SizedBox(height: 10),
+
+          // Close Button
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              "CLOSE",
+              style: TextStyle(
+                color: isDark ? Colors.white60 : Colors.grey[600],
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _toggleBtn(String label, bool active, VoidCallback onTap, bool isDark) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: active ? AppColors.brandMain : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+  Widget _buildDetailStat(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: AppColors.brandMain, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
           ),
-          child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: active ? Colors.white : (isDark ? Colors.white54 : Colors.grey))),
         ),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Achievements Guide"),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildInfoItem("🎯 Daily Quests", "Reset every day, easy XP"),
+              _buildInfoItem("📅 Weekly Challenges", "Reset every week, bigger rewards"),
+              _buildInfoItem("🏆 One-time Achievements", "Permanent, huge XP boosts"),
+              _buildInfoItem("🔓 Locked Achievements", "Require minimum XP to unlock"),
+              _buildInfoItem("⚡ XP Rewards", "Earn XP to level up your badge"),
+              _buildInfoItem("✅ Progress Tracking", "Track your completion status"),
+              const SizedBox(height: 16),
+              const Text(
+                "Complete tasks to earn XP and level up your badge!",
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("GOT IT"),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildEmptyState(bool isCollect, bool isDark) {
+  Widget _buildInfoItem(String title, String description) {
     return Padding(
-      padding: const EdgeInsets.only(top: 50),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(isCollect ? Icons.rocket_launch : Icons.done_all, size: 60, color: Colors.grey.withOpacity(0.3)),
-          const SizedBox(height: 10),
-          Text(isCollect ? "All quests completed!" : "No achievements yet.", style: TextStyle(color: isDark ? Colors.white38 : Colors.grey)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
