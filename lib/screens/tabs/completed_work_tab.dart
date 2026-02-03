@@ -1,5 +1,3 @@
-// lib/screens/tabs/completed_work_tab.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -113,7 +111,6 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     final address = _s(job['location'], 'Location Hidden');
     final price = _s(job['price'] ?? job['offerPrice'], 'Negotiable');
 
-    // Denormalized fallback
     final String otherNameFromDoc = (currentUid == workerId) ? _s(job['receiverName']) : _s(job['workerName']);
     final String otherImageFromDoc = (currentUid == workerId) ? _s(job['receiverImage']) : _s(job['workerImage']);
     final String otherRoleFromDoc = (currentUid == workerId) ? _s(job['receiverRole']) : _s(job['workerRole']);
@@ -140,11 +137,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
             borderRadius: BorderRadius.circular(20),
             color: Theme.of(context).cardColor,
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
+              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
             ],
           ),
           child: Column(
@@ -155,7 +148,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                 role: role,
                 imageUrl: imageUrl,
                 address: address,
-                rating: _asDouble(job['rating'], fallback: 4.8).toStringAsFixed(1),
+                rating: _asDouble(job['rating'], fallback: 0.0).toStringAsFixed(1),
                 completed: _asInt(job['completedCount']).toString(),
                 reviews: _asInt(job['reviewsCount']).toString(),
                 price: price,
@@ -164,27 +157,18 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
                 followersCount: _asInt(job['followersCount']),
                 margin: EdgeInsets.zero,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-
-                // ✅ প্রোফাইল ওপেন লজিক
                 onTap: () {
                   if (otherUserId.isNotEmpty) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => UnifiedProfileScreen(
-                          uid: otherUserId,
-                          isOwner: false,
-                          showBack: true,
-                        ),
+                        builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false, showBack: true),
                       ),
                     );
                   }
                 },
-
-                // ✅ চ্যাট ওপেন লজিক
                 onChatTap: () => _connectAgain(context, otherUserId, name, role, imageUrl),
               ),
-
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
@@ -225,7 +209,7 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
   }
 
   Future<void> _connectAgain(BuildContext context, String otherId, String name, String role, String img) async {
-    if (otherId.isEmpty) return; // ✅ সেফটি চেক
+    if (otherId.isEmpty) return;
 
     HapticFeedback.lightImpact();
     showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
@@ -235,21 +219,31 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
       if (!context.mounted) return;
       Navigator.pop(context);
 
-      Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(
-        conversationId: convId,
-        userName: name,
-        userRole: role,
-        userImage: img,
-      )));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: convId,
+            userName: name,
+            userRole: role,
+            userImage: img,
+          ),
+        ),
+      );
     } catch (e) {
       if (context.mounted) Navigator.pop(context);
       _showToast(context, "Connect failed: $e", isError: true);
     }
   }
 
-  Future<void> _showReviewDialog(BuildContext context, {required String jobId, required String targetId, required String targetName}) async {
+  Future<void> _showReviewDialog(
+      BuildContext context, {
+        required String jobId,
+        required String targetId,
+        required String targetName,
+      }) async {
     final myUid = _auth.currentUser?.uid;
-    if (myUid == null || targetId.isEmpty) return; // ✅ সেফটি চেক
+    if (myUid == null || targetId.isEmpty) return;
 
     final controller = TextEditingController();
     double rating = 5.0;
@@ -265,10 +259,13 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) => IconButton(
-                  icon: Icon(i < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: Colors.amber, size: 32),
-                  onPressed: () => setModalState(() => rating = i + 1.0),
-                )),
+                children: List.generate(
+                  5,
+                      (i) => IconButton(
+                    icon: Icon(i < rating ? Icons.star_rounded : Icons.star_outline_rounded, color: Colors.amber, size: 32),
+                    onPressed: () => setModalState(() => rating = i + 1.0),
+                  ),
+                ),
               ),
               TextField(
                 controller: controller,
@@ -288,21 +285,59 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
       ),
     );
 
-    if (confirm == true) {
-      try {
-        await _db.collection('reviews').add({
+    if (confirm != true) return;
+
+    try {
+      // ✅ Write review + update stats atomically
+      await _db.runTransaction((tx) async {
+        // 1) create review doc
+        final reviewRef = _db.collection('reviews').doc(); // auto-id
+        tx.set(reviewRef, {
           'fromUserId': myUid,
           'targetUserId': targetId,
           'jobId': jobId,
           'rating': rating,
           'comment': controller.text.trim(),
           'createdAt': FieldValue.serverTimestamp(),
-          'isAnonymous': false, // ✅ স্ট্রিং 'false' নয়, বুলিয়ান
+          'isAnonymous': false,
         });
-        if (context.mounted) _showToast(context, "Review submitted!");
-      } catch (e) {
-        if (context.mounted) _showToast(context, "Failed: $e", isError: true);
-      }
+
+        // 2) update target's user_stats (running average)
+        final statsRef = _db.collection('user_stats').doc(targetId);
+        final statsSnap = await tx.get(statsRef);
+        final stats = statsSnap.data() ?? {};
+
+        final int oldCount = (stats['reviewsCount'] is num) ? (stats['reviewsCount'] as num).toInt() : 0;
+        final double oldAvg = (stats['avgRating'] is num) ? (stats['avgRating'] as num).toDouble() : 0.0;
+
+        final int newCount = oldCount + 1;
+        final double newAvg = ((oldAvg * oldCount) + rating) / newCount;
+
+        tx.set(
+          statsRef,
+          {
+            'reviewsCount': newCount,
+            'avgRating': double.parse(newAvg.toStringAsFixed(2)),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        // 3) optional: reviewsGiven counter for reviewer
+        final fromStatsRef = _db.collection('user_stats').doc(myUid);
+        tx.set(
+          fromStatsRef,
+          {
+            'reviewsGiven': FieldValue.increment(1),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      });
+
+      if (context.mounted) _showToast(context, "Review submitted!");
+    } catch (e) {
+      if (context.mounted) _showToast(context, "Failed: $e", isError: true);
     }
   }
 
@@ -320,17 +355,10 @@ class _CompletedWorkTabState extends State<CompletedWorkTab> {
     );
   }
 
-  Widget _buildErrorState(String msg) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Text(msg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
-      ),
-    );
-  }
-
   void _showToast(BuildContext context, String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
+    );
   }
 
   String _getTimeAgo(DateTime date) {

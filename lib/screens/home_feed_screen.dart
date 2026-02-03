@@ -6,7 +6,7 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/work_in_progress_tab.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
-import 'package:findus_app/screens/tabs/leaderboard_screen.dart'; // ✅ LeaderboardTab
+import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
 import 'package:findus_app/screens/dashboard/dashboard_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     WorkInProgressTab(),
     CompletedWorkTab(),
     AchievementsTab(),
-    LeaderboardTab(), // ✅ LeaderboardTab ব্যবহার করুন
+    LeaderboardScreen(), // ✅ LeaderboardTab ব্যবহার করুন
   ];
 
   @override

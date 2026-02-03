@@ -5,8 +5,13 @@ import 'package:shimmer/shimmer.dart'; // লোডিং ইফেক্টে�
 
 class PerformanceCard extends StatelessWidget {
   final String userId;
+  final String userRole; // 'finder' or 'supporter'
 
-  const PerformanceCard({super.key, required this.userId});
+  const PerformanceCard({
+    super.key,
+    required this.userId,
+    required this.userRole,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,13 +35,27 @@ class PerformanceCard extends StatelessWidget {
         // ২. যদি স্ট্যাটস না থাকে, তবে ইউজার ডকুমেন্ট থেকে ডাটা নেওয়ার চেষ্টা (অপশনাল)
         if (snapshot.hasData && snapshot.data!.exists) {
           data = snapshot.data!.data() as Map<String, dynamic>;
-        } else {
-          // Fallback logic could be added here if needed
         }
+
+        // ✅ ডাইনামিক লজিক শুরু
+        final bool isFinder = userRole.toLowerCase() == 'finder';
 
         final impressions = data['impressions'] ?? 0;
         final views = data['profileViews'] ?? 0;
-        final hires = data['hires'] ?? 0;
+
+        final int hiresCount = (data['hiresCount'] is num)
+            ? (data['hiresCount'] as num).toInt()
+            : int.tryParse((data['hiresCount'] ?? '0').toString()) ?? 0;
+
+        final int jobsCompleted = (data['jobsCompleted'] is num)
+            ? (data['jobsCompleted'] as num).toInt()
+            : int.tryParse((data['jobsCompleted'] ?? '0').toString()) ?? 0;
+
+// ✅ role-based 3rd metric
+        final String thirdLabel = isFinder ? "Jobs Completed" : "Total Hires";
+        final int thirdValue = isFinder ? jobsCompleted : hiresCount;
+        final IconData thirdIcon = isFinder ? Icons.work_outline : Icons.handshake_outlined;
+        final Color thirdColor = isFinder ? Colors.blue : Colors.orange;
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -111,7 +130,8 @@ class PerformanceCard extends StatelessWidget {
                   _verticalDivider(isDark),
                   _perfItem("Profile Views", _format(views), Icons.person_search_outlined, Colors.purple, textColor, subTextColor),
                   _verticalDivider(isDark),
-                  _perfItem("Total Hires", _format(hires), Icons.handshake_outlined, Colors.orange, textColor, subTextColor),
+                  // ✅ ডাইনামিক আইটেম
+                  _perfItem(thirdLabel, _format(thirdValue), thirdIcon, thirdColor, textColor, subTextColor),
                 ],
               ),
             ],

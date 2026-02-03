@@ -1,18 +1,16 @@
-// lib/screens/tabs/achievements_tab.dart
-// lib/screens/tabs/achievements_tab.dart
 import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:percent_indicator/percent_indicator.dart';
 import 'package:confetti/confetti.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/constants/status_theme.dart';
-import 'package:findus_app/badge/badge_service.dart' hide BadgeLevel;
-import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/achievement/achievement_models.dart';
+import 'package:findus_app/badge/badge_service.dart';
 import 'package:findus_app/screens/profile/support_post_screen.dart';
 import 'package:findus_app/screens/profile/earn_post_screen.dart';
 import 'package:findus_app/screens/profile/unified_profile_edit_screen.dart';
@@ -26,28 +24,20 @@ class AchievementsTab extends StatefulWidget {
 }
 
 class _AchievementsTabState extends State<AchievementsTab> {
-  int _selectedCategory = 0;
-  bool _showCompleted = false;
-  late ConfettiController _confettiController;
-  late VoidCallback _badgeListener;
-
   bool _isLoading = true;
-  bool _isWorker = true;
-  bool _isVerified = false;
-  bool _isTrusted = false;
-  bool _isTopRated = false;
+  bool _showCompleted = false;
+
+  // role
+  bool _isWorker = true; // your app naming: finder = worker side
+
   int _totalXpEarned = 0;
   int _totalAchievements = 0;
   int _completedAchievements = 0;
 
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
 
-  final List<Map<String, dynamic>> _categories = [
-    {'id': 'all', 'label': 'All', 'icon': Icons.all_inclusive, 'color': AppColors.brandMain},
-    {'id': 'daily', 'label': 'Daily', 'icon': Icons.today, 'color': Colors.green},
-    {'id': 'weekly', 'label': 'Weekly', 'icon': Icons.date_range, 'color': Colors.blue},
-    {'id': 'onetime', 'label': 'One-time', 'icon': Icons.flag, 'color': Colors.purple},
-  ];
+  late ConfettiController _confettiController;
+  late VoidCallback _badgeListener;
 
   @override
   void initState() {
@@ -55,10 +45,9 @@ class _AchievementsTabState extends State<AchievementsTab> {
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
 
     _badgeListener = () {
-      if (mounted) {
-        _updateStats();
-        setState(() {});
-      }
+      if (!mounted) return;
+      _updateStats();
+      setState(() {});
     };
     BadgeService.badgeNotifier.addListener(_badgeListener);
 
@@ -84,22 +73,21 @@ class _AchievementsTabState extends State<AchievementsTab> {
     _userSub?.cancel();
     _userSub = FirebaseFirestore.instance.collection('users').doc(uid).snapshots().listen((snap) {
       if (!snap.exists) return;
-
       final data = snap.data() ?? {};
+
+      // XP sync
       final rawXp = data['xpPoints'] ?? 0;
       final int xp = rawXp is num ? rawXp.toInt() : int.tryParse(rawXp.toString()) ?? 0;
       BadgeService.setPointsFromServer(xp);
 
-      final userRole = (data['userRole'] ?? 'finder').toString().toLowerCase();
-      final rating = AchievementService.getRating(data);
-      final completed = AchievementService.getCompletedCount(data);
+      // role
+      final role = (data['userRole'] ?? 'finder').toString().toLowerCase();
+      // you said two roles: finder + maker (supporter). Finder side = worker tasks
+      final bool isWorker = role == 'finder';
 
       if (!mounted) return;
       setState(() {
-        _isWorker = userRole == 'finder';
-        _isVerified = (data['kyc_completed'] ?? false) == true;
-        _isTopRated = rating >= 4.8;
-        _isTrusted = completed >= 50 && rating >= 4.5;
+        _isWorker = isWorker;
         _isLoading = false;
       });
 
@@ -110,33 +98,109 @@ class _AchievementsTabState extends State<AchievementsTab> {
   }
 
   void _updateStats() {
-    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
+    final points = BadgeService.badgeNotifier.value.totalPoints;
 
-    final achievements = AchievementService.getAllForUser(
-      isWorker: _isWorker,
-      currentPoints: currentPoints,
-    );
+    final all = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points);
 
     int totalXp = 0;
     int completed = 0;
-
-    for (final achievement in achievements) {
-      if (achievement.claimed) {
-        totalXp += achievement.def.xpReward;
+    for (final st in all) {
+      if (st.claimed) {
+        totalXp += st.def.xpReward;
         completed++;
       }
     }
 
-    if (mounted) {
-      setState(() {
-        _totalXpEarned = totalXp;
-        _totalAchievements = achievements.length;
-        _completedAchievements = completed;
-      });
+    if (!mounted) return;
+    setState(() {
+      _totalXpEarned = totalXp;
+      _totalAchievements = all.length;
+      _completedAchievements = completed;
+    });
+  }
+
+  // -----------------------
+  // CoC-style board pickers
+  // -----------------------
+
+  List<AchievementState> _dailyBoard({required bool bonus}) {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    // daily only
+    final list = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.daily)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    // Sort: claimable > active > others
+    list.sort((a, b) {
+      final aClaim = (a.isCompleted && !a.claimed) ? 0 : (a.claimed ? 2 : 1);
+      final bClaim = (b.isCompleted && !b.claimed) ? 0 : (b.claimed ? 2 : 1);
+      if (aClaim != bClaim) return aClaim.compareTo(bClaim);
+      // closer to completion first
+      final aPct = a.def.target == 0 ? 0.0 : a.progress / a.def.target;
+      final bPct = b.def.target == 0 ? 0.0 : b.progress / b.def.target;
+      return bPct.compareTo(aPct);
+    });
+
+    // 5 core + 2 bonus
+    if (list.isEmpty) return [];
+
+    if (!bonus) {
+      return list.take(5).toList();
+    } else {
+      return list.skip(5).take(2).toList();
     }
   }
 
-  String _formatPoints(int points) => points >= 1000 ? "${(points / 1000).toStringAsFixed(1)}K" : points.toString();
+  AchievementState? _weeklyBigMission() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final weekly = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.weekly)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    if (weekly.isEmpty) return null;
+
+    // pick: highest reward / or most-progressing
+    weekly.sort((a, b) {
+      // claimable first
+      final aC = (a.isCompleted && !a.claimed) ? 0 : 1;
+      final bC = (b.isCompleted && !b.claimed) ? 0 : 1;
+      if (aC != bC) return aC.compareTo(bC);
+      // higher xp reward first
+      return b.def.xpReward.compareTo(a.def.xpReward);
+    });
+
+    return weekly.first;
+  }
+
+  List<AchievementState> _longTermMissions() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final onetime = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.none)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    // Sort: claimable first, then completed, then minPoints
+    onetime.sort((a, b) {
+      final aClaimable = a.isCompleted && !a.claimed;
+      final bClaimable = b.isCompleted && !b.claimed;
+      if (aClaimable != bClaimable) return aClaimable ? -1 : 1;
+      if (a.claimed != b.claimed) return a.claimed ? 1 : -1;
+      return a.def.minPoints.compareTo(b.def.minPoints);
+    });
+
+    return onetime;
+  }
+
+  String _formatPoints(int points) {
+    if (points >= 1000000) return "${(points / 1000000).toStringAsFixed(1)}M";
+    if (points >= 1000) return "${(points / 1000).toStringAsFixed(1)}K";
+    return points.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,24 +218,32 @@ class _AchievementsTabState extends State<AchievementsTab> {
             physics: const BouncingScrollPhysics(),
             child: Column(
               children: [
-                // 1. Hero Stats Section
-                _buildHeroStats(isDark),
+                _buildHero(isDark),
+                const SizedBox(height: 12),
+                _buildToggle(isDark),
+                const SizedBox(height: 12),
 
-                // 2. Category Selector
-                _buildCategorySelector(isDark),
+                // Daily Board
+                _buildSectionTitle("DAILY BOARD", "5 quests + 2 bonus", Icons.today, isDark),
+                _buildDailyBoard(isDark),
 
-                // 3. Toggle & Stats
-                _buildToggleAndStats(isDark),
+                const SizedBox(height: 18),
 
-                // 4. Achievement Grid
-                _buildAchievementGrid(isDark),
+                // Weekly
+                _buildSectionTitle("WEEKLY BIG MISSION", "Big reward, resets weekly", Icons.date_range, isDark),
+                _buildWeeklyMission(isDark),
+
+                const SizedBox(height: 18),
+
+                // Long-term
+                _buildSectionTitle("LONG-TERM MISSIONS", "Permanent progress", Icons.flag, isDark),
+                _buildLongTermGrid(isDark),
 
                 const SizedBox(height: 100),
               ],
             ),
           ),
 
-          // Confetti Animation
           ConfettiWidget(
             confettiController: _confettiController,
             blastDirectionality: BlastDirectionality.explosive,
@@ -183,38 +255,32 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Hero Stats Section
-  Widget _buildHeroStats(bool isDark) {
+  Widget _buildHero(bool isDark) {
     final progress = BadgeService.badgeNotifier.value;
     final levelColor = progress.levelColor;
-    final levelName = progress.level.toString().split('.').last.toUpperCase();
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppColors.brandMain.withOpacity(0.9),
-            AppColors.brandDark,
-          ],
+          colors: [AppColors.brandMain.withOpacity(0.9), AppColors.brandDark],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
+          bottomLeft: Radius.circular(28),
+          bottomRight: Radius.circular(28),
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            // Title
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "ACHIEVEMENTS",
+                const Text(
+                  "QUESTS",
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
@@ -228,104 +294,65 @@ class _AchievementsTabState extends State<AchievementsTab> {
                 ),
               ],
             ),
+            const SizedBox(height: 14),
 
-            const SizedBox(height: 20),
-
-            // Progress Card
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withOpacity(0.25)),
               ),
               child: Column(
                 children: [
-                  // Level & Progress
                   Row(
                     children: [
-                      // Level Badge (Updated Logic)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: levelColor.withOpacity(0.2), // ✅ হালকা ব্যাকগ্রাউন্ড
                           shape: BoxShape.circle,
-                          border: Border.all(color: levelColor, width: 2), // ✅ বর্ডার যোগ করা হয়েছে
-                          boxShadow: [
-                            BoxShadow(
-                              color: levelColor.withOpacity(0.5),
-                              blurRadius: 15,
-                              spreadRadius: 2,
-                            )
-                          ],
+                          color: levelColor.withOpacity(0.18),
+                          border: Border.all(color: levelColor, width: 2),
                         ),
-                        child: Icon(
-                          Icons.workspace_premium,
-                          color: levelColor, // ✅ আইকনের কালার লেভেল কালারের মতো হবে
-                          size: 24,
-                        ),
+                        child: Icon(Icons.workspace_premium, color: levelColor, size: 22),
                       ),
-
-                      const SizedBox(width: 16),
-
-                      // Level Info
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "CURRENT LEVEL",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withOpacity(0.8),
-                              ),
-                            ),
-                            Text(
-                              levelName,
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                              ),
+                              "TOTAL XP",
+                              style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.75)),
                             ),
                             Text(
                               "${_formatPoints(progress.totalPoints)} XP",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white.withOpacity(0.9),
-                              ),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${_formatPoints(progress.pointsToNextLevel)} XP to next",
+                              style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.8)),
                             ),
                           ],
                         ),
                       ),
-
-                      // Next Level
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            "NEXT LEVEL",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.white.withOpacity(0.7),
-                            ),
+                            "COMPLETED",
+                            style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.7)),
                           ),
                           Text(
-                            _formatPoints(progress.nextLevelPoints),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                            "$_completedAchievements/$_totalAchievements",
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // Progress Bar
+                  const SizedBox(height: 12),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
@@ -335,158 +362,52 @@ class _AchievementsTabState extends State<AchievementsTab> {
                       valueColor: AlwaysStoppedAnimation(levelColor),
                     ),
                   ),
-
-                  const SizedBox(height: 8),
-
-                  // Progress Text
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${_formatPoints(progress.totalPoints)} XP",
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        "${_formatPoints(progress.nextLevelPoints - progress.totalPoints)} XP to go",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
+            const SizedBox(height: 14),
 
-            const SizedBox(height: 20),
-
-            // Stats Row
-            _buildStatsRow(isDark),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _miniStat("Total XP Earned", _formatPoints(_totalXpEarned), Icons.emoji_events, Colors.amber),
+                _miniStat("Active", "${_totalAchievements - _completedAchievements}", Icons.timeline, Colors.blue),
+                _miniStat("Role", _isWorker ? "Finder" : "Supporter", Icons.person, Colors.white),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatsRow(bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildStatItem("Total XP", _formatPoints(_totalXpEarned), Icons.emoji_events, Colors.amber),
-        _buildStatItem("Completed", "$_completedAchievements/$_totalAchievements", Icons.check_circle, Colors.green),
-        _buildStatItem("Active", "${_totalAchievements - _completedAchievements}", Icons.timeline, Colors.blue),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, IconData icon, Color color) {
+  Widget _miniStat(String label, String value, IconData icon, Color color) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 20),
+          decoration: BoxDecoration(color: color.withOpacity(0.18), shape: BoxShape.circle),
+          child: Icon(icon, color: color, size: 18),
         ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
-            fontSize: 12,
-          ),
-        ),
+        const SizedBox(height: 6),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 10)),
       ],
     );
   }
 
-  // 🔥 Category Selector
-  Widget _buildCategorySelector(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(_categories.length, (index) {
-            final category = _categories[index];
-            final isSelected = _selectedCategory == index;
-
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedCategory = index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSelected ? category['color'] : (isDark ? Colors.white10 : Colors.grey[100]),
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: isSelected ? category['color'] : Colors.transparent,
-                      width: 2,
-                    ),
-                    boxShadow: isSelected ? [
-                      BoxShadow(
-                        color: (category['color'] as Color).withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      )
-                    ] : [],
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        category['icon'] as IconData,
-                        size: 18,
-                        color: isSelected ? Colors.white : (isDark ? Colors.white60 : Colors.grey[600]),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        category['label'] as String,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: isSelected ? Colors.white : (isDark ? Colors.white60 : Colors.grey[600]),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-
-  // 🔥 Toggle & Stats
-  Widget _buildToggleAndStats(bool isDark) {
+  Widget _buildToggle(bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Toggle Button
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white10 : Colors.grey[100],
+                color: isDark ? Colors.white10 : Colors.white,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
               ),
               child: Row(
                 children: [
@@ -502,11 +423,11 @@ class _AchievementsTabState extends State<AchievementsTab> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          "Active Quests",
+                          "Active",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
-                            color: !_showCompleted ? Colors.white : (isDark ? Colors.white60 : Colors.grey),
+                            color: !_showCompleted ? Colors.white : (isDark ? Colors.white70 : Colors.black54),
                           ),
                         ),
                       ),
@@ -528,7 +449,7 @@ class _AchievementsTabState extends State<AchievementsTab> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
-                            color: _showCompleted ? Colors.white : (isDark ? Colors.white60 : Colors.grey),
+                            color: _showCompleted ? Colors.white : (isDark ? Colors.white70 : Colors.black54),
                           ),
                         ),
                       ),
@@ -538,21 +459,28 @@ class _AchievementsTabState extends State<AchievementsTab> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(width: 12),
+  Widget _buildSectionTitle(String title, String subtitle, IconData icon, bool isDark) {
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final sub = isDark ? Colors.white60 : Colors.black54;
 
-          // Filter Button
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white10 : Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isDark ? Colors.white10 : Colors.grey[200]!),
-            ),
-            child: Icon(
-              Icons.filter_list,
-              color: isDark ? Colors.white60 : Colors.grey[600],
-              size: 20,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.brandMain, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor, letterSpacing: 1.0)),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: sub)),
+              ],
             ),
           ),
         ],
@@ -560,35 +488,71 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  // 🔥 Achievement Grid
-  Widget _buildAchievementGrid(bool isDark) {
-    final currentPoints = BadgeService.badgeNotifier.value.totalPoints;
+  Widget _buildDailyBoard(bool isDark) {
+    final core = _dailyCore();
+    final bonus = _dailyBonus();
 
-    // ✅ Synchronous method ব্যবহার করুন
-    final achievements = _showCompleted
-        ? AchievementService.getCompletedAchievements(
-      isWorker: _isWorker,
-      currentPoints: currentPoints,
-    )
-        : AchievementService.getActiveAchievements(
-      isWorker: _isWorker,
-      currentPoints: currentPoints,
-    );
-
-    // Filter by selected category
-    List<AchievementState> filtered = achievements.where((st) {
-      if (_selectedCategory == 0) return true;
-
-      final categoryId = _categories[_selectedCategory]['id'];
-      if (categoryId == 'daily') return st.def.resetPeriod == ResetPeriod.daily;
-      if (categoryId == 'weekly') return st.def.resetPeriod == ResetPeriod.weekly;
-      if (categoryId == 'onetime') return st.def.resetPeriod == ResetPeriod.none;
-      return true;
-    }).toList();
-
-    if (filtered.isEmpty) {
-      return _buildEmptyState(isDark);
+    if (core.isEmpty && bonus.isEmpty) {
+      return _buildBoardEmpty(isDark, "No daily quests found.");
     }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        children: [
+          ...core.map((st) => _buildQuestRowCard(st, isDark, starTier: 1)),
+          if (bonus.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildBonusHeader(isDark),
+            ...bonus.map((st) => _buildQuestRowCard(st, isDark, starTier: 1)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBonusHeader(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.add_circle_outline, color: Colors.amber.shade700, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            "BONUS QUESTS",
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.0,
+              color: isDark ? Colors.white : AppColors.brandDark,
+            ),
+          ),
+          const Spacer(),
+          Text("2", style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyMission(bool isDark) {
+    final st = _weeklyBigMissionPick();
+    if (st == null) return _buildBoardEmpty(isDark, "No weekly missions available.");
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: _buildWeeklyCard(st, isDark),
+    );
+  }
+
+  Widget _buildLongTermGrid(bool isDark) {
+    final list = _longTermPick();
+    if (list.isEmpty) return _buildBoardEmpty(isDark, "No long-term missions found.");
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -599,314 +563,216 @@ class _AchievementsTabState extends State<AchievementsTab> {
           crossAxisCount: 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 0.85,
+          childAspectRatio: 0.92,
         ),
-        itemCount: filtered.length,
-        itemBuilder: (context, index) {
-          return _buildAchievementCard(filtered[index], isDark);
+        itemCount: list.length,
+        itemBuilder: (context, i) {
+          final st = list[i];
+          final tier = _estimateTier(st);
+          return _buildQuestGridCard(st, isDark, tier);
         },
       ),
     );
   }
 
-  // 🔥 Achievement Card
-  Widget _buildAchievementCard(AchievementState st, bool isDark) {
-    final isLocked = BadgeService.badgeNotifier.value.totalPoints < st.def.minPoints;
-    final isCompleted = st.isCompleted;
-    final canClaim = isCompleted && !st.claimed;
-    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
-    final Color borderColor = canClaim // ✅ FIXED: non-nullable Color
-        ? Colors.green
-        : (isDark ? Colors.white10 : Colors.grey[200]!);
+  int _estimateTier(AchievementState st) {
+    // Very simple heuristic for ⭐/⭐⭐/⭐⭐⭐ feel
+    final t = st.def.target;
+    final r = st.def.xpReward;
+    if (r >= 5000 || t >= 20) return 3;
+    if (r >= 1500 || t >= 5) return 2;
+    return 1;
+  }
 
-    if (isLocked) {
-      return _buildLockedCard(st, isDark);
-    }
+  // -----------------------
+  // Quest cards
+  // -----------------------
+
+  Widget _questRowCard(AchievementState st, bool isDark, {required int starTier}) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
 
     return GestureDetector(
       onTap: () => _showAchievementDetails(st),
       child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: borderColor, width: canClaim ? 2 : 1), // ✅ FIXED
-          boxShadow: [
-            if (canClaim) BoxShadow(color: Colors.green.withOpacity(0.15), blurRadius: 15, spreadRadius: 1),
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200),
+            width: canClaim ? 2 : 1,
+          ),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
-        child: Stack(
+        child: Column(
           children: [
-            // Content
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Icon & XP
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          canClaim ? Icons.redeem : Icons.emoji_events_rounded,
-                          color: canClaim ? Colors.green : AppColors.brandMain,
-                          size: 24,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.bolt, color: Colors.amber, size: 12),
-                            const SizedBox(width: 4),
-                            Text(
-                              "+${st.def.xpReward}",
-                              style: const TextStyle(
-                                color: Colors.amber,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Title
-                  Text(
-                    st.def.title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: isDark ? Colors.white : Colors.black87,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  // Description
-                  Text(
-                    st.def.description,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.white54 : Colors.grey.shade600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // Progress Bar
-                  Column(
+            Row(
+              children: [
+                _stars(starTier),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "Progress",
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: isDark ? Colors.white60 : Colors.grey,
-                            ),
-                          ),
-                          Text(
-                            "${st.progress}/${st.def.target}",
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white60 : Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: (st.progress / st.def.target).clamp(0.0, 1.0),
-                          minHeight: 6,
-                          backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                          valueColor: AlwaysStoppedAnimation(
-                            canClaim ? Colors.green : AppColors.brandMain,
-                          ),
-                        ),
+                      Text(st.def.title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor)),
+                      const SizedBox(height: 3),
+                      Text(
+                        st.def.description,
+                        style: TextStyle(fontSize: 11, color: sub),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 12),
-
-                  // Action Button
-                  if (!st.claimed)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _navigateToTask(st.def.id),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandMain.withOpacity(0.1),
-                          foregroundColor: AppColors.brandMain,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.arrow_forward, size: 14),
-                        label: Text(
-                          _getButtonLabel(st.def.id),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-
-                  if (canClaim)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          HapticFeedback.heavyImpact();
-                          _confettiController.play();
-                          await AchievementService.claim(st.def.id);
-                          if (mounted) setState(() {});
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          elevation: 2,
-                        ),
-                        icon: const Icon(Icons.check, size: 16),
-                        label: const Text(
-                          "CLAIM REWARD",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                        ),
-                      ),
-                    ),
-
-                  if (st.claimed)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle, size: 14, color: Colors.green),
-                          SizedBox(width: 4),
-                          Text("COMPLETED", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
-                        ],
-                      ),
-                    ),
-                ],
+                ),
+                const SizedBox(width: 10),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
               ),
             ),
-
-            // Badge for reset period
-            if (st.def.resetPeriod != ResetPeriod.none)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: st.def.resetPeriod == ResetPeriod.daily ? Colors.green : Colors.blue,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    st.def.resetPeriod == ResetPeriod.daily ? "DAILY" : "WEEKLY",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 8,
-                      fontWeight: FontWeight.bold,
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 11, color: sub)),
+                const Spacer(),
+                if (canClaim)
+                  ElevatedButton(
+                    onPressed: () => _claim(st),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 1,
+                    ),
+                    child: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else if (!st.claimed)
+                  OutlinedButton(
+                    onPressed: () => _navigateToTask(st.def.id),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandMain,
+                      side: const BorderSide(color: AppColors.brandMain),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(999)),
+                    child: const Text(
+                      "COMPLETED",
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
-                ),
-              ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLockedCard(AchievementState st, bool isDark) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white10 : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Padding(
+  Widget _weeklyCard(AchievementState st, bool isDark) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200), width: canClaim ? 2 : 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 5))],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.lock_outline, color: Colors.grey, size: 24),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              st.def.title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "Unlocks at ${st.def.minPoints} XP",
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade500,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.lock, color: Colors.grey, size: 12),
-                  const SizedBox(width: 4),
-                  Text(
-                    "LOCKED",
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
-                    ),
+            Row(
+              children: [
+                _stars(3),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(st.def.title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor, fontSize: 16)),
+                      const SizedBox(height: 3),
+                      Text(st.def.description, style: TextStyle(fontSize: 12, color: sub)),
+                    ],
                   ),
-                ],
+                ),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 10,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.blue),
               ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 12, color: sub)),
+                const Spacer(),
+                if (canClaim)
+                  ElevatedButton.icon(
+                    onPressed: () => _claim(st),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else if (!st.claimed)
+                  OutlinedButton.icon(
+                    onPressed: () => _navigateToTask(st.def.id),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.arrow_forward, size: 18),
+                    label: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(999)),
+                    child: const Text("COMPLETED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  ),
+              ],
             ),
           ],
         ),
@@ -914,41 +780,164 @@ class _AchievementsTabState extends State<AchievementsTab> {
     );
   }
 
-  Widget _buildEmptyState(bool isDark) {
+  Widget _questGridCard(AchievementState st, bool isDark, int tier) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200), width: canClaim ? 2 : 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _stars(tier),
+                const Spacer(),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              st.def.title,
+              style: TextStyle(fontWeight: FontWeight.w900, color: textColor),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              st.def.description,
+              style: TextStyle(fontSize: 11, color: sub),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Spacer(),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (canClaim)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _claim(st),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )
+            else if (!st.claimed)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _navigateToTask(st.def.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandMain,
+                    side: const BorderSide(color: AppColors.brandMain),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                child: const Text("COMPLETED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyBox(bool isDark, String msg) {
     return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white10 : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        ),
+        child: Text(
+          msg,
+          style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+        ),
+      ),
+    );
+  }
+
+  Widget _stars(int tier) {
+    tier = tier.clamp(1, 3);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        final active = i < tier;
+        return Icon(
+          active ? Icons.star_rounded : Icons.star_border_rounded,
+          size: 18,
+          color: active ? Colors.amber : Colors.grey.withOpacity(0.5),
+        );
+      }),
+    );
+  }
+
+  Widget _xpPill(int xp) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.amber.withOpacity(0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _showCompleted ? Icons.emoji_events_outlined : Icons.rocket_launch,
-            size: 80,
-            color: Colors.grey.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _showCompleted ? "No achievements yet!" : "All quests completed!",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white60 : Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _showCompleted
-                ? "Complete tasks to earn achievements"
-                : "Great job! You've completed all available quests",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isDark ? Colors.white38 : Colors.grey[500],
-            ),
-          ),
+          const Icon(Icons.bolt, color: Colors.amber, size: 14),
+          const SizedBox(width: 5),
+          Text("+$xp", style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
         ],
       ),
     );
   }
 
-  // 🚀 Helper Methods
+  Future<void> _claim(AchievementState st) async {
+    HapticFeedback.heavyImpact();
+    _confettiController.play();
+    await AchievementService.claim(st.def.id);
+    if (mounted) setState(() {});
+  }
+
+  // -----------------------
+  // Existing task navigation
+  // -----------------------
   String _getButtonLabel(String id) {
     if (id.contains('portfolio') || id.contains('cv')) return "Upload Now";
     if (id.contains('job')) return "Post Job";
@@ -964,385 +953,116 @@ class _AchievementsTabState extends State<AchievementsTab> {
     if (uid == null) return;
 
     if (id.contains('portfolio') || id.contains('cv') || id.contains('upload')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => WorkerDocumentsScreen(uid: uid, isOwner: true),
-        ),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerDocumentsScreen(uid: uid, isOwner: true)));
     } else if (id.contains('job') || id.contains('post')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SupportPostScreen()),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportPostScreen()));
     } else if (id.contains('earn') || id.contains('pin')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const EarnPostScreen()),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
     } else if (id.contains('profile')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => UnifiedProfileEditScreen(uid: uid),
-        ),
-      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileEditScreen(uid: uid)));
     } else if (id.contains('login')) {
-      // Daily login - already handled by opening app
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Daily check-in recorded!")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Daily check-in recorded!")));
     } else if (id.contains('share')) {
-      // Share functionality
       _shareProfile();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Action not available")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Action not available")));
     }
   }
 
   void _shareProfile() {
-    // Implement share functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Share feature coming soon!")),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Share feature coming soon!")));
   }
 
+  // -----------------------
+  // Details bottom sheet
+  // -----------------------
   void _showAchievementDetails(AchievementState st) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => _buildAchievementDetails(st),
+      builder: (context) => _detailsSheet(st),
     );
   }
 
-  Widget _buildAchievementDetails(AchievementState st) {
+  Widget _detailsSheet(AchievementState st) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLocked = BadgeService.badgeNotifier.value.totalPoints < st.def.minPoints;
     final canClaim = st.isCompleted && !st.claimed;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(30),
-          topRight: Radius.circular(30),
-        ),
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(26), topRight: Radius.circular(26)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Achievement Icon
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: canClaim ? Colors.green.withOpacity(0.1) : AppColors.brandLight.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              canClaim ? Icons.redeem :
-              isLocked ? Icons.lock_outline :
-              Icons.emoji_events_rounded,
-              size: 40,
-              color: canClaim ? Colors.green : AppColors.brandMain,
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-      // Title
-      Text(
-        st.def.title,
-        style: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: isDark ? Colors.white : Colors.black,
-        ),
-        textAlign: TextAlign.center,
-      ),
-
-      const SizedBox(height: 10),
-
-      // Description
-      Text(
-        st.def.description,
-        style: TextStyle(
-          fontSize: 16,
-          color: isDark ? Colors.white60 : Colors.grey[600],
-        ),
-        textAlign: TextAlign.center,
-      ),
-
-      const SizedBox(height: 20),
-
-      // Stats
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? Colors.white10 : Colors.grey[50],
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildDetailStat("XP Reward", "+${st.def.xpReward}", Icons.bolt),
-            _buildDetailStat("Progress", "${st.progress}/${st.def.target}", Icons.timeline),
-            _buildDetailStat("Type",
-              st.def.resetPeriod == ResetPeriod.daily ? "Daily" :
-              st.def.resetPeriod == ResetPeriod.weekly ? "Weekly" : "One-time",
-              Icons.schedule,
-            ),
-          ],
-        ),
-      ),
-
-      const SizedBox(height: 20),
-
-      // Progress Bar
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-        Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-        Text(
-        "Progress",
-        style: TextStyle(
-          fontSize: 14,
-          color: isDark ? Colors.white60 : Colors.grey[600],
-        ),
-      ),
-      Text(
-        "${((st.progress / st.def.target) * 100).toStringAsFixed(0)}%",
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: isDark ? Colors.white : Colors.black,
-        ),
-      ),
-        ],
-        ),
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Text(st.def.title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black)),
           const SizedBox(height: 8),
+          Text(st.def.description, style: TextStyle(color: isDark ? Colors.white60 : Colors.black54), textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          _xpPill(st.def.xpReward),
+          const SizedBox(height: 16),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
-              value: (st.progress / st.def.target).clamp(0.0, 1.0),
+              value: pct,
               minHeight: 12,
-              backgroundColor: isDark ? Colors.white10 : Colors.grey[200],
-              valueColor: AlwaysStoppedAnimation(
-                canClaim ? Colors.green : AppColors.brandMain,
-              ),
+              backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "${st.progress} completed",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : Colors.grey[600],
-                ),
-              ),
-              Text(
-                "${st.def.target - st.progress} remaining",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : Colors.grey[600],
-                ),
-              ),
+              Text("${st.progress}/${st.def.target}", style: TextStyle(color: isDark ? Colors.white60 : Colors.black54)),
+              const Spacer(),
+              Text("${(pct * 100).toStringAsFixed(0)}%", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
             ],
           ),
-        ],
-      ),
-
-          const SizedBox(height: 20),
-
-          // Requirements
-          if (st.def.minPoints > 0)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.white10 : Colors.grey[50],
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.lock_outline,
-                    color: isLocked ? Colors.orange : Colors.green,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      isLocked
-                          ? "Requires ${st.def.minPoints} XP to unlock"
-                          : "Unlocked at ${st.def.minPoints} XP",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isDark ? Colors.white70 : Colors.grey[700],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 20),
-
-          // Action Buttons
-          if (isLocked)
+          const SizedBox(height: 16),
+          if (canClaim)
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // Navigate to XP earning tasks
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.withOpacity(0.1),
-                  foregroundColor: Colors.orange,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                ),
-                icon: const Icon(Icons.bolt),
-                label: const Text(
-                  "EARN MORE XP TO UNLOCK",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            )
-          else if (canClaim)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
+              child: ElevatedButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  HapticFeedback.heavyImpact();
-                  _confettiController.play();
-                  await AchievementService.claim(st.def.id);
-                  if (mounted) setState(() {});
+                  await _claim(st);
                 },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                ),
-                icon: const Icon(Icons.check),
-                label: Text(
-                  "CLAIM ${st.def.xpReward} XP REWARD", // ✅ const সরিয়ে দিন
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                child: const Text("CLAIM REWARD", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             )
           else if (!st.claimed)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _navigateToTask(st.def.id);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandMain,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  icon: const Icon(Icons.arrow_forward),
-                  label: Text(
-                    _getButtonLabel(st.def.id),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.green.withOpacity(0.3)),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text(
-                      "ACHIEVEMENT COMPLETED",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _navigateToTask(st.def.id);
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain, foregroundColor: Colors.white),
+                child: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
-
-          const SizedBox(height: 10),
-
-          // Close Button
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              "CLOSE",
-              style: TextStyle(
-                color: isDark ? Colors.white60 : Colors.grey[600],
-                fontWeight: FontWeight.bold,
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+              child: const Center(
+                child: Text("COMPLETED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text("CLOSE", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54))),
         ],
       ),
-    );
-  }
-
-  Widget _buildDetailStat(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.brandMain, size: 20),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
-        ),
-      ],
     );
   }
 
@@ -1350,66 +1070,420 @@ class _AchievementsTabState extends State<AchievementsTab> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Achievements Guide"),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildInfoItem("🎯 Daily Quests", "Reset every day, easy XP"),
-              _buildInfoItem("📅 Weekly Challenges", "Reset every week, bigger rewards"),
-              _buildInfoItem("🏆 One-time Achievements", "Permanent, huge XP boosts"),
-              _buildInfoItem("🔓 Locked Achievements", "Require minimum XP to unlock"),
-              _buildInfoItem("⚡ XP Rewards", "Earn XP to level up your badge"),
-              _buildInfoItem("✅ Progress Tracking", "Track your completion status"),
-              const SizedBox(height: 16),
-              const Text(
-                "Complete tasks to earn XP and level up your badge!",
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
+        title: const Text("Quest Guide"),
+        content: const Text(
+          "Daily Board: 5 core quests + 2 bonus\n"
+              "Weekly Big Mission: big reward, resets weekly\n"
+              "Long-term: permanent missions\n\n"
+              "Complete quests → claim XP → level up.",
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("GOT IT"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
         ],
       ),
     );
   }
 
-  Widget _buildInfoItem(String title, String description) {
+  List<AchievementState> _dailyCore() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final list = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.daily)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    list.sort((a, b) {
+      final aClaimable = a.isCompleted && !a.claimed;
+      final bClaimable = b.isCompleted && !b.claimed;
+      if (aClaimable != bClaimable) return aClaimable ? -1 : 1;
+
+      final aPct = a.def.target == 0 ? 0.0 : a.progress / a.def.target;
+      final bPct = b.def.target == 0 ? 0.0 : b.progress / b.def.target;
+      return bPct.compareTo(aPct);
+    });
+
+    return list.take(5).toList();
+  }
+
+  List<AchievementState> _dailyBonus() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final list = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.daily)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    list.sort((a, b) {
+      final aClaimable = a.isCompleted && !a.claimed;
+      final bClaimable = b.isCompleted && !b.claimed;
+      if (aClaimable != bClaimable) return aClaimable ? -1 : 1;
+
+      final aPct = a.def.target == 0 ? 0.0 : a.progress / a.def.target;
+      final bPct = b.def.target == 0 ? 0.0 : b.progress / b.def.target;
+      return bPct.compareTo(aPct);
+    });
+
+    return list.skip(5).take(2).toList();
+  }
+
+  AchievementState? _weeklyBigMissionPick() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final weekly = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.weekly)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    if (weekly.isEmpty) return null;
+
+    weekly.sort((a, b) {
+      final aClaimable = a.isCompleted && !a.claimed;
+      final bClaimable = b.isCompleted && !b.claimed;
+      if (aClaimable != bClaimable) return aClaimable ? -1 : 1;
+      return b.def.xpReward.compareTo(a.def.xpReward);
+    });
+
+    return weekly.first;
+  }
+
+  List<AchievementState> _longTermPick() {
+    final points = BadgeService.badgeNotifier.value.totalPoints;
+
+    final onetime = AchievementService.getAllForUser(isWorker: _isWorker, currentPoints: points)
+        .where((st) => st.def.resetPeriod == ResetPeriod.none)
+        .where((st) => _showCompleted ? st.claimed : !st.claimed)
+        .toList();
+
+    onetime.sort((a, b) {
+      final aClaimable = a.isCompleted && !a.claimed;
+      final bClaimable = b.isCompleted && !b.claimed;
+      if (aClaimable != bClaimable) return aClaimable ? -1 : 1;
+      if (a.claimed != b.claimed) return a.claimed ? 1 : -1;
+      return a.def.minPoints.compareTo(b.def.minPoints);
+    });
+
+    return onetime;
+  }
+
+
+  Widget _buildBoardEmpty(bool isDark, String msg) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                Text(
-                  description,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white10 : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        ),
+        child: Text(msg, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54)),
       ),
     );
   }
+
+
+  Widget _buildQuestRowCard(AchievementState st, bool isDark, {required int starTier}) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200),
+            width: canClaim ? 2 : 1,
+          ),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                _stars(starTier),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(st.def.title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor)),
+                      const SizedBox(height: 3),
+                      Text(
+                        st.def.description,
+                        style: TextStyle(fontSize: 11, color: sub),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 11, color: sub)),
+                const Spacer(),
+                if (canClaim)
+                  ElevatedButton(
+                    onPressed: () async {
+                      HapticFeedback.heavyImpact();
+                      _confettiController.play();
+                      await AchievementService.claim(st.def.id);
+                      if (mounted) setState(() {});
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 1,
+                    ),
+                    child: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else if (!st.claimed)
+                  OutlinedButton(
+                    onPressed: () => _navigateToTask(st.def.id),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandMain,
+                      side: const BorderSide(color: AppColors.brandMain),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(999)),
+                    child: const Text(
+                      "COMPLETED",
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyCard(AchievementState st, bool isDark) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200), width: canClaim ? 2 : 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 5))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _stars(3),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(st.def.title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor, fontSize: 16)),
+                      const SizedBox(height: 3),
+                      Text(st.def.description, style: TextStyle(fontSize: 12, color: sub)),
+                    ],
+                  ),
+                ),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 10,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : Colors.blue),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text("${st.progress}/${st.def.target}", style: TextStyle(fontSize: 12, color: sub)),
+                const Spacer(),
+                if (canClaim)
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      HapticFeedback.heavyImpact();
+                      _confettiController.play();
+                      await AchievementService.claim(st.def.id);
+                      if (mounted) setState(() {});
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else if (!st.claimed)
+                  OutlinedButton.icon(
+                    onPressed: () => _navigateToTask(st.def.id),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.arrow_forward, size: 18),
+                    label: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(999)),
+                    child: const Text("COMPLETED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuestGridCard(AchievementState st, bool isDark, int tier) {
+    final canClaim = st.isCompleted && !st.claimed;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final sub = isDark ? Colors.white60 : Colors.black54;
+
+    final pct = st.def.target == 0 ? 0.0 : (st.progress / st.def.target).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetails(st),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: canClaim ? Colors.green : (isDark ? Colors.white10 : Colors.grey.shade200), width: canClaim ? 2 : 1),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _stars(tier),
+                const Spacer(),
+                _xpPill(st.def.xpReward),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              st.def.title,
+              style: TextStyle(fontWeight: FontWeight.w900, color: textColor),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              st.def.description,
+              style: TextStyle(fontSize: 11, color: sub),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Spacer(),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(canClaim ? Colors.green : AppColors.brandMain),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (canClaim)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    HapticFeedback.heavyImpact();
+                    _confettiController.play();
+                    await AchievementService.claim(st.def.id);
+                    if (mounted) setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: const Text("CLAIM", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )
+            else if (!st.claimed)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _navigateToTask(st.def.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandMain,
+                    side: const BorderSide(color: AppColors.brandMain),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                  child: Text(_getButtonLabel(st.def.id), style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                child: const Text("COMPLETED", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
 }

@@ -261,12 +261,14 @@ class PendingJobsScreen extends StatelessWidget {
 
         supporterId = (data['senderId'] ?? '').toString();
 
+        // 1. Update Hire Request Status
         tx.update(doc.reference, {
           'status': DashboardConstants.ongoingStatus,
           'approvedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
+        // 2. Create Ongoing Job Entry
         final ongoingRef = FirebaseFirestore.instance.collection('ongoing_jobs').doc(doc.id);
         tx.set(ongoingRef, {
           'participants': [finderId, supporterId],
@@ -280,8 +282,24 @@ class PendingJobsScreen extends StatelessWidget {
           'originalRequestId': doc.id,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+
+        // 3. Update User Stats (Hire Count)
+        if (supporterId.isNotEmpty) {
+          // ✅ Increment supporter hiresCount (Hire-based Trusted denominator)
+          final supporterStatsRef = FirebaseFirestore.instance.collection('user_stats').doc(supporterId);
+
+          tx.set(
+            supporterStatsRef,
+            {
+              'hiresCount': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+        }
       });
 
+      // Send Notification
       if (supporterId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('notifications').add({
           'toUserId': supporterId,

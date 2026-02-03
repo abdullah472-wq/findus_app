@@ -44,6 +44,9 @@ import 'followers_following_screen.dart';
 enum ProfileMenuOwner { edit, shareProfile, previewPublicCard, lockAccount, theme, hideProfile, pauseWork }
 enum ProfileMenuOther { report, block }
 
+StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userStatsSub;
+Map<String, dynamic> userStats = {};
+
 class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   // Streams
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
@@ -106,6 +109,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     _notifSub?.cancel();
     BadgeService.badgeNotifier.removeListener(_badgeListener);
     _userSub?.cancel();
+    _userStatsSub?.cancel();
     super.dispose();
   }
 
@@ -126,6 +130,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   late VoidCallback _badgeListener;
 
   void _listenToUserData() {
+    _listenToUserStats();
     _userSub?.cancel();
     _userSub = FirebaseFirestore.instance.collection('users').doc(widget.uid).snapshots().listen((snap) {
       if (!snap.exists || !mounted) return;
@@ -148,6 +153,20 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       });
     }, onError: (_) {
       if (mounted) setState(() => isLoading = false);
+    });
+  }
+
+  void _listenToUserStats() {
+    _userStatsSub?.cancel();
+    _userStatsSub = FirebaseFirestore.instance
+        .collection('user_stats')
+        .doc(widget.uid)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      setState(() {
+        userStats = snap.data() ?? {};
+      });
     });
   }
 
@@ -451,8 +470,38 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
     // ৩. স্ট্যাটাস লজিক
     final bool isVerified = userData['kyc_completed'] == true;
-    final bool isTopRated = rating >= 4.8;
-    final bool isTrusted = completed >= 50 && rating >= 4.5;
+
+    final double avgRating = (userStats['avgRating'] is num)
+        ? (userStats['avgRating'] as num).toDouble()
+        : double.tryParse((userStats['avgRating'] ?? '0').toString()) ?? 0.0;
+
+    final int reviewsCount = (userStats['reviewsCount'] is num)
+        ? (userStats['reviewsCount'] as num).toInt()
+        : int.tryParse((userStats['reviewsCount'] ?? '0').toString()) ?? 0;
+
+    final bool isTopRated = avgRating >= 4.8 && reviewsCount >= 10;
+
+// role detect
+    final bool isFinder = _isWorkerRole(); // তোমার naming অনুযায়ী finder=true
+
+    final int hiresCount = (userStats['hiresCount'] ?? 0) is num
+        ? (userStats['hiresCount'] as num).toInt()
+        : int.tryParse((userStats['hiresCount'] ?? '0').toString()) ?? 0;
+
+    final int hiresCompleted = (userStats['hiresCompleted'] ?? 0) is num
+        ? (userStats['hiresCompleted'] as num).toInt()
+        : int.tryParse((userStats['hiresCompleted'] ?? '0').toString()) ?? 0;
+
+    final int jobsCompleted = (userStats['jobsCompleted'] ?? 0) is num
+        ? (userStats['jobsCompleted'] as num).toInt()
+        : int.tryParse((userStats['jobsCompleted'] ?? '0').toString()) ?? 0;
+
+    final double hireSuccessRate = hiresCount > 0 ? (hiresCompleted / hiresCount) : 0.0;
+
+// Trusted logic
+    final bool isTrusted = isFinder
+        ? (jobsCompleted >= 50) // এখন milestone-based (পরে successRate add করতে পারবে)
+        : (hiresCount >= 20 && hireSuccessRate >= 0.90);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

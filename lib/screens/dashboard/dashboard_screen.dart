@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
 
 // Widgets
@@ -18,11 +20,22 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final String _uid = FirebaseAuth.instance.currentUser!.uid;
+  final String _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   Future<void> _refreshData() async {
     setState(() {});
     await Future.delayed(const Duration(seconds: 1));
+  }
+
+  // ✅ Role fetch (finder / maker)
+  Future<String> _getUserRole() async {
+    if (_uid.isEmpty) return 'finder';
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(_uid).get();
+      return (doc.data()?['userRole'] ?? 'finder').toString().toLowerCase();
+    } catch (_) {
+      return 'finder';
+    }
   }
 
   @override
@@ -31,28 +44,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final textColor = isDark ? Colors.white : AppColors.brandDark;
 
+    if (_uid.isEmpty) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: const Center(child: Text("Please login again")),
+      );
+    }
+
     return Scaffold(
       backgroundColor: bgColor,
       body: Stack(
         children: [
-          // ✅ মেইন কন্টেন্ট
           RefreshIndicator(
             onRefresh: _refreshData,
             child: ListView(
-              padding: const EdgeInsets.only(top: 80, left: 16, right: 16, bottom: 100), // উপরে বাটনের জন্য জায়গা রাখা হয়েছে
+              padding: const EdgeInsets.only(top: 80, left: 16, right: 16, bottom: 100),
               physics: const BouncingScrollPhysics(),
               children: [
-                // ১. পারফরম্যান্স কার্ড
-                PerformanceCard(userId: _uid),
+                // ✅ ১) PerformanceCard with role
+                FutureBuilder<String>(
+                  future: _getUserRole(),
+                  builder: (context, snap) {
+                    final role = snap.data ?? 'finder'; // 'finder' or 'maker'
+                    return PerformanceCard(
+                      userId: _uid,
+                      userRole: role,
+                    );
+                  },
+                ),
 
                 const SizedBox(height: 25),
 
-                // ২. ওয়ার্ক সামারি
+                // ✅ ২) Work summary
                 WorkSummarySection(userId: _uid),
 
                 const SizedBox(height: 25),
 
-                // ৩. পোস্ট করা পিন লিস্ট
+                // ✅ ৩) Posted pins
                 Text(
                   "Your Posted Pins",
                   style: TextStyle(
@@ -67,16 +95,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
 
-          // ✅ ফ্লোটিং বাটনস (উপরে ডান কোণায়)
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             right: 16,
             child: Column(
               children: [
-                // ২. অ্যানালিটিক্স বাটন
                 _buildFloatingButton(
                   icon: Icons.analytics_outlined,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsScreen())),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+                  ),
                   isDark: isDark,
                   hasBadge: false,
                 ),
@@ -88,7 +117,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ✅ ফ্লোটিং বাটন উইজেট
   Widget _buildFloatingButton({
     required IconData icon,
     required VoidCallback onTap,

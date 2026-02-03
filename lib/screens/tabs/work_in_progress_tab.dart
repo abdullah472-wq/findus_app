@@ -19,7 +19,6 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
-  // ✅ সেইফ কনভার্সন ফাংশন
   double _asDouble(dynamic v, {double fallback = 0.0}) {
     if (v == null) return fallback;
     if (v is num) return v.toDouble();
@@ -57,7 +56,6 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           final err = snapshot.error.toString();
-          // ইনডেক্সিং এরর হ্যান্ডলিং
           if (err.contains('FAILED_PRECONDITION') || err.contains('index')) {
             return Center(
               child: Padding(
@@ -114,14 +112,13 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         required String docId,
         required String currentUid,
       }) {
-    final receiverId = _s(data['receiverId']).trim();
-    final workerId = _s(data['workerId']).trim();
+    final receiverId = _s(data['receiverId']).trim(); // finder
+    final workerId = _s(data['workerId']).trim(); // supporter (naming legacy)
     final participants = (data['participants'] is List) ? List.from(data['participants']) : <dynamic>[];
 
     final otherUserId = (currentUid == workerId) ? receiverId : workerId;
     final bool canComplete = currentUid == receiverId;
 
-    // ডিফল্ট ভ্যালু হ্যান্ডলিং
     final String otherNameFromDoc = (currentUid == workerId) ? _s(data['receiverName']) : _s(data['workerName']);
     final String otherImageFromDoc = (currentUid == workerId) ? _s(data['receiverImage']) : _s(data['workerImage']);
     final String otherRoleFromDoc = (currentUid == workerId) ? _s(data['receiverRole']) : _s(data['workerRole']);
@@ -145,12 +142,11 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         String role = otherRoleFromDoc.isNotEmpty ? otherRoleFromDoc : 'User';
         String imageUrl = otherImageFromDoc;
 
-        // যদি ইউজারের আপডেট করা ডাটা পাওয়া যায়
         if (snap.data != null && snap.data!.exists) {
           final u = snap.data!.data() ?? {};
           name = _s(u['name'], name);
           role = _s(u['userRole'], role);
-          imageUrl = _s(u['image'], imageUrl); // 'image' or 'imageUrl'
+          imageUrl = _s(u['image'], imageUrl);
         }
 
         return Container(
@@ -159,11 +155,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
             borderRadius: BorderRadius.circular(16),
             color: Theme.of(context).cardColor,
             boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
             ],
           ),
           child: Column(
@@ -172,7 +164,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                 id: otherUserId,
                 name: name,
                 role: role,
-                imageUrl: imageUrl.isNotEmpty ? imageUrl : 'https://i.pravatar.cc/150', // ডিফল্ট ইমেজ
+                imageUrl: imageUrl.isNotEmpty ? imageUrl : 'https://i.pravatar.cc/150',
                 address: location,
                 rating: ratingStr,
                 completed: completedCount.toString(),
@@ -187,22 +179,16 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
                 ),
-
                 onTap: () {
                   if (otherUserId.isNotEmpty) {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => UnifiedProfileScreen(
-                          uid: otherUserId,
-                          isOwner: false,
-                          showBack: true,
-                        ),
+                        builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false, showBack: true),
                       ),
                     );
                   }
                 },
-
                 onChatTap: () async {
                   if (otherUserId.isEmpty) return;
 
@@ -213,10 +199,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                   );
 
                   try {
-                    final convId = await FirestoreChatService.getOrCreateConversation(
-                      otherUserId: otherUserId,
-                    );
-
+                    final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUserId);
                     if (!context.mounted) return;
                     Navigator.pop(context);
 
@@ -231,12 +214,11 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                         ),
                       ),
                     );
-                  } catch (e) {
+                  } catch (_) {
                     if (context.mounted) Navigator.pop(context);
                   }
                 },
               ),
-
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: ElevatedButton(
@@ -247,16 +229,13 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                     receiverId: receiverId,
                     workerId: workerId,
                     participants: participants,
-                    jobData: data,
                   )
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: canComplete ? AppColors.brandMain : Colors.grey.shade400,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
                   ),
                   child: Row(
@@ -290,15 +269,12 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         required String receiverId,
         required String workerId,
         required List participants,
-        required Map<String, dynamic> jobData,
       }) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
     if (currentUser.uid != receiverId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Only Finder can complete this job.")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Only Finder can complete this job.")));
       return;
     }
 
@@ -315,10 +291,10 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           ),
         ],
       ),
-    ) ?? false;
+    ) ??
+        false;
 
     if (!confirm) return;
-
 
     showDialog(
       context: context,
@@ -329,7 +305,9 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
     try {
       final ongoingRef = _firestore.collection('ongoing_jobs').doc(jobId);
       final completedRef = _firestore.collection('completed_jobs').doc(jobId);
-      final requestRef = _firestore.collection('hire_requests').doc(jobId); // if you used same id
+
+      // may or may not exist -> use set(merge:true) to avoid transaction failure
+      final requestRef = _firestore.collection('hire_requests').doc(jobId);
 
       await _firestore.runTransaction((tx) async {
         final snap = await tx.get(ongoingRef);
@@ -345,47 +323,81 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           throw Exception('Job is not ongoing');
         }
 
-        final List parts = (data['participants'] is List) ? List.from(data['participants']) : participants;
+        final List parts = (data['participants'] is List) ? List.from(data['participants']) : List.from(participants);
         if (parts.isEmpty) {
-          // fallback
           parts.addAll([receiverId, workerId]);
         }
 
-        // 1) update ongoing job -> completed (so it disappears from this tab)
+        // 1) update ongoing -> completed
         tx.update(ongoingRef, {
           'status': 'completed',
           'endTime': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 2) create completed history for BOTH participants
-        tx.set(completedRef, {
-          'participants': parts,
-          'receiverId': receiverId,
-          'workerId': workerId,
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-          'completedBy': currentUser.uid,
-          'originalRequestId': _s(data['originalRequestId'], jobId),
+        // 2) create completed history
+        tx.set(
+          completedRef,
+          {
+            'participants': parts,
+            'receiverId': receiverId,
+            'workerId': workerId,
+            'status': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+            'completedBy': currentUser.uid,
+            'originalRequestId': _s(data['originalRequestId'], jobId),
+            'updatedAt': FieldValue.serverTimestamp(),
 
-          // optional fields for UI
-          'price': data['price'] ?? data['offerPrice'],
-          'location': data['location'],
-          'workerName': data['workerName'],
-          'workerImage': data['workerImage'],
-          'receiverName': data['receiverName'],
-          'receiverImage': data['receiverImage'],
-        }, SetOptions(merge: true));
+            // optional fields for UI
+            'price': data['price'] ?? data['offerPrice'],
+            'offerPrice': data['offerPrice'],
+            'location': data['location'],
+            'workerName': data['workerName'],
+            'workerImage': data['workerImage'],
+            'receiverName': data['receiverName'],
+            'receiverImage': data['receiverImage'],
+            'workerRole': data['workerRole'],
+            'receiverRole': data['receiverRole'],
+          },
+          SetOptions(merge: true),
+        );
 
-        // 3) optional: hire_requests status completed (if you keep same id)
-        tx.update(requestRef, {
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+        // 3) safe update hire_requests status (no crash if missing)
+        tx.set(
+          requestRef,
+          {
+            'status': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        // ✅ 4) Update user_stats
+        // workerId is supporterId in your current schema
+        final supporterStatsRef = _firestore.collection('user_stats').doc(workerId);
+        final finderStatsRef = _firestore.collection('user_stats').doc(receiverId);
+
+        tx.set(
+          supporterStatsRef,
+          {
+            'hiresCompleted': FieldValue.increment(1),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        tx.set(
+          finderStatsRef,
+          {
+            'jobsCompleted': FieldValue.increment(1),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
       });
 
-      // 4) notify supporter
+      // notify supporter
       if (workerId.isNotEmpty) {
         await _firestore.collection('notifications').add({
           'toUserId': workerId,
@@ -400,22 +412,16 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
       }
 
       if (!context.mounted) return;
-      Navigator.pop(context); // close loading
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Job marked as completed!"),
-          backgroundColor: Colors.green,
-        ),
+        const SnackBar(content: Text("Job marked as completed!"), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (context.mounted) {
-        Navigator.pop(context); // close loading
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: $e"),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
         );
       }
     }
