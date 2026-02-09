@@ -2,11 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore লাগতবে Worker আপডেট করার জন্য
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/services/review_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
+
+// ✅ Services Import
+import 'package:findus_app/achievement/achievement_service.dart'; // কুয়েস্টের জন্য
+import 'package:findus_app/badge/badge_service.dart'; // আমার নিজের XP এর জন্য
 
 class ReviewScreen extends StatefulWidget {
   final String workerId;
@@ -67,6 +72,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
         fullComment += "\n\nFeedback: ${_selectedTags.join(', ')}";
       }
 
+      // 1. Submit Review (সাধারণ রিভিউ ডাটাবেসে সেভ)
       await ReviewService.addReview(
         targetUserId: widget.workerId,
         postId: widget.postId,
@@ -77,14 +83,46 @@ class _ReviewScreenState extends State<ReviewScreen> {
         isAnonymous: false,
       );
 
+      // 2. Send Notification
       final myUid = FirebaseAuth.instance.currentUser?.uid;
       await NotificationService.sendNotification(
         toUserId: widget.workerId,
         fromUserId: myUid ?? 'system',
         title: "New Review Received! ⭐",
-        body: "You received a ${_rating.toStringAsFixed(1)} star review for your work.",
+        body: "You received a ${_rating.toStringAsFixed(1)} star review!",
         type: "review",
       );
+
+      // ============================================================
+      // 🔥🔥 NEW BADGE LOGIC IMPLEMENTATION 🔥🔥
+      // ============================================================
+
+      // A. WORKER UPDATE (যাকে রিভিউ দিলেন):
+      // তার 'totalStars' বা 'accumulated_stars' ফিল্ডে রেটিং যোগ হবে।
+      // সে যখন অ্যাপ ওপেন করবে, BadgeService এই ডাটা পড়ে তার ব্যাজ (Bronze/Gold) আপডেট করবে।
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(widget.workerId).update({
+          // এখানে rating সরাসরি যোগ হবে (যেমন: 4.5 বা 5)
+          // 'user_accumulated_stars' নামটি BadgeService এর _starsKey এর সাথে মিল রাখতে হবে যদি সার্ভার সিঙ্ক থাকে
+          'user_accumulated_stars': FieldValue.increment(_rating),
+          'rating_count': FieldValue.increment(1),
+        });
+        debugPrint("✅ Worker's Accumulated Stars Updated by +$_rating");
+      } catch (e) {
+        debugPrint("Failed to update worker stats: $e");
+      }
+
+      // B. REVIEWER UPDATE (আপনি):
+      // ১. রিভিউ দেওয়ার জন্য আপনি কিছু XP পাবেন (লেভেল ১-১০০ বাড়ার জন্য)
+      await BadgeService.addXP(50);
+
+      // ২. ডেইলি কুয়েস্ট বা অ্যাচিভমেন্ট আপডেট (যদি থাকে)
+      await AchievementService.incrementProgress('daily_review', amount: 1);
+      await AchievementService.syncWeeklyChestFromServer();
+
+      debugPrint("🏆 Reviewer rewarded with XP & Quest Progress");
+
+      // ============================================================
 
       if (!mounted) return;
       _showSnack("Review submitted successfully!", Colors.green);
@@ -102,7 +140,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড ভেরিয়েবলস
+    // UI ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;

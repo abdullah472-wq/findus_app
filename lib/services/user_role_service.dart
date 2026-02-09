@@ -39,8 +39,9 @@ class UserRoleService {
 
   /// রোল চেক করার হেল্পার
   static bool isFinder(String role) {
-    return role.toLowerCase() == 'finder';
+    return role.toLowerCase() == 'worker' || role.toLowerCase() == 'finder';
   }
+
 
   static bool isMaker(String role) {
     return role.toLowerCase() == 'maker';

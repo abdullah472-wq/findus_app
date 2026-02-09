@@ -32,17 +32,14 @@ import 'localization/app_localizations_delegate.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // গ্লোবাল এরর হ্যান্ডলিং
   FlutterError.onError = (details) {
     log("Flutter Error: ${details.exception}", stackTrace: details.stack);
   };
 
-  // শুধুমাত্র পোর্ট্রেট মোড
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
 
-  // সেইফ জোন এক্সিকিউশন
   runZonedGuarded(() async {
     try {
       try {
@@ -78,26 +75,67 @@ Future<void> main() async {
   });
 }
 
-// প্যারালাল সার্ভিস ইনিশিয়ালাইজেশন (ফাস্ট স্টার্টআপের জন্য)
 Future<void> _initializeAllServices() async {
   try {
+    log("Starting service initialization...");
+
     await Future.wait([
       ThemeService.loadTheme(),
       AppConfigService.init(),
-      BadgeService.init(),
       PushNotificationService.init(),
     ]).timeout(const Duration(seconds: 5));
+
+    await BadgeService.init();
+    log("BadgeService initialized");
+
+    await AchievementService.init();
+    log("AchievementService initialized");
 
     await Future.wait([
       ProfileStatusService.init(),
       SavedService.init(),
-      AchievementService.init(),
       BlockedUserService().syncWithFirestore(),
     ]).timeout(const Duration(seconds: 5));
 
     log("All services initialized successfully");
   } catch (e) {
     log("Service Init Warning: $e");
+    await _sequentialInitializeServices();
+  }
+}
+
+Future<void> _sequentialInitializeServices() async {
+  try {
+    log("Trying sequential initialization...");
+
+    await ThemeService.loadTheme();
+    log("ThemeService initialized");
+
+    await AppConfigService.init();
+    log("AppConfigService initialized");
+
+    await BadgeService.init();
+    log("BadgeService initialized");
+
+    await AchievementService.init();
+    log("AchievementService initialized");
+
+    await PushNotificationService.init();
+    log("PushNotificationService initialized");
+
+    await ProfileStatusService.init();
+    log("ProfileStatusService initialized");
+
+    await SavedService.init();
+    log("SavedService initialized");
+
+    await BlockedUserService().syncWithFirestore();
+    log("BlockedUserService initialized");
+
+    log("Sequential initialization completed successfully");
+  } catch (e) {
+    log("Sequential initialization failed: $e");
+    throw e;
   }
 }
 
@@ -109,20 +147,57 @@ class FindUsApp extends StatefulWidget {
 }
 
 class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
+  bool _servicesInitialized = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _checkServices();
+  }
+
+  void _checkServices() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final achievements = AchievementService.achievementsNotifier.value;
+        log("Achievements loaded: ${achievements.length}");
+
+        final badgeProgress = BadgeService.badgeNotifier.value;
+        // ✅ FIX: totalPoints -> totalXP
+        log("Badge points: ${badgeProgress.totalXP}");
+
+        setState(() {
+          _servicesInitialized = true;
+        });
+      } catch (e) {
+        log("Error checking services: $e");
+        await _retryServices();
+      }
+    });
+  }
+
+  Future<void> _retryServices() async {
+    try {
+      log("Retrying service initialization...");
+      await AchievementService.init();
+      await BadgeService.init();
+      setState(() {
+        _servicesInitialized = true;
+      });
+      log("Services re-initialized successfully");
+    } catch (e) {
+      log("Failed to re-initialize services: $e");
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // ✅ FIX: BadgeService.dispose() called only if method exists
+    BadgeService.dispose();
     super.dispose();
   }
 
-  // সিস্টেম থিম পরিবর্তনের লিসেনার
   @override
   void didChangePlatformBrightness() {
     ThemeService.onSystemThemeChanged();
@@ -138,24 +213,19 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
       builder: (context, themeSettings, _) {
         final isDark = themeSettings.isDarkMode;
 
-        // ✅ স্ট্যাটাস বার কালার কনফিগারেশন (মডার্ন লুক)
         SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-          systemNavigationBarColor: isDark ? const Color(0xFF1A1A1A) : Colors.white, // নিচে নেভিগেশন বার কালার ম্যাচিং
+          systemNavigationBarColor: isDark ? const Color(0xFF1A1A1A) : Colors.white,
           systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
         ));
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'FINDUS',
-
-          // থিম মোড
           themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
           theme: _getTheme(false, themeSettings),
           darkTheme: _getTheme(true, themeSettings),
-
-          // লোকালাইজেশন
           locale: localizationWrapper.locale,
           supportedLocales: const [
             Locale('en', 'US'),
@@ -167,12 +237,18 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-
           home: const MySplashScreen(),
-
-          // ডাইনামিক ফন্ট স্কেলিং
           builder: (context, child) {
             final mediaQuery = MediaQuery.of(context);
+
+            if (!_servicesInitialized && child is! MySplashScreen) {
+              return const Material(
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
             return MediaQuery(
               data: mediaQuery.copyWith(
                 textScaler: TextScaler.linear(themeSettings.fontSize),
@@ -185,13 +261,11 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
     );
   }
 
-  // ✅ থিম মেথড (কালার ম্যাচিং আপডেট করা হয়েছে)
   ThemeData _getTheme(bool isDark, ThemeSettings settings) {
     final primaryColor = settings.isHighContrast
         ? (isDark ? Colors.white : Colors.black)
-        : const Color(0xFF38B6FF); // AppColors.brandMain
+        : const Color(0xFF38B6FF);
 
-    // ✅ ডার্ক মোডের জন্য সেইম কালার ব্যবহার করা হয়েছে যা Settings/Subscription পেজে ছিল
     final scaffoldBg = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final appBarBg = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
 
@@ -200,9 +274,7 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
       brightness: isDark ? Brightness.dark : Brightness.light,
       fontFamily: 'Poppins',
       colorSchemeSeed: primaryColor,
-
       scaffoldBackgroundColor: scaffoldBg,
-
       appBarTheme: AppBarTheme(
         centerTitle: false,
         elevation: 0,
@@ -216,12 +288,9 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
           fontWeight: FontWeight.w600,
         ),
       ),
-
       cardTheme: isDark
           ? AppCardThemes.darkCardTheme
           : AppCardThemes.lightCardTheme,
-
-      // বাটন থিম
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.brandMain,
@@ -234,7 +303,6 @@ class _FindUsAppState extends State<FindUsApp> with WidgetsBindingObserver {
   }
 }
 
-// গ্লোবাল এরর স্ক্রিন
 class _ErrorApp extends StatelessWidget {
   const _ErrorApp();
 

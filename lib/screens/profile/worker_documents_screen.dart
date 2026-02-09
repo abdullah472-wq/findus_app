@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
@@ -168,6 +169,9 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         SetOptions(merge: true),
       );
 
+// ✅ add this
+      await AchievementService.syncProfileChainFromUserDoc(uid: widget.uid);
+
       if (!mounted) return;
       setState(() {
         _cvUrl = url;
@@ -287,6 +291,8 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         'portfolioUrls': FieldValue.arrayUnion(newUrls),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      // ✅ Sync profile long-term chain (stage-3) after CV upload
+      await AchievementService.syncProfileChainFromUserDoc(uid: widget.uid);
 
       if (!mounted) return;
       setState(() {

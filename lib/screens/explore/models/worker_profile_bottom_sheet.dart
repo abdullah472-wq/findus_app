@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:findus_app/constants/app_colors.dart';
 
+import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/services/saved_service.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/profile/worker_job_details_screen.dart';
-import 'package:findus_app/screens/profile/job_post_gate_screen.dart';
 import 'package:findus_app/services/profile_lock_service.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 
@@ -26,7 +25,7 @@ Future<void> showWorkerProfileBottomSheet({
   bool isSaved = SavedService.isSaved(data);
   final NavigatorState rootNav = Navigator.of(context, rootNavigator: true);
 
-  // ✅ লগইন চেক হেল্পার
+  // ✅ login check helper
   bool checkLogin(BuildContext ctx) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -44,7 +43,7 @@ Future<void> showWorkerProfileBottomSheet({
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(dialogCtx);
-                Navigator.pop(ctx);
+                Navigator.pop(ctx); // close bottom sheet
                 Navigator.push(ctx, MaterialPageRoute(builder: (_) => const LoginScreen()));
               },
               style: ElevatedButton.styleFrom(
@@ -61,13 +60,11 @@ Future<void> showWorkerProfileBottomSheet({
     return true;
   }
 
-  // ✅ Suggestion Logic Fixed: current worker বাদে বাকিদের দেখাবে
-  // allWorkers লিস্ট থেকে বর্তমান আইডি বাদ দিয়ে ফিল্টার করা হচ্ছে
+  // ✅ suggestion list (exclude current)
   final currentId = (data['ownerId'] ?? data['id'] ?? workerModel.uid).toString();
-
   final suggestions = allWorkers.where((w) {
     final wId = (w['ownerId'] ?? w['id'] ?? '').toString();
-    return wId.isNotEmpty && wId != currentId; // বর্তমান কার্ড বাদ
+    return wId.isNotEmpty && wId != currentId;
   }).take(5).toList();
 
   Future<void> openProfile() async {
@@ -92,37 +89,29 @@ Future<void> showWorkerProfileBottomSheet({
     );
   }
 
+  // ✅ FIXED: always open WorkerJobDetailsScreen (post-centric flow)
+  // ✅ FIXED: Directly open WorkerJobDetailsScreen (No loading/ad delay)
   Future<void> openJobDetails() async {
     if (!checkLogin(context)) return;
 
-    // লোডিং ডায়ালগ দেখানো
-    if (context.mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          Future.delayed(const Duration(seconds: 1), () {
-            if (ctx.mounted && Navigator.canPop(ctx)) Navigator.pop(ctx);
-          });
-          return const Center(child: CircularProgressIndicator());
-        },
+    final postId = workerModel.postId.toString().trim();
+    if (postId.isEmpty) {
+      ScaffoldMessenger.of(rootNav.context).showSnackBar(
+        const SnackBar(content: Text("No post found. Please select a post to view details.")),
       );
+      return;
     }
 
-    await Future.delayed(const Duration(seconds: 1));
-
-    // বটম শিট বন্ধ করা
+    // ১. বটম শিট বন্ধ করা
     if (context.mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
 
-    // পেজে যাওয়া
-    if (context.mounted) {
+    // ২. সরাসরি জব ডিটেইলস পেজে যাওয়া
+    if (rootNav.context.mounted) {
       rootNav.push(
         MaterialPageRoute(
-          builder: (_) => isWorker
-              ? JobPostGateScreen(worker: workerModel)
-              : WorkerJobDetailsScreen(worker: workerModel),
+          builder: (_) => WorkerJobDetailsScreen(worker: workerModel),
         ),
       );
     }
@@ -180,7 +169,7 @@ Future<void> showWorkerProfileBottomSheet({
                       ),
                     ),
 
-                    // 🔹 মেইন কার্ড
+                    // 🔹 Main card
                     UniversalWorkerCard(
                       id: workerModel.uid,
                       name: (data['name'] ?? 'Unknown').toString(),
@@ -192,19 +181,18 @@ Future<void> showWorkerProfileBottomSheet({
                       reviews: reviewsStr,
                       price: priceStr,
                       time: (data['time'] ?? "Available now").toString(),
-
                       badgeLevel: badgeLevel,
                       isVerifiedWorker: isVerified,
                       isTrusted: isTrusted,
                       isTopRated: isTopRated,
                       isSaved: isSaved,
 
-                      // কার্ডে ট্যাপ = প্রোফাইল
                       onTap: openProfile,
 
-                      // "View Job Details" বাটন অ্যাকশন
+                      // ✅ Primary button is "VIEW DETAILS"
+                      primaryButtonText: "View Details",
                       onViewProfileTap: openJobDetails,
-                      showActionButtons: true, // ✅ বাটন দেখাবে
+                      showActionButtons: true,
 
                       onSaveTap: () async {
                         if (!checkLogin(context)) return;
@@ -214,18 +202,25 @@ Future<void> showWorkerProfileBottomSheet({
 
                       onChatTap: () async {
                         if (!checkLogin(context)) return;
-
-                        // চ্যাট লজিক...
                         final otherUid = workerModel.uid.trim();
                         final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUid);
                         if (rootNav.canPop()) rootNav.pop();
-                        rootNav.push(MaterialPageRoute(builder: (_) => ChatScreen(conversationId: convId, userName: workerModel.name, userRole: workerModel.userRole, userImage: workerModel.image)));
+                        rootNav.push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              conversationId: convId,
+                              userName: workerModel.name,
+                              userRole: workerModel.userRole,
+                              userImage: workerModel.image,
+                            ),
+                          ),
+                        );
                       },
                     ),
 
                     const SizedBox(height: 25),
 
-                    // 🔹 Suggestions Section (Fix: Always Shows)
+                    // 🔹 Suggestions Section
                     if (suggestions.isNotEmpty) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 15, bottom: 10),
@@ -258,17 +253,17 @@ Future<void> showWorkerProfileBottomSheet({
                               time: "Available now",
                               isVerifiedWorker: true,
 
-                              // ✅ Suggestion Tap Fix: Recursive Call with Full List
+                              // open suggestion sheet
                               onTap: () {
-                                Navigator.pop(sheetCtx); // বর্তমান শিট বন্ধ
+                                Navigator.pop(sheetCtx);
                                 showWorkerProfileBottomSheet(
                                   context: rootNav.context,
                                   data: s,
                                   isWorker: isWorker,
-                                  allWorkers: allWorkers, // ✅ পুরো লিস্ট পাস করা হচ্ছে যাতে চেইন চলতে থাকে
+                                  allWorkers: allWorkers,
                                   workerModel: Worker(
                                     uid: (s['ownerId'] ?? s['id'] ?? '').toString(),
-                                    postId: (s['id'] ?? '').toString(),
+                                    postId: (s['id'] ?? '').toString(), // best-effort; suggestions no actions anyway
                                     name: (s['name'] ?? '').toString(),
                                     userRole: 'finder',
                                     image: (s['image'] ?? '').toString(),
@@ -280,7 +275,9 @@ Future<void> showWorkerProfileBottomSheet({
                                 );
                               },
 
-                              showActionButtons: false, // সাজেশনে বাটন দেখাবে না
+                              showActionButtons: false,
+                              showSaveButton: false,
+                              showShareButton: false,
                             ),
                           );
                         }).toList(),

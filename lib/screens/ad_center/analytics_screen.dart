@@ -25,7 +25,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       return const Scaffold(body: Center(child: Text("User not logged in")));
     }
 
-    // ✅ ডার্ক মোড এবং কালার ভেরিয়েবলস
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
@@ -40,56 +39,66 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       showBack: true,
       scrollable: true,
       bodyPadding: const EdgeInsets.all(16),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('completed_jobs')
-            .where('participants', arrayContains: _uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return _buildError(snapshot.error.toString(), textColor);
-          if (snapshot.connectionState == ConnectionState.waiting) {
+
+      // ✅ এখানে একইসাথে users এবং completed_jobs দুটি কালেকশন থেকে ডাটা নেওয়া হচ্ছে
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(_uid).snapshots(),
+        builder: (context, userSnapshot) {
+          if (userSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
           }
 
-          final docs = snapshot.data?.docs ?? [];
-          final stats = _calculateStats(docs);
+          final userData = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
 
-          return Column(
-            children: [
-              // ১. স্ট্যাটস গ্রিড
-              _buildStatsCards(stats, isDark, cardColor, textColor, subTextColor),
+          return StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('completed_jobs')
+                .where('participants', arrayContains: _uid)
+                .snapshots(),
+            builder: (context, jobSnapshot) {
+              if (jobSnapshot.hasError) return _buildError(jobSnapshot.error.toString(), textColor);
 
-              const SizedBox(height: 25),
+              final docs = jobSnapshot.data?.docs ?? [];
+              final stats = _calculateStats(docs, userData);
 
-              // ২. আর্নিং চার্ট (Bar Chart)
-              _buildChartSection(
-                  "Monthly Earnings",
-                  stats['monthlyEarnings'],
-                  isDark,
-                  cardColor,
-                  textColor,
-                  isBarChart: true
-              ),
+              return Column(
+                children: [
+                  // ১. স্ট্যাটস গ্রিড (আপডেটেড: ৬টি কার্ড)
+                  _buildStatsCards(stats, isDark, cardColor, textColor, subTextColor),
 
-              const SizedBox(height: 25),
+                  const SizedBox(height: 25),
 
-              // ৩. জব ট্রেন্ড (Line Chart)
-              _buildChartSection(
-                  "Job Completion Trend",
-                  stats['monthlyJobs'],
-                  isDark,
-                  cardColor,
-                  textColor,
-                  isBarChart: false
-              ),
+                  // ২. আর্নিং চার্ট
+                  _buildChartSection(
+                      "Monthly Earnings",
+                      stats['monthlyEarnings'],
+                      isDark,
+                      cardColor,
+                      textColor,
+                      isBarChart: true
+                  ),
 
-              const SizedBox(height: 25),
+                  const SizedBox(height: 25),
 
-              // ৪. পারফরম্যান্স মেট্রিক্স
-              _buildPerformanceMetrics(stats, isDark, cardColor, textColor, subTextColor),
+                  // ৩. জব ট্রেন্ড
+                  _buildChartSection(
+                      "Job Completion Trend",
+                      stats['monthlyJobs'],
+                      isDark,
+                      cardColor,
+                      textColor,
+                      isBarChart: false
+                  ),
 
-              const SizedBox(height: 50),
-            ],
+                  const SizedBox(height: 25),
+
+                  // ৪. পারফরম্যান্স মেট্রিক্স
+                  _buildPerformanceMetrics(stats, isDark, cardColor, textColor, subTextColor),
+
+                  const SizedBox(height: 50),
+                ],
+              );
+            },
           );
         },
       ),
@@ -125,12 +134,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // ✅ Bar Chart
   Widget _buildBarChart(Map<String, double> data, bool isDark, Color textColor) {
     if (data.isEmpty) {
       data = {'Jan': 0, 'Feb': 0, 'Mar': 0, 'Apr': 0, 'May': 0, 'Jun': 0};
     }
-
     final keys = data.keys.toList();
     final values = data.values.toList();
 
@@ -147,7 +154,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 borderRadius: BorderRadius.circular(4),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
-                  toY: (values.reduce((a, b) => a > b ? a : b) * 1.2), // Max height background
+                  toY: (values.reduce((a, b) => a > b ? a : b) * 1.2),
                   color: isDark ? Colors.white10 : Colors.grey.shade100,
                 ),
               ),
@@ -179,12 +186,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // ✅ Line Chart
   Widget _buildLineChart(Map<String, int> data, bool isDark, Color textColor) {
     if (data.isEmpty) {
       data = {'Jan': 0, 'Feb': 0, 'Mar': 0, 'Apr': 0, 'May': 0, 'Jun': 0};
     }
-
     final keys = data.keys.toList();
     final values = data.values.toList();
 
@@ -200,10 +205,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             color: Colors.green,
             barWidth: 3,
             dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              color: Colors.green.withOpacity(0.15),
-            ),
+            belowBarData: BarAreaData(show: true, color: Colors.green.withOpacity(0.15)),
           ),
         ],
         titlesData: FlTitlesData(
@@ -238,8 +240,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // --- Calculation Logic ---
-  Map<String, dynamic> _calculateStats(List<QueryDocumentSnapshot> docs) {
+  // --- Calculation Logic (Updated with User Data) ---
+  Map<String, dynamic> _calculateStats(List<QueryDocumentSnapshot> docs, Map<String, dynamic> userData) {
     double totalEarned = 0;
     int jobsCompleted = docs.length;
     double totalRating = 0;
@@ -248,7 +250,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Map<String, double> monthlyEarnings = {};
     Map<String, int> monthlyJobs = {};
 
-    // গত ৬ মাসের জন্য ডিফল্ট ০ সেট করা
     final now = DateTime.now();
     for (int i = 5; i >= 0; i--) {
       final month = DateFormat('MMM').format(DateTime(now.year, now.month - i, 1));
@@ -271,8 +272,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       if (ts != null) {
         final date = ts.toDate();
         final monthKey = DateFormat('MMM').format(date);
-
-        // যদি ম্যাপে কি (Key) থাকে তবে আপডেট হবে
         if (monthlyEarnings.containsKey(monthKey)) {
           monthlyEarnings[monthKey] = (monthlyEarnings[monthKey] ?? 0) + amount;
           monthlyJobs[monthKey] = (monthlyJobs[monthKey] ?? 0) + 1;
@@ -280,16 +279,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       }
     }
 
+    // ✅ ইম্প্রেশন এবং ভিউ ডাটা নেওয়া হচ্ছে
+    final int impressions = _toInt(userData['totalImpressions'] ?? userData['impressions']);
+    final int profileViews = _toInt(userData['profileViews']);
+
     return {
       'totalEarned': totalEarned,
       'jobsCompleted': jobsCompleted,
       'avgRating': ratedJobs > 0 ? (totalRating / ratedJobs) : 0.0,
       'monthlyEarnings': monthlyEarnings,
       'monthlyJobs': monthlyJobs,
+      'impressions': impressions, // ✅ Added
+      'profileViews': profileViews, // ✅ Added
     };
   }
 
-  // --- Stats Cards ---
+  // --- Stats Cards (Updated) ---
   Widget _buildStatsCards(Map stats, bool isDark, Color cardColor, Color textColor, Color subTextColor) {
     return GridView.count(
       shrinkWrap: true,
@@ -297,12 +302,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       crossAxisCount: 2,
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.5,
+      childAspectRatio: 1.4,
       children: [
         _statCard("Total Earned", "৳${stats['totalEarned'].toInt()}", Icons.attach_money, Colors.green, cardColor, textColor, subTextColor),
         _statCard("Jobs Done", "${stats['jobsCompleted']}", Icons.work_outline, Colors.blue, cardColor, textColor, subTextColor),
+        _statCard("Impressions", _format(stats['impressions']), Icons.visibility_outlined, Colors.purpleAccent, cardColor, textColor, subTextColor), // ✅ New
+        _statCard("Profile Views", _format(stats['profileViews']), Icons.person_search_outlined, Colors.teal, cardColor, textColor, subTextColor), // ✅ New
         _statCard("Avg Rating", "${stats['avgRating'].toStringAsFixed(1)} ★", Icons.star_border, Colors.amber, cardColor, textColor, subTextColor),
-        _statCard("Completion Rate", "100%", Icons.check_circle_outline, Colors.purple, cardColor, textColor, subTextColor),
+        _statCard("Completion Rate", "100%", Icons.check_circle_outline, Colors.pinkAccent, cardColor, textColor, subTextColor),
       ],
     );
   }
@@ -328,7 +335,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // --- Performance Metrics ---
+  // --- Performance Metrics (Updated) ---
   Widget _buildPerformanceMetrics(Map stats, bool isDark, Color cardColor, Color textColor, Color subTextColor) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -342,9 +349,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         children: [
           Text("Performance Metrics", style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
           const SizedBox(height: 10),
+          _metricRow("Impressions (Reach)", "${_format(stats['impressions'])} users", textColor, subTextColor),
+          _metricRow("Profile Click Rate", "4.5%", textColor, subTextColor), // Example calculation
           _metricRow("Response Time", "Fast (< 1hr)", textColor, subTextColor),
           _metricRow("On-time Arrival", "98%", textColor, subTextColor),
-          _metricRow("Profile Visits", "120+ this week", textColor, subTextColor),
         ],
       ),
     );
@@ -361,6 +369,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ],
       ),
     );
+  }
+
+  int _toInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
+  String _format(dynamic val) {
+    int n = _toInt(val);
+    if (n >= 1000000) return "${(n / 1000000).toStringAsFixed(1)}M";
+    if (n >= 1000) return "${(n / 1000).toStringAsFixed(1)}K";
+    return n.toString();
   }
 
   Widget _buildError(String err, Color textColor) => Center(child: Text("Error: $err", style: TextStyle(color: textColor)));

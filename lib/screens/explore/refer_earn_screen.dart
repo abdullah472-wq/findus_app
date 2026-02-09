@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/services/referral_service.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class ReferEarnScreen extends StatefulWidget {
   const ReferEarnScreen({super.key});
@@ -428,17 +430,52 @@ class _ReferEarnScreenState extends State<ReferEarnScreen> {
   }
 
   Widget _buildShareActionsRow(BuildContext context, Color textColor) {
-    void showComingSoon(String where) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Share to $where coming soon."))); }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text("Quick share", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor)),
-      const SizedBox(height: 8),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        _shareIconButton(icon: Icons.chat, label: "WhatsApp", onTap: () => showComingSoon("WhatsApp"), textColor: textColor),
-        _shareIconButton(icon: Icons.facebook, label: "Facebook", onTap: () => showComingSoon("Facebook"), textColor: textColor),
-        _shareIconButton(icon: Icons.message_outlined, label: "SMS", onTap: () => showComingSoon("SMS"), textColor: textColor),
-        _shareIconButton(icon: Icons.more_horiz, label: "More", onTap: () => showComingSoon("other apps"), textColor: textColor),
-      ]),
-    ]);
+    // ✅ রিয়েল শেয়ার ফাংশন (Quest Update সহ)
+    Future<void> shareLink(String platformName) async {
+      if (_referralLink.isEmpty) return;
+
+      final String message = "Join FindUs using my referral code: $_referralCode\nDownload now: $_referralLink";
+
+      // 1. Share UI Open
+      await Share.share(message);
+
+      // ==================================================
+      // ✅ REFERRAL QUEST UPDATE
+      // ==================================================
+      // 1. Long Term Invite Chain
+      await AchievementService.incrementProgress('lt_invite_s1');
+      await AchievementService.incrementProgress('lt_invite_s2');
+      await AchievementService.incrementProgress('lt_invite_s3');
+
+      // 2. Daily Share
+      await AchievementService.incrementProgress('daily_share');
+
+      // 3. Sync
+      await AchievementService.syncWeeklyChestFromServer();
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Shared via $platformName! Quest updated.")),
+        );
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Quick share", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _shareIconButton(icon: Icons.chat, label: "WhatsApp", onTap: () => shareLink("WhatsApp"), textColor: textColor),
+            _shareIconButton(icon: Icons.facebook, label: "Facebook", onTap: () => shareLink("Facebook"), textColor: textColor),
+            _shareIconButton(icon: Icons.message_outlined, label: "SMS", onTap: () => shareLink("SMS"), textColor: textColor),
+            _shareIconButton(icon: Icons.share, label: "More", onTap: () => shareLink("Other Apps"), textColor: textColor),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _shareIconButton({required IconData icon, required String label, required VoidCallback onTap, required Color textColor}) {

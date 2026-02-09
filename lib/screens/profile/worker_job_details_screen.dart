@@ -6,9 +6,14 @@ import 'package:findus_app/screens/hire_request_screen.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/widgets/universal_worker_card.dart'; // ✅ Universal Card Import
+import 'package:findus_app/widgets/universal_worker_card.dart';
+import 'package:findus_app/screens/apply/apply_to_post_screen.dart';
 
-class WorkerJobDetailsScreen extends StatelessWidget {
+// ✅ 1. Import Achievement Service
+import 'package:findus_app/achievement/achievement_service.dart';
+
+// ✅ 2. Change to StatefulWidget to handle init logic
+class WorkerJobDetailsScreen extends StatefulWidget {
   final Worker worker;
 
   const WorkerJobDetailsScreen({
@@ -16,8 +21,36 @@ class WorkerJobDetailsScreen extends StatelessWidget {
     required this.worker,
   });
 
+  @override
+  State<WorkerJobDetailsScreen> createState() => _WorkerJobDetailsScreenState();
+}
+
+class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
+
+  // ✅ 3. InitState: Trigger Quest Progress
+  @override
+  void initState() {
+    super.initState();
+    // স্ক্রিন বিল্ড হওয়ার পর কুয়েস্ট আপডেট হবে
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _trackJobView();
+    });
+  }
+
+  Future<void> _trackJobView() async {
+    try {
+      // 'daily_view_jobs' আইডি দিয়ে প্রগ্রেস ১ বাড়ানো হলো
+      await AchievementService.incrementProgress('daily_view_jobs', amount: 1);
+      // অপশনাল: উইকলি চেস্ট সিঙ্ক করা
+      await AchievementService.syncWeeklyChestFromServer();
+      debugPrint("🎯 Daily View Job Quest Updated!");
+    } catch (e) {
+      debugPrint("Error tracking job view: $e");
+    }
+  }
+
   String get _roleLabel {
-    final r = worker.userRole.toLowerCase().trim();
+    final r = widget.worker.userRole.toLowerCase().trim();
     return r == 'finder' ? 'Worker' : 'Supporter';
   }
 
@@ -31,15 +64,15 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
     final jobTitle = "$_roleLabel Service Details";
     final jobDescription =
-        "This ${_roleLabel.toLowerCase()} is offering professional services in ${worker.location}.\n\n"
-        "• Verified Profile: ${worker.kycCompleted ? 'Yes' : 'No'}\n"
-        "• Experience: ${worker.experienceYears ?? 'Fresh'} Years\n"
+        "This ${_roleLabel.toLowerCase()} is offering professional services in ${widget.worker.location}.\n\n"
+        "• Verified Profile: ${widget.worker.kycCompleted ? 'Yes' : 'No'}\n"
+        "• Experience: ${widget.worker.experienceYears ?? 'Fresh'} Years\n"
         "• You can discuss work details, timing, and final pricing in chat.";
 
     // Price Display
-    String displayPrice = worker.priceText.trim().isNotEmpty
-        ? worker.priceText
-        : (worker.price != null ? "${worker.price!.toInt()}" : "Negotiable");
+    String displayPrice = widget.worker.priceText.trim().isNotEmpty
+        ? widget.worker.priceText
+        : (widget.worker.price != null ? "${widget.worker.price!.toInt()}" : "Negotiable");
 
     return FloatingScaffold(
       title: "JOB DETAILS",
@@ -68,26 +101,26 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🔥🔥 UNIVERSAL WORKER CARD (Instead of Custom Header)
+                    // 🔥🔥 UNIVERSAL WORKER CARD
                     UniversalWorkerCard(
-                      id: worker.uid,
-                      name: worker.name,
+                      id: widget.worker.uid,
+                      name: widget.worker.name,
                       role: _roleLabel,
-                      imageUrl: worker.image,
-                      address: worker.location,
-                      rating: worker.rating.toStringAsFixed(1),
-                      completed: worker.completedCount.toString(),
-                      reviews: worker.reviewsCount.toString(),
+                      imageUrl: widget.worker.image,
+                      address: widget.worker.location,
+                      rating: widget.worker.rating.toStringAsFixed(1),
+                      completed: widget.worker.completedCount.toString(),
+                      reviews: widget.worker.reviewsCount.toString(),
                       price: displayPrice,
 
-                      isVerifiedWorker: worker.kycCompleted,
-                      isTopRated: worker.rating >= 4.8,
-                      isTrusted: worker.completedCount >= 50 && worker.rating >= 4.5,
+                      isVerifiedWorker: widget.worker.kycCompleted,
+                      isTopRated: widget.worker.rating >= 4.8,
+                      isTrusted: widget.worker.completedCount >= 50 && widget.worker.rating >= 4.5,
 
                       // ✅ Button & Actions Config
                       showActionButtons: true,
-                      primaryButtonText: "View Profile", // ✅ Button Text Change
-                      onViewProfileTap: () => _navigateToProfile(context), // ✅ Action
+                      primaryButtonText: "View Profile",
+                      onViewProfileTap: () => _navigateToProfile(context),
 
                       showSaveButton: true,
                       showShareButton: true,
@@ -117,12 +150,12 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
   // ✅ Navigate to Profile
   void _navigateToProfile(BuildContext context) {
-    if (worker.uid.isEmpty) return;
+    if (widget.worker.uid.isEmpty) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => UnifiedProfileScreen(
-          uid: worker.uid,
+          uid: widget.worker.uid,
           isOwner: false,
           showBack: true,
         ),
@@ -132,8 +165,8 @@ class WorkerJobDetailsScreen extends StatelessWidget {
 
   // ✅ Open Chat
   void _openChat(BuildContext context) async {
-    if (worker.uid.isEmpty) return;
-    final cid = await FirestoreChatService.getOrCreateConversation(otherUserId: worker.uid);
+    if (widget.worker.uid.isEmpty) return;
+    final cid = await FirestoreChatService.getOrCreateConversation(otherUserId: widget.worker.uid);
     if (!context.mounted) return;
 
     Navigator.push(
@@ -141,15 +174,15 @@ class WorkerJobDetailsScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => ChatScreen(
           conversationId: cid,
-          userName: worker.name,
-          userRole: worker.userRole,
-          userImage: worker.image,
+          userName: widget.worker.name,
+          userRole: widget.worker.userRole,
+          userImage: widget.worker.image,
         ),
       ),
     );
   }
 
-  // 📝 Job Info Card (বাকি অংশ ঠিক রাখা হয়েছে)
+  // 📝 Job Info Card
   Widget _buildJobInfoCard(String title, String description, Color cardColor, Color textColor, Color subtitleColor, bool isDark) {
     return Container(
       width: double.infinity,
@@ -215,7 +248,20 @@ class WorkerJobDetailsScreen extends StatelessWidget {
           Expanded(
             child: ElevatedButton(
               onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => HireRequestScreen(worker: worker)));
+                final postId = widget.worker.postId.toString().trim();
+                if (postId.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Post not found for this job.")),
+                  );
+                  return;
+                }
+
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ApplyToPostScreen(postId: postId),
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandMain,
@@ -223,7 +269,10 @@ class WorkerJobDetailsScreen extends StatelessWidget {
                 minimumSize: const Size.fromHeight(50),
                 elevation: 4,
               ),
-              child: const Text("HIRE NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              child: const Text(
+                "APPLY NOW",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
             ),
           ),
         ],

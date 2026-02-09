@@ -3,6 +3,7 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/achievement/achievement_service.dart'; // Achievement
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -26,6 +27,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final currentUser = FirebaseAuth.instance.currentUser!;
   late ChatUser _me;
   late ChatUser _otherUser;
+  bool _isFirstMessage = true; // লোকাল ট্র্যাকার
 
   @override
   void initState() {
@@ -40,9 +42,25 @@ class _ChatScreenState extends State<ChatScreen> {
       firstName: widget.userName,
       profileImage: widget.userImage,
     );
+    _checkIfFirstMessage();
   }
 
-  void _sendMessage(ChatMessage message) {
+  // ✅ চেক করা আগে কোনো মেসেজ আছে কি না
+  Future<void> _checkIfFirstMessage() async {
+    final snap = await FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(widget.conversationId)
+        .collection('messages')
+        .limit(1)
+        .get();
+
+    if (snap.docs.isNotEmpty) {
+      _isFirstMessage = false;
+    }
+  }
+
+  void _sendMessage(ChatMessage message) async {
+    // 1. Send Message
     FirebaseFirestore.instance
         .collection('conversations')
         .doc(widget.conversationId)
@@ -53,6 +71,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
+    // 2. Update Conversation Metadata
     FirebaseFirestore.instance
         .collection('conversations')
         .doc(widget.conversationId)
@@ -62,6 +81,22 @@ class _ChatScreenState extends State<ChatScreen> {
       'unread': FieldValue.increment(1),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    // ==================================================
+    // ✅ ACHIEVEMENT & QUEST UPDATES
+    // ==================================================
+
+    // 1. Daily Message Quest (সবসময় বাড়বে)
+    await AchievementService.incrementProgress('daily_message');
+    await AchievementService.syncWeeklyChestFromServer();
+
+    // 2. Long Term Chat Chain (শুধুমাত্র নতুন কনভারসেশনের জন্য)
+    if (_isFirstMessage) {
+      await AchievementService.incrementProgress('lt_chat_s1');
+      await AchievementService.incrementProgress('lt_chat_s2');
+      await AchievementService.incrementProgress('lt_chat_s3');
+      _isFirstMessage = false; // ফ্ল্যাগ আপডেট
+    }
   }
 
   @override
@@ -123,6 +158,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 text: data['text'] ?? '',
               );
             }).toList();
+
+            // স্ট্রিম থেকে ডাটা আসলে ফ্ল্যাগ আপডেট করা (সেফটি)
+            if (messages.isNotEmpty) {
+              _isFirstMessage = false;
+            }
           }
 
           return DashChat(

@@ -3,11 +3,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/services/theme_service.dart';
 import 'package:findus_app/badge/badge_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
@@ -125,6 +127,41 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
     HomeFeedScreen.goToTab(0);
   }
 
+  Future<void> _handleRateUs() async {
+    Navigator.pop(context); // ড্রয়ার বন্ধ করা
+
+    // ১. প্লে স্টোর লিংক ওপেন করা
+    final Uri url = Uri.parse("https://play.google.com/store/apps/details?id=com.findus.app"); // ডামি লিংক
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        debugPrint("Could not launch URL");
+      }
+    } catch (e) {
+      debugPrint("Rate Us Error: $e");
+    }
+
+    // ==================================================
+    // ✅ QUEST UPDATE: Fan of FindUs
+    // ==================================================
+
+    // 1. Bonus Quest (Single Long Term)
+    await AchievementService.incrementProgress('bonus_rate_us');
+
+    // 2. Weekly Chest Sync (Optional, but good practice)
+    await AchievementService.syncWeeklyChestFromServer();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Thanks for rating us! Quest updated."),
+          backgroundColor: Colors.amber,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -171,6 +208,7 @@ class _ProfileSideBarState extends State<ProfileSideBar> {
                         _buildSettingsGroup([
                           _buildCompactTile(Icons.card_giftcard_rounded, "Refer & Earn", () => _navigateProtected(targetScreen: const ReferEarnScreen(), featureName: "Referral"), Colors.green),
                           _buildCompactTile(Icons.bug_report_outlined, "Report a Problem", () => _navigateProtected(targetScreen: const ReportScreen(), featureName: "Support"), Colors.orangeAccent),
+                          _buildCompactTile(Icons.star_rate_rounded, "Rate Us", _handleRateUs, Colors.amber),
                         ], isDark),
 
                         if (isLoggedIn) ...[

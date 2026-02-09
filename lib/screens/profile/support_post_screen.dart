@@ -38,6 +38,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
   String _locationName = "Detecting location...";
   LatLng? _selectedLatLng;
   double _budget = 1200.0;
+  int _slots = 1;
 
   final List<Map<String, dynamic>> _categories = const [
     {"icon": Icons.electric_bolt, "name": "Electrician"},
@@ -238,7 +239,9 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
 
       await PostService.createPost(
         ownerId: user.uid,
-        ownerRole: meta['userRole'] == 'finder' ? 'maker' : meta['userRole'],
+        ownerRole: meta['userRole'],
+        slots: _slots,
+        approvedCount: 0,
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
         roleLabel: _selectedCategory.toUpperCase(),

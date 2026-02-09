@@ -138,7 +138,7 @@ class QuestGenerator {
 
       return personalizedQuests;
     } catch (e) {
-      print('QuestGenerator error: $e'); // ✅ print ব্যবহার করুন
+      debugPrint('QuestGenerator error: $e');
       return personalizedQuests;
     }
   }

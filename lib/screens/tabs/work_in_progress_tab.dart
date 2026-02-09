@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
@@ -266,8 +267,8 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
   Future<void> _markJobAsCompleted(
       BuildContext context, {
         required String jobId,
-        required String receiverId,
-        required String workerId,
+        required String receiverId, // Finder (Worker)
+        required String workerId,   // Supporter (Employer)
         required List participants,
       }) async {
     final currentUser = _auth.currentUser;
@@ -291,8 +292,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           ),
         ],
       ),
-    ) ??
-        false;
+    ) ?? false;
 
     if (!confirm) return;
 
@@ -305,8 +305,6 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
     try {
       final ongoingRef = _firestore.collection('ongoing_jobs').doc(jobId);
       final completedRef = _firestore.collection('completed_jobs').doc(jobId);
-
-      // may or may not exist -> use set(merge:true) to avoid transaction failure
       final requestRef = _firestore.collection('hire_requests').doc(jobId);
 
       await _firestore.runTransaction((tx) async {
@@ -328,14 +326,14 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           parts.addAll([receiverId, workerId]);
         }
 
-        // 1) update ongoing -> completed
+        // 1) Update ongoing -> completed
         tx.update(ongoingRef, {
           'status': 'completed',
           'endTime': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 2) create completed history
+        // 2) Create completed history
         tx.set(
           completedRef,
           {
@@ -347,8 +345,6 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
             'completedBy': currentUser.uid,
             'originalRequestId': _s(data['originalRequestId'], jobId),
             'updatedAt': FieldValue.serverTimestamp(),
-
-            // optional fields for UI
             'price': data['price'] ?? data['offerPrice'],
             'offerPrice': data['offerPrice'],
             'location': data['location'],
@@ -362,7 +358,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           SetOptions(merge: true),
         );
 
-        // 3) safe update hire_requests status (no crash if missing)
+        // 3) Update hire_requests status
         tx.set(
           requestRef,
           {
@@ -373,8 +369,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
           SetOptions(merge: true),
         );
 
-        // ✅ 4) Update user_stats
-        // workerId is supporterId in your current schema
+        // 4) Update user_stats
         final supporterStatsRef = _firestore.collection('user_stats').doc(workerId);
         final finderStatsRef = _firestore.collection('user_stats').doc(receiverId);
 
@@ -397,7 +392,7 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         );
       });
 
-      // notify supporter
+      // 5) Notify supporter
       if (workerId.isNotEmpty) {
         await _firestore.collection('notifications').add({
           'toUserId': workerId,
@@ -411,11 +406,43 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         });
       }
 
+      // ==================================================
+      // ✅ ACHIEVEMENT & QUEST UPDATES
+      // ==================================================
+
+      // 🟢 1. WORKER (Finder) - Job Completion Chain
+      // Daily
+      await AchievementService.incrementProgress('daily_complete_job');
+      // Weekly
+      await AchievementService.incrementProgress('weekly_complete_jobs');
+      // Long-Term
+      await AchievementService.incrementProgress('lt_jobs_s1');
+      await AchievementService.incrementProgress('lt_jobs_s2');
+      await AchievementService.incrementProgress('lt_jobs_s3');
+
+
+      // 🔵 2. EMPLOYER (Supporter) - Hiring Chain Update
+      // যেহেতু হায়ারটি সাকসেসফুল হয়েছে, তাই এমপ্লয়ারের হায়ার চেইনেও প্রগ্রেস যোগ হবে
+      // (যদিও সে এই মুহূর্তে অনলাইনে নেই, সার্ভারে তার প্রগ্রেস সেভ হবে)
+      /*
+        নোট: AchievementService ডিফল্টভাবে কারেন্ট ইউজারের জন্য কাজ করে।
+        অন্য ইউজারের (Employer) প্রগ্রেস বাড়াতে হলে আমাদের সার্ভিসে অন্য ইউজারের ID সাপোর্টেড থাকতে হবে।
+        যদি আপনার সিস্টেমে সার্ভার সাইড (Cloud Functions) থাকে তবে সেখানে করা ভালো।
+        তবে ক্লায়েন্ট সাইড থেকে করতে চাইলে আমাদের AchievementService এ অন্য ইউজারের জন্য আপডেট করার মেথড লাগবে।
+
+        আপাতত Worker (Current User) এর প্রগ্রেস আপডেট করা হলো। Employer এর আপডেট
+        সাধারণত সে যখন 'Complete' নোটিফিকেশন পেয়ে অ্যাপ ওপেন করবে, তখন সিঙ্ক হতে পারে।
+      */
+
+      // Sync Weekly Chest
+      await AchievementService.syncWeeklyChestFromServer();
+
+
       if (!context.mounted) return;
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Job marked as completed!"), backgroundColor: Colors.green),
+        const SnackBar(content: Text("Job completed! Quests updated."), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (context.mounted) {

@@ -1,5 +1,3 @@
-// lib/screens/profile/earn_post_screen.dart
-
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,7 +15,7 @@ import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/screens/ads/ad_display_screen.dart'; // ✅ অ্যাড পেজ ইমপোর্ট
+import 'package:findus_app/screens/ads/ad_display_screen.dart';
 
 class EarnPostScreen extends StatefulWidget {
   const EarnPostScreen({super.key});
@@ -38,6 +36,9 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
   String _locationName = "Detecting location...";
   LatLng? _selectedLatLng;
   double _expectedCharge = 800.0;
+
+  // ✅ NEW: slots
+  int _slots = 1;
 
   final List<Map<String, dynamic>> _categories = const [
     {"icon": Icons.electric_bolt, "name": "Electrician"},
@@ -134,7 +135,7 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
 
       final addressStr = parts.join(', ');
       setState(() => _locationName = addressStr.isNotEmpty ? addressStr : "Selected Location");
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _locationName = "Selected Location");
     }
@@ -156,7 +157,12 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     for (final f in _mediaFiles) {
       try {
         final isVideo = _isVideoFile(f.path);
-        final res = await CloudinaryService.uploadXFile(f, folder: 'findus/posts/media', resourceType: isVideo ? 'video' : 'image', tags: const ['post', 'earn']);
+        final res = await CloudinaryService.uploadXFile(
+          f,
+          folder: 'findus/posts/media',
+          resourceType: isVideo ? 'video' : 'image',
+          tags: const ['post', 'earn'],
+        );
         final url = res['secure_url']?.toString();
         if (url != null) urls.add(url);
       } catch (e) {
@@ -176,14 +182,21 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         'experience': int.tryParse('${data['experienceYears']}') ?? 0,
         'rating': double.tryParse('${data['rating']}') ?? 0.0,
         'verified': data['kyc_completed'] == true,
-        'trusted': (int.tryParse('${data['completedCount']}') ?? 0) >= 50 && (double.tryParse('${data['rating']}') ?? 0) >= 4.5,
+        'trusted': (int.tryParse('${data['completedCount']}') ?? 0) >= 50 &&
+            (double.tryParse('${data['rating']}') ?? 0) >= 4.5,
       };
     } catch (_) {
-      return {'userRole': 'finder', 'gender': 'Any', 'experience': 0, 'rating': 0.0, 'verified': false, 'trusted': false};
+      return {
+        'userRole': 'finder',
+        'gender': 'Any',
+        'experience': 0,
+        'rating': 0.0,
+        'verified': false,
+        'trusted': false,
+      };
     }
   }
 
-  // ✅ আপডেটেড পোস্ট লজিক (অ্যাড সিস্টেম সহ)
   Future<void> _handleDropPin() async {
     if (_isSaving) return;
     if (AppConfigService.isPostingDisabled) {
@@ -205,29 +218,23 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
       return;
     }
 
-    // --- অ্যাড লজিক শুরু ---
+    // Ad check (unchanged)
     try {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final subscription = (userDoc.data()?['subscription_type'] ?? 'free').toString();
       final bool isPremium = subscription == 'pro' || subscription == 'business';
 
       if (!isPremium && mounted) {
-        // ফ্রি ইউজার হলে অ্যাড দেখাবে
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => AdDisplayScreen(
-              onAdDismissed: () {
-                // অ্যাড শেষ হলে ফিরে আসবে এবং নিচের কোড রান করবে
-              },
-            ),
+            builder: (_) => AdDisplayScreen(onAdDismissed: () {}),
           ),
         );
       }
     } catch (e) {
       debugPrint("Ad check error: $e");
     }
-    // --- অ্যাড লজিক শেষ ---
 
     setState(() => _isSaving = true);
 
@@ -245,7 +252,11 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         lat: _selectedLatLng!.latitude,
         lng: _selectedLatLng!.longitude,
         address: _locationName,
-        locationKeys: _locationName.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((s) => s.isNotEmpty).toList(),
+        locationKeys: _locationName
+            .toLowerCase()
+            .split(RegExp(r'[^a-z0-9]+'))
+            .where((s) => s.isNotEmpty)
+            .toList(),
         price: _expectedCharge,
         priceLabel: '৳ ${_expectedCharge.toInt()} / day',
         images: uploadedUrls,
@@ -258,6 +269,10 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         verified: meta['verified'],
         isPromoted: false,
         status: 'open',
+
+        // ✅ NEW
+        slots: _slots,
+        approvedCount: 0,
       );
 
       await NotificationService.sendNotificationToUser(
@@ -383,6 +398,29 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
             const SizedBox(height: 8),
             _buildTextField(_descController, "Describe your skills...", isDark, cardColor, textColor, hintColor, maxLines: 4),
 
+            // ✅ NEW: Slots selector
+            const SizedBox(height: 20),
+            Text("How many people do you want to approve?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _slots > 1 ? () => setState(() => _slots--) : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                  color: AppColors.brandMain,
+                ),
+                Text("$_slots", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
+                IconButton(
+                  onPressed: _slots < 10 ? () => setState(() => _slots++) : null,
+                  icon: const Icon(Icons.add_circle_outline),
+                  color: AppColors.brandMain,
+                ),
+                const SizedBox(width: 8),
+                Text("(max 10)", style: TextStyle(color: hintColor, fontSize: 12)),
+              ],
+            ),
+
             const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.all(12),
@@ -438,12 +476,15 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text("Expected Daily Charge", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-                Text("৳ ${_expectedCharge.toInt()}", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
+                Text("৳ ${_expectedCharge.toInt()}",
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange)),
               ],
             ),
             Slider(
               value: _expectedCharge,
-              min: 300, max: 5000, divisions: 47,
+              min: 300,
+              max: 5000,
+              divisions: 47,
               activeColor: AppColors.brandMain,
               inactiveColor: isDark ? Colors.grey : Colors.grey.shade300,
               onChanged: (val) => setState(() => _expectedCharge = val),
@@ -472,7 +513,15 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, bool isDark, Color fillColor, Color textColor, Color hintColor, {int maxLines = 1}) {
+  Widget _buildTextField(
+      TextEditingController controller,
+      String hint,
+      bool isDark,
+      Color fillColor,
+      Color textColor,
+      Color hintColor, {
+        int maxLines = 1,
+      }) {
     return TextField(
       controller: controller,
       maxLines: maxLines,
@@ -529,7 +578,15 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
           children: [
             Icon(item['icon'], size: 28, color: isSelected ? AppColors.brandMain : Colors.grey),
             const SizedBox(height: 6),
-            Text(item['name'], textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, color: isSelected ? AppColors.brandMain : textColor)),
+            Text(
+              item['name'],
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? AppColors.brandMain : textColor,
+              ),
+            ),
           ],
         ),
       ),

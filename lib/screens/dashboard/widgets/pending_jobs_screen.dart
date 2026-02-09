@@ -285,9 +285,7 @@ class PendingJobsScreen extends StatelessWidget {
 
         // 3. Update User Stats (Hire Count)
         if (supporterId.isNotEmpty) {
-          // ✅ Increment supporter hiresCount (Hire-based Trusted denominator)
           final supporterStatsRef = FirebaseFirestore.instance.collection('user_stats').doc(supporterId);
-
           tx.set(
             supporterStatsRef,
             {
@@ -312,6 +310,25 @@ class PendingJobsScreen extends StatelessWidget {
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
+
+      // ==================================================
+      // ✅ ACHIEVEMENT & QUEST UPDATES (Employer/Supporter)
+      // ==================================================
+      /*
+       নোট: যেহেতু Employer (Supporter) অ্যাপে অ্যাক্টিভ নেই (Finder এক্সেপ্ট করছে),
+       তাই Employer এর প্রগ্রেস রিয়েল-টাইমে আপডেট হবে না যতক্ষণ না সে অ্যাপ ওপেন করে।
+       তবে, আমরা এখানে লোকাল লজিক দিয়ে বা ফায়ারবেস ট্রিগার দিয়ে আপডেট করতে পারি।
+
+       সহজ সমাধানের জন্য: Employer যখন নোটিফিকেশন পেয়ে অ্যাপ ওপেন করবে, তখন তার `syncWeeklyChest`
+       বা `init` মেথড রান করলে ডাটা আপডেট হবে।
+
+       তবে যদি আপনি চান Finder এর জন্যও কোনো 'Accept Request' কোয়েস্ট থাকে, তবে সেটা এখানে অ্যাড করা যাবে।
+       বর্তমানে আমরা শুধু Employer এর Hiring Chain আপডেট লজিক ভাবছি।
+      */
+
+      // এখানে Finder (Current User) এর জন্য কোনো স্পেসিফিক কোয়েস্ট থাকলে কল করুন।
+      // যেমন: "Accept 5 Job Requests"
+      // await AchievementService.incrementProgress('daily_accept_job'); (যদি থাকে)
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job approved successfully'), backgroundColor: Colors.green));

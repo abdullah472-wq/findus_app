@@ -76,7 +76,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 25),
 
                 // ✅ ২) Work summary
-                WorkSummarySection(userId: _uid),
+                FutureBuilder<String>(
+                  future: _getUserRole(),
+                  builder: (context, snap) {
+                    final role = snap.data ?? 'finder';
+                    return WorkSummarySection(
+                      userId: _uid,
+                      userRole: role,
+                    );
+                  },
+                ),
 
                 const SizedBox(height: 25),
 

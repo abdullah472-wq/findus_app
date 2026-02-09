@@ -87,7 +87,11 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
 
   Future<void> shareProfile() async {
     try {
-      final userName = UnifiedProfileUtils.safeString(userData['name'], defaultValue: 'FindUs User');
+      final userName = UnifiedProfileUtils.safeString(
+        userData['name'],
+        defaultValue: 'FindUs User',
+      );
+
       // TODO: তোমার real deep link/domain বসাও
       final profileLink = 'https://yourapp.com/profile/$profileUid';
       final message = 'FindUs Profile: $userName\n$profileLink';
@@ -96,6 +100,17 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
       final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
       await Share.share(message, sharePositionOrigin: origin);
+
+      // ✅ Update daily share quest progress (target=1 daily)
+      await AchievementService.incrementProgress('daily_share', amount: 1);
+
+      // ✅ optional: refresh weekly chest progress UI (doesn't increment weekly count; claim does)
+      await AchievementService.syncWeeklyChestFromServer();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Shared! Daily quest updated. Claim it in Quests.')),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,5 +1,6 @@
-// lib/screens/home_feed_screen.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
 // ট্যাব পেজ ইম্পোর্ট
@@ -8,6 +9,7 @@ import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
 import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
 import 'package:findus_app/screens/dashboard/dashboard_screen.dart';
+import 'package:findus_app/achievement/achievement_service.dart'; // Achievement
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -20,8 +22,7 @@ class HomeFeedScreen extends StatefulWidget {
   State<HomeFeedScreen> createState() => _HomeFeedScreenState();
 }
 
-class _HomeFeedScreenState extends State<HomeFeedScreen>
-    with TickerProviderStateMixin {
+class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStateMixin {
   int _selectedTopIndex = 0;
 
   late PageController _pageController;
@@ -29,13 +30,17 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
 
-  // ✅ ৫টি ট্যাবের লিস্ট
+  // 🔴 Badge Counts
+  int _claimableQuestCount = 0;
+  int _ongoingActionCount = 0; // Jobs needing completion
+  int _pendingReviewCount = 0;
+
   final List<Widget> _tabViews = const [
     DashboardScreen(),
     WorkInProgressTab(),
     CompletedWorkTab(),
     AchievementsTab(),
-    LeaderboardScreen(), // ✅ LeaderboardTab ব্যবহার করুন
+    LeaderboardScreen(),
   ];
 
   @override
@@ -62,14 +67,72 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         _bounceController.reverse();
       }
     });
+
+    // ✅ Listeners Init
+    AchievementService.achievementsNotifier.addListener(_updateQuestBadge);
+    _listenToJobStatus();
+    _updateQuestBadge(); // Initial Load
   }
 
   @override
   void dispose() {
+    AchievementService.achievementsNotifier.removeListener(_updateQuestBadge);
     _pageController.dispose();
     _spinController.dispose();
     _bounceController.dispose();
     super.dispose();
+  }
+
+  // ✅ 1. Quest Badge Logic
+  void _updateQuestBadge() {
+    final count = AchievementService.achievementsNotifier.value
+        .where((st) => st.isCompleted && !st.claimed)
+        .length;
+    if (mounted && count != _claimableQuestCount) {
+      setState(() => _claimableQuestCount = count);
+    }
+  }
+
+  // ✅ 2. Job Status Listener (Ongoing & Review)
+  void _listenToJobStatus() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // A. Ongoing Jobs (Check if user needs to mark complete)
+    FirebaseFirestore.instance
+        .collection('ongoing_jobs')
+        .where('participants', arrayContains: uid)
+        .where('status', isEqualTo: 'ongoing')
+        .snapshots()
+        .listen((snap) {
+      int actionCount = 0;
+      for (var doc in snap.docs) {
+        // যদি আমি রিসিভার (Finder) হই, তবে আমাকে কমপ্লিট করতে হবে
+        if (doc['receiverId'] == uid) {
+          actionCount++;
+        }
+      }
+      if (mounted) setState(() => _ongoingActionCount = actionCount);
+    });
+
+    // B. Pending Reviews (Completed Jobs)
+    // Note: This logic assumes if I haven't reviewed yet.
+    // To do this perfectly, you need a subcollection check.
+    // For simplicity, we can just check 'user_stats' -> 'reviewsGiven' vs 'jobsCompleted' count logic
+    // OR just leave it manual.
+    // Here using a simplified placeholder logic:
+    /*
+    FirebaseFirestore.instance
+        .collection('completed_jobs')
+        .where('participants', arrayContains: uid)
+        .orderBy('completedAt', descending: true)
+        .limit(10)
+        .snapshots()
+        .listen((snap) {
+           // Logic to check if review given... (skipping complex query for now)
+           // You can implement this later.
+    });
+    */
   }
 
   void _onTabTapped(int index) {
@@ -97,7 +160,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // --- উপরের মেনু বার ---
             Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
@@ -114,7 +176,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Dashboard বাটন
                   _buildTopIcon(Icons.dashboard_rounded, "Dashboard", 0, isDark),
 
                   _buildTopIcon(
@@ -123,6 +184,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     1,
                     isDark,
                     isSpinning: true,
+                    badgeCount: _ongoingActionCount, // 🔴 Badge
                   ),
 
                   _buildTopIcon(
@@ -130,16 +192,22 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     "Completed",
                     2,
                     isDark,
+                    badgeCount: _pendingReviewCount, // 🔴 Badge (Future impl)
                   ),
 
-                  _buildTopIcon(Icons.bar_chart_rounded, "Progress", 3, isDark),
+                  _buildTopIcon(
+                    Icons.bar_chart_rounded,
+                    "Progress",
+                    3,
+                    isDark,
+                    badgeCount: _claimableQuestCount, // 🔴 Badge
+                  ),
 
                   _buildTopIcon(Icons.emoji_events_outlined, "Rank", 4, isDark),
                 ],
               ),
             ),
 
-            // --- বডি পার্ট (PageView) ---
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -164,6 +232,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       int index,
       bool isDark, {
         bool isSpinning = false,
+        int badgeCount = 0, // ✅ New Parameter
       }) {
     final bool isActive = _selectedTopIndex == index;
     const activeColor = AppColors.brandMain;
@@ -192,18 +261,49 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isActive ? activeColor.withOpacity(0.3) : Colors.transparent,
-                width: 1.5,
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isActive ? activeColor.withOpacity(0.3) : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: iconWidget,
               ),
-            ),
-            child: iconWidget,
+
+              // ✅ Badge UI Logic
+              if (badgeCount > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: isDark ? Colors.black : Colors.white, width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Center(
+                      child: Text(
+                        badgeCount > 9 ? '9+' : '$badgeCount',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           SizedBox(

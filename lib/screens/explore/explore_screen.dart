@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 // Constants & Services
 import '../../../constants/app_colors.dart';
 import 'package:findus_app/services/user_role_service.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/services/profile_completion_service.dart';
 import 'package:findus_app/services/blocked_user_service.dart';
 import 'package:findus_app/services/post_service.dart';
@@ -116,6 +117,7 @@ class _ExploreScreenState extends State<ExploreScreen>
     _loadBlockedUsers();
     _handleWelcomeLogic();
     _listenToNotifications();
+    _updateMapQuest();
 
     _isSearchingLocation = true;
 
@@ -157,6 +159,17 @@ class _ExploreScreenState extends State<ExploreScreen>
       );
       await prefs.setBool(key, true);
     }
+  }
+
+
+  Future<void> _updateMapQuest() async {
+    // 1. Daily Map Explorer Quest
+    await AchievementService.incrementProgress('daily_explore');
+
+    // 2. Weekly Chest Sync
+    await AchievementService.syncWeeklyChestFromServer();
+
+    debugPrint("🗺️ Map Explorer Quest Updated!");
   }
 
   void _listenToNotifications() {
@@ -596,10 +609,28 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Future<void> _showFilterPanel() async {
-    final prefs = await SharedPreferences.getInstance();
-    final plan = prefs.getString('subscription_plan') ?? 'free';
-    final isProUser = plan == 'pro' || plan == 'business';
+    bool isProUser = false;
 
+    // ✅ ফায়ারবেস থেকে সরাসরি লেটেস্ট সাবস্ক্রিপশন স্ট্যাটাস চেক করা
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          final plan = (data['subscription_plan'] ?? 'free').toString().toLowerCase();
+          // ✅ প্রো বা বিজনেস প্ল্যান চেক
+          isProUser = plan == 'pro' || plan == 'business';
+
+          // Debugging Check (কনসোলে দেখুন কী প্রিন্ট হয়)
+          debugPrint("User Plan: $plan, Is Pro: $isProUser");
+        }
+      } catch (e) {
+        debugPrint("Error fetching user plan: $e");
+      }
+    }
+
+    // ✅ Filter Bottom Sheet কল করা হচ্ছে সঠিক isProUser ভ্যালু দিয়ে
     final result = await showFilterBottomSheet(
       context: context,
       locationController: _locationSearchController,
@@ -610,7 +641,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       initialMinExperience: _minExperience,
       initialTopRatedOnly: _topRatedOnly,
       initialTrustedOnly: _trustedOnly,
-      isProUser: isProUser,
+      isProUser: isProUser, // ✅ সঠিক ভ্যালু পাঠানো হচ্ছে
     );
 
     if (result == null) return;

@@ -1,10 +1,9 @@
-// lib/achievement/achievements_config.dart
 import 'achievement_models.dart';
 
 class AchievementsConfig {
   static List<AchievementDef> get all => [
     // ==================================================
-    // 🎯 DAILY QUESTS (প্রতিদিন রিসেট হবে)
+    // 🎯 DAILY QUESTS (সহজ ও দ্রুত)
     // ==================================================
     const AchievementDef(
       id: 'daily_login',
@@ -13,311 +12,466 @@ class AchievementsConfig {
       target: 1,
       xpReward: 50,
       resetPeriod: ResetPeriod.daily,
-      minPoints: 0,
+    ),
+    const AchievementDef(
+      id: 'daily_message',
+      title: 'Conversation Starter',
+      description: 'Send a message or reply',
+      target: 1,
+      xpReward: 60,
+      resetPeriod: ResetPeriod.daily,
+    ),
+    const AchievementDef(
+      id: 'daily_view_jobs',
+      title: 'Window Shopper',
+      description: 'View details of 3 jobs',
+      target: 3,
+      xpReward: 70,
+      resetPeriod: ResetPeriod.daily,
     ),
     const AchievementDef(
       id: 'daily_explore',
-      title: 'Daily Explorer',
-      description: 'Browse the map for finding workers',
+      title: 'Map Explorer',
+      description: 'Browse the map for 1 minute',
       target: 1,
       xpReward: 50,
       resetPeriod: ResetPeriod.daily,
-      minPoints: 0,
     ),
     const AchievementDef(
       id: 'daily_share',
       title: 'Social Sharer',
-      description: 'Share your profile on social media',
+      description: 'Share a job or profile',
       target: 1,
       xpReward: 100,
       resetPeriod: ResetPeriod.daily,
-      minPoints: 0,
-    ),
-    const AchievementDef(
-      id: 'daily_job_view',
-      title: 'Job Browser',
-      description: 'View 5 job listings',
-      target: 5,
-      xpReward: 75,
-      resetPeriod: ResetPeriod.daily,
-      minPoints: 0,
     ),
 
     // ==================================================
-    // 📅 WEEKLY QUESTS (সাপ্তাহিক রিসেট)
+    // 📅 WEEKLY QUESTS (চেইন লজিক)
     // ==================================================
     const AchievementDef(
-      id: 'weekly_referral',
-      title: 'Weekly Referral',
-      description: 'Refer a friend to join FindUs',
-      target: 1,
-      xpReward: 500,
+      id: 'weekly_daily_chest',
+      title: 'Weekly Consistency',
+      description: 'Complete 20 daily quests this week',
+      target: 20,
+      xpReward: 1500,
       resetPeriod: ResetPeriod.weekly,
-      minPoints: 1000,
     ),
     const AchievementDef(
-      id: 'weekly_complete_jobs',
-      title: 'Weekly Worker',
-      description: 'Complete 3 jobs this week',
+      id: 'weekly_apply',
+      title: 'Active Seeker',
+      description: 'Apply to 5 jobs this week',
+      target: 5,
+      xpReward: 400,
+      workerOnly: true,
+      resetPeriod: ResetPeriod.weekly,
+    ),
+    const AchievementDef(
+      id: 'weekly_post_free',
+      title: 'Weekly Hiring',
+      description: 'Post 3 job this week',
       target: 3,
       xpReward: 300,
-      resetPeriod: ResetPeriod.weekly,
-      workerOnly: true,
-      minPoints: 1000,
-    ),
-    const AchievementDef(
-      id: 'weekly_post_jobs',
-      title: 'Weekly Employer',
-      description: 'Post 2 jobs this week',
-      target: 2,
-      xpReward: 400,
-      resetPeriod: ResetPeriod.weekly,
       supporterOnly: true,
-      minPoints: 1000,
+      resetPeriod: ResetPeriod.weekly,
     ),
 
     // ==================================================
-    // 🏆 ONE-TIME ACHIEVEMENTS (আনলক হবে ধাপে ধাপে)
+    // 🏢 TEAM & PRO QUESTS (বিজনেস প্ল্যান)
     // ==================================================
-
-    // 🥉 BRONZE LEVEL (0-1000 XP)
     const AchievementDef(
-      id: 'setup_profile',
-      title: 'Profile Perfectionist',
-      description: 'Complete your profile with photo and bio',
+      id: 'team_daily_active',
+      title: 'Team Huddle',
+      description: '2 Team members active today',
       target: 1,
-      xpReward: 500,
-      minPoints: 0,
+      xpReward: 200,
+      teamOnly: true,
+      resetPeriod: ResetPeriod.daily,
     ),
     const AchievementDef(
-      id: 'first_map_view',
-      title: 'Map Explorer',
-      description: 'Explore the map for the first time',
-      target: 1,
-      xpReward: 100,
-      minPoints: 0,
-    ),
-    const AchievementDef(
-      id: 'add_skills',
-      title: 'Skill Master',
-      description: 'Add at least 3 skills to your profile',
-      target: 1,
-      xpReward: 300,
-      workerOnly: true,
-      minPoints: 0,
+      id: 'team_weekly_hire',
+      title: 'Recruitment Drive',
+      description: 'Shortlist 10 candidates as a team',
+      target: 10,
+      xpReward: 1000,
+      teamOnly: true,
+      resetPeriod: ResetPeriod.weekly,
     ),
 
-    // 🥈 SILVER LEVEL (1000-10000 XP)
+    // 🔒 LOCKED QUESTS (Upselling for Pro)
     const AchievementDef(
-      id: 'first_job_complete',
-      title: 'First Earnings',
-      description: 'Complete your first job successfully',
-      target: 1,
+      id: 'pro_mass_post',
+      title: 'Power Poster',
+      description: 'Post 5 jobs in a week (Pro Only)',
+      target: 5,
       xpReward: 2000,
-      workerOnly: true,
-      minPoints: 1000,
+      supporterOnly: true,
+      proOnly: true, // 🔒 ফ্রি ইউজারদের জন্য লক থাকবে
+      resetPeriod: ResetPeriod.weekly,
     ),
     const AchievementDef(
-      id: 'first_job_post',
-      title: 'First Job Poster',
-      description: 'Post your first job requirement',
-      target: 1,
+      id: 'pro_top_candidate',
+      title: 'Elite Hunter',
+      description: 'Contact 10 candidates (Pro Only)',
+      target: 10,
       xpReward: 1500,
       supporterOnly: true,
-      minPoints: 1000,
+      proOnly: true,
+      resetPeriod: ResetPeriod.weekly,
     ),
+
+    // ==================================================
+    // 🏆 LONG-TERM CHAINS (Profile Setup)
+    // ==================================================
     const AchievementDef(
-      id: 'rating_4_star',
-      title: 'Quality Worker',
-      description: 'Get a 4+ star rating on any job',
+      id: 'lt_profile_s1',
+      chainKey: 'lt_profile',
+      chainStage: 1,
+      title: 'Profile Setup I',
+      description: 'Basic info & photo',
       target: 1,
-      xpReward: 1000,
-      workerOnly: true,
-      minPoints: 1000,
+      xpReward: 300,
     ),
     const AchievementDef(
-      id: 'complete_5_jobs',
+      id: 'lt_profile_s2',
+      chainKey: 'lt_profile',
+      chainStage: 2,
+      title: 'Profile Setup II',
+      description: 'Add Bio & Location details',
+      target: 1,
+      xpReward: 700,
+    ),
+    const AchievementDef(
+      id: 'lt_profile_s3',
+      chainKey: 'lt_profile',
+      chainStage: 3,
+      title: 'Profile Setup III',
+      description: 'Add Skills & Portfolio',
+      target: 1,
+      xpReward: 1200,
+    ),
+
+    // 🏆 LONG-TERM CHAINS (Job Journey - Worker)
+    const AchievementDef(
+      id: 'lt_jobs_s1',
+      chainKey: 'lt_jobs',
+      chainStage: 1,
+      title: 'Job Journey I',
+      description: 'Complete 1 job',
+      target: 1,
+      xpReward: 500,
+      workerOnly: true,
+    ),
+    const AchievementDef(
+      id: 'lt_jobs_s2',
+      chainKey: 'lt_jobs',
+      chainStage: 2,
+      title: 'Job Journey II',
+      description: 'Complete 10 jobs',
+      target: 10,
+      xpReward: 2000,
+      workerOnly: true,
+    ),
+    const AchievementDef(
+      id: 'lt_jobs_s3',
+      chainKey: 'lt_jobs',
+      chainStage: 3,
+      title: 'Job Journey III',
+      description: 'Complete 50 jobs',
+      target: 50,
+      xpReward: 5000,
+      workerOnly: true,
+    ),
+
+    // ==================================================
+    // 🏆 EXISTING LONG-TERM CHAINS (Profile & Jobs)
+    // ==================================================
+    // ... আপনার আগের lt_profile এবং lt_jobs কোডগুলো এখানে থাকবে ...
+
+    // ==================================================
+    // 🌟 NEW 1: REPUTATION BUILDER (Ratings - Everyone)
+    // ==================================================
+    const AchievementDef(
+      id: 'lt_rating_s1',
+      chainKey: 'lt_rating',
+      chainStage: 1,
       title: 'Rising Star',
-      description: 'Complete 5 jobs successfully',
-      target: 5,
+      description: 'Receive your first 50-star rating',
+      target: 50,
+      xpReward: 1000,
+    ),
+    const AchievementDef(
+      id: 'lt_rating_s2',
+      chainKey: 'lt_rating',
+      chainStage: 2,
+      title: 'Trusted User',
+      description: 'Receive 500 positive ratings',
+      target: 500,
+      xpReward: 2500,
+    ),
+    const AchievementDef(
+      id: 'lt_rating_s3',
+      chainKey: 'lt_rating',
+      chainStage: 3,
+      title: 'Community Legend',
+      description: 'Receive 1000 positive ratings',
+      target: 1000,
+      xpReward: 5000, // Big Reward!
+    ),
+
+    // ==================================================
+    // 🤝 NEW 2: SOCIAL CONNECTOR (Referrals - Everyone)
+    // ==================================================
+    const AchievementDef(
+      id: 'lt_invite_s1',
+      chainKey: 'lt_invite',
+      chainStage: 1,
+      title: 'Friendly Face',
+      description: 'Refer 50 friend to the app',
+      target: 50,
+      xpReward: 1500,
+    ),
+    const AchievementDef(
+      id: 'lt_invite_s2',
+      chainKey: 'lt_invite',
+      chainStage: 2,
+      title: 'Community Builder',
+      description: 'Refer 500 friends',
+      target: 500,
+      xpReward: 5000,
+    ),
+    const AchievementDef(
+      id: 'lt_invite_s3',
+      chainKey: 'lt_invite',
+      chainStage: 3,
+      title: 'Influencer',
+      description: 'Refer 1000 friends',
+      target: 1000,
+      xpReward: 10000,
+    ),
+
+    // ==================================================
+    // 💬 NEW 3: NETWORK MASTER (Chat/Messages - Everyone)
+    // ==================================================
+    const AchievementDef(
+      id: 'lt_chat_s1',
+      chainKey: 'lt_chat',
+      chainStage: 1,
+      title: 'Hello World',
+      description: 'Start conversations with 100 people',
+      target: 100,
+      xpReward: 1500,
+    ),
+    const AchievementDef(
+      id: 'lt_chat_s2',
+      chainKey: 'lt_chat',
+      chainStage: 2,
+      title: 'Networker',
+      description: 'Start conversations with 1000 people',
+      target: 1000,
+      xpReward: 10000,
+    ),
+    const AchievementDef(
+      id: 'lt_chat_s3',
+      chainKey: 'lt_chat',
+      chainStage: 3,
+      title: 'Communication Hub',
+      description: 'Start conversations with 5000 people',
+      target: 5000,
+      xpReward: 50000,
+    ),
+
+    // ==================================================
+    // 📝 NEW 4: AMBITIOUS APPLICANT (Worker Only)
+    // ==================================================
+    const AchievementDef(
+      id: 'lt_apply_s1',
+      chainKey: 'lt_apply',
+      chainStage: 1,
+      title: 'Job Hunter I',
+      description: 'Apply to 50 jobs',
+      target: 50,
       xpReward: 2500,
       workerOnly: true,
-      minPoints: 1000,
-    ),
-
-    // 🥇 GOLD LEVEL (10000-50000 XP)
-    const AchievementDef(
-      id: 'portfolio_upload',
-      title: 'Portfolio Pro',
-      description: 'Upload your portfolio/CV',
-      target: 1,
-      xpReward: 3000,
-      workerOnly: true,
-      minPoints: 10000,
     ),
     const AchievementDef(
-      id: 'rating_4.5_star',
-      title: 'Top Rated',
-      description: 'Maintain 4.5+ average rating',
-      target: 1,
+      id: 'lt_apply_s2',
+      chainKey: 'lt_apply',
+      chainStage: 2,
+      title: 'Job Hunter II',
+      description: 'Apply to 200 jobs',
+      target: 200,
       xpReward: 5000,
       workerOnly: true,
-      minPoints: 10000,
     ),
     const AchievementDef(
-      id: 'complete_20_jobs',
-      title: 'Experienced Worker',
-      description: 'Complete 20 jobs successfully',
-      target: 20,
-      xpReward: 8000,
-      workerOnly: true,
-      minPoints: 10000,
-    ),
-    const AchievementDef(
-      id: 'post_10_jobs',
-      title: 'Active Employer',
-      description: 'Post 10 jobs',
-      target: 10,
-      xpReward: 6000,
-      supporterOnly: true,
-      minPoints: 10000,
-    ),
-
-    // 💎 PLATINUM LEVEL (50000-100000 XP) - DOCUMENT VERIFICATION
-    const AchievementDef(
-      id: 'kyc_verify',
-      title: 'KYC Verified',
-      description: 'Upload NID/Passport for verification',
-      target: 1,
-      xpReward: 20000,
-      minPoints: 50000,
-    ),
-    const AchievementDef(
-      id: 'driving_license',
-      title: 'Licensed Professional',
-      description: 'Upload valid Driving License',
-      target: 1,
-      xpReward: 15000,
-      minPoints: 50000,
-    ),
-    const AchievementDef(
-      id: 'education_certificate',
-      title: 'Certified Expert',
-      description: 'Upload education certificates',
-      target: 1,
+      id: 'lt_apply_s3',
+      chainKey: 'lt_apply',
+      chainStage: 3,
+      title: 'Job Hunter III',
+      description: 'Apply to 1000 jobs',
+      target: 1000,
       xpReward: 10000,
-      minPoints: 50000,
+      workerOnly: true,
+    ),
+
+    // ==================================================
+    // 💼 NEW 5: THE RECRUITER (Employer Only)
+    // ==================================================
+    const AchievementDef(
+      id: 'lt_hire_s1',
+      chainKey: 'lt_hire',
+      chainStage: 1,
+      title: 'First Hire',
+      description: 'Hire 50 person successfully',
+      target: 50,
+      xpReward: 1000,
+      supporterOnly: true,
     ),
     const AchievementDef(
-      id: 'complete_50_jobs',
-      title: 'Veteran Worker',
-      description: 'Complete 50 jobs with 4+ rating',
+      id: 'lt_hire_s2',
+      chainKey: 'lt_hire',
+      chainStage: 2,
+      title: 'Team Builder',
+      description: 'Hire 200 people',
+      target: 200,
+      xpReward: 2500,
+      supporterOnly: true,
+    ),
+    const AchievementDef(
+      id: 'lt_hire_s3',
+      chainKey: 'lt_hire',
+      chainStage: 3,
+      title: 'Business Tycoon',
+      description: 'Hire 1000 people',
+      target: 1000,
+      xpReward: 15000,
+      supporterOnly: true,
+    ),
+
+    // ==================================================
+    // 🛠 WORKER: JOB COMPLETION CHAIN
+    // ==================================================
+
+    // 1. Daily (প্রতিদিন ১টা কাজ)
+    const AchievementDef(
+      id: 'daily_complete_job',
+      title: 'Hard Worker',
+      description: 'Complete 1 job today',
+      target: 1,
+      xpReward: 100,
+      workerOnly: true,
+      resetPeriod: ResetPeriod.daily,
+    ),
+
+    // 2. Weekly (সপ্তাহে ৩টা কাজ)
+    const AchievementDef(
+      id: 'weekly_complete_jobs',
+      title: 'Job Marathon',
+      description: 'Complete 3 jobs this week',
+      target: 3,
+      xpReward: 500,
+      workerOnly: true,
+      resetPeriod: ResetPeriod.weekly,
+    ),
+
+    // 3. Long-Term Chain (লাইফটাইম প্রগ্রেস)
+    const AchievementDef(
+      id: 'lt_jobs_s1',
+      chainKey: 'lt_jobs',
+      chainStage: 1,
+      title: 'First Earnings',
+      description: 'Complete 20 jobs',
+      target: 20,
+      xpReward: 2500,
+      workerOnly: true,
+    ),
+    const AchievementDef(
+      id: 'lt_jobs_s2',
+      chainKey: 'lt_jobs',
+      chainStage: 2,
+      title: 'Professional',
+      description: 'Complete 50 jobs',
       target: 50,
+      xpReward: 10000,
+      workerOnly: true,
+    ),
+    const AchievementDef(
+      id: 'lt_jobs_s3',
+      chainKey: 'lt_jobs',
+      chainStage: 3,
+      title: 'Veteran Worker',
+      description: 'Complete 200 jobs',
+      target: 200,
       xpReward: 15000,
       workerOnly: true,
-      minPoints: 50000,
     ),
 
-    // 👑 DIAMOND LEVEL (100000+ XP) - ELITE ACHIEVEMENTS
+    // ==================================================
+    // 💼 EMPLOYER: HIRING CHAIN
+    // ==================================================
+
+    // 1. Daily (প্রতিদিন ১ জনকে হায়ার)
     const AchievementDef(
-      id: 'top_rated_100',
-      title: 'Legendary Worker',
-      description: 'Complete 100 jobs with 5-star rating',
-      target: 100,
-      xpReward: 50000,
-      workerOnly: true,
-      minPoints: 100000,
-    ),
-    const AchievementDef(
-      id: 'elite_employer',
-      title: 'Elite Employer',
-      description: 'Post 50+ jobs with 90% completion rate',
-      target: 50,
-      xpReward: 40000,
+      id: 'daily_hire',
+      title: 'Daily Recruiter',
+      description: 'Hire 1 person today',
+      target: 1,
+      xpReward: 150,
       supporterOnly: true,
-      minPoints: 100000,
-    ),
-    const AchievementDef(
-      id: 'referral_champion',
-      title: 'Referral Champion',
-      description: 'Refer 10+ friends who complete profile',
-      target: 10,
-      xpReward: 30000,
-      minPoints: 100000,
-    ),
-    const AchievementDef(
-      id: 'perfect_rating',
-      title: 'Perfect Score',
-      description: 'Maintain 5.0 rating for 20+ jobs',
-      target: 20,
-      xpReward: 25000,
-      workerOnly: true,
-      minPoints: 100000,
+      resetPeriod: ResetPeriod.daily,
     ),
 
-    // ==================================================
-    // 🎮 SPECIAL CHALLENGES (বিশেষ চ্যালেঞ্জ)
-    // ==================================================
+    // 2. Weekly (সপ্তাহে ৩ জনকে হায়ার)
     const AchievementDef(
-      id: 'streak_7_days',
-      title: 'Weekly Warrior',
-      description: 'Maintain 7-day login streak',
-      target: 7,
-      xpReward: 1000,
-      minPoints: 0,
-    ),
-    const AchievementDef(
-      id: 'streak_30_days',
-      title: 'Monthly Champion',
-      description: 'Maintain 30-day login streak',
-      target: 30,
-      xpReward: 5000,
-      minPoints: 1000,
-    ),
-    const AchievementDef(
-      id: 'quick_completion',
-      title: 'Speed Demon',
-      description: 'Complete a job within 24 hours of posting',
-      target: 1,
-      xpReward: 1500,
-      workerOnly: true,
-      minPoints: 1000,
-    ),
-    const AchievementDef(
-      id: 'repeat_client',
-      title: 'Trusted Partner',
-      description: 'Get hired by same client 3+ times',
+      id: 'weekly_hire',
+      title: 'Hiring Spree',
+      description: 'Hire 3 people this week',
       target: 3,
-      xpReward: 2000,
-      workerOnly: true,
-      minPoints: 5000,
+      xpReward: 600,
+      supporterOnly: true,
+      resetPeriod: ResetPeriod.weekly,
+    ),
+
+    // 3. Long-Term Chain (লাইফটাইম হায়ার)
+    const AchievementDef(
+      id: 'lt_hire_s1',
+      chainKey: 'lt_hire',
+      chainStage: 1,
+      title: 'First Hire',
+      description: 'Hire 20 people',
+      target: 20,
+      xpReward: 2500,
+      supporterOnly: true,
     ),
     const AchievementDef(
-      id: 'weekend_warrior',
-      title: 'Weekend Warrior',
-      description: 'Complete jobs on both Saturday and Sunday',
-      target: 2,
-      xpReward: 1200,
-      workerOnly: true,
-      minPoints: 1000,
+      id: 'lt_hire_s2',
+      chainKey: 'lt_hire',
+      chainStage: 2,
+      title: 'Team Builder',
+      description: 'Hire 50 people',
+      target: 50,
+      xpReward: 10000,
+      supporterOnly: true,
     ),
     const AchievementDef(
-      id: 'early_bird',
-      title: 'Early Bird',
-      description: 'Complete a job before 10 AM',
+      id: 'lt_hire_s3',
+      chainKey: 'lt_hire',
+      chainStage: 3,
+      title: 'Business Tycoon',
+      description: 'Hire 200 people',
+      target: 200,
+      xpReward: 20000,
+      supporterOnly: true,
+    ),
+
+    // 🎁 BONUS (Side Missions - No Chain)
+    const AchievementDef(
+      id: 'bonus_rate_us',
+      title: 'Fan of FindUs',
+      description: 'Rate us on Play Store',
       target: 1,
-      xpReward: 800,
-      workerOnly: true,
-      minPoints: 0,
-    ),
-    const AchievementDef(
-      id: 'night_owl',
-      title: 'Night Owl',
-      description: 'Complete a job after 10 PM',
-      target: 1,
-      xpReward: 800,
-      workerOnly: true,
-      minPoints: 0,
+      xpReward: 500,
     ),
   ];
 
@@ -326,44 +480,6 @@ class AchievementsConfig {
       return all.firstWhere((e) => e.id == id);
     } catch (_) {
       return null;
-    }
-  }
-
-  // ✅ ক্যাটাগরি অনুযায়ী ফিল্টার করার মেথড
-  static List<AchievementDef> getByCategory(String category) {
-    switch (category) {
-      case 'daily':
-        return all.where((e) => e.resetPeriod == ResetPeriod.daily).toList();
-      case 'weekly':
-        return all.where((e) => e.resetPeriod == ResetPeriod.weekly).toList();
-      case 'onetime':
-        return all.where((e) => e.resetPeriod == ResetPeriod.none).toList();
-      default:
-        return all;
-    }
-  }
-
-  // ✅ লেভেল অনুযায়ী ফিল্টার করার মেথড
-  static List<AchievementDef> getByLevel(int minPoints) {
-    if (minPoints >= 100000) {
-      return all.where((e) => e.minPoints >= 100000).toList();
-    } else if (minPoints >= 50000) {
-      return all.where((e) => e.minPoints >= 50000 && e.minPoints < 100000).toList();
-    } else if (minPoints >= 10000) {
-      return all.where((e) => e.minPoints >= 10000 && e.minPoints < 50000).toList();
-    } else if (minPoints >= 1000) {
-      return all.where((e) => e.minPoints >= 1000 && e.minPoints < 10000).toList();
-    } else {
-      return all.where((e) => e.minPoints == 0).toList();
-    }
-  }
-
-  // ✅ রোল অনুযায়ী ফিল্টার করার মেথড
-  static List<AchievementDef> getByRole(bool isWorker) {
-    if (isWorker) {
-      return all.where((e) => !e.supporterOnly).toList();
-    } else {
-      return all.where((e) => !e.workerOnly).toList();
     }
   }
 }

@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart'; // ডিবাগ প্রিন্টের জন্য
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class PostService {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
-  static const String _collection = 'posts'; // কালেকশন নাম কনস্ট্যান্ট হিসেবে রাখা ভালো
+  static const String _collection = 'posts';
 
-  /// 📌 পিন তৈরি করা (Create Post/Pin)
+  /// 📌 Create Post/Pin
   static Future<void> createPost({
     required String ownerId,
     required String ownerRole,
@@ -21,7 +23,6 @@ class PostService {
     required String priceLabel,
     required List<String> images,
     required bool isLive,
-    // FieldValue.serverTimestamp() পাস করাই উত্তম
     FieldValue? createdAt,
     String gender = 'Any',
     double experience = 0,
@@ -30,9 +31,11 @@ class PostService {
     bool verified = false,
     bool isPromoted = false,
     String status = 'open',
+    int slots = 1,
+    int approvedCount = 0,
   }) async {
     try {
-      await _db.collection(_collection).add({
+      final docRef = await _db.collection(_collection).add({
         'ownerId': ownerId,
         'ownerRole': ownerRole,
         'title': title,
@@ -57,16 +60,28 @@ class PostService {
         'verified': verified,
         'isPromoted': isPromoted,
         'status': status,
+        'slots': slots.clamp(1, 10),
+        'approvedCount': approvedCount,
+
+        // ✅ Analytics Initial Fields
+        'clicks': 0,
+        'impressions': 0,
       });
-      if (kDebugMode) print("✅ Post created successfully");
+
+      // ✅ Long-term chain progress
+      try {
+        await AchievementService.incrementProgress('lt_posts_s1', amount: 1);
+        await AchievementService.incrementProgress('lt_posts_s2', amount: 1);
+        await AchievementService.incrementProgress('lt_posts_s3', amount: 1);
+      } catch (_) {}
+
+      if (kDebugMode) print("✅ Post created successfully: ${docRef.id}");
     } catch (e) {
       if (kDebugMode) print("❌ Error creating post: $e");
-      rethrow; // UI তে এরর দেখানোর জন্য rethrow করা হলো
+      rethrow;
     }
   }
 
-  /// 📍 ম্যাপের সব পিন লোড করা
-  /// দ্রষ্টব্য: Firebase Console এ 'isLive' এবং 'createdAt' এর জন্য Composite Index তৈরি করতে হবে।
   static Stream<List<Map<String, dynamic>>> streamPins() {
     return _db
         .collection(_collection)
@@ -77,17 +92,14 @@ class PostService {
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final data = doc.data();
-
-        // সেফটি চেক: লোকেশন ডেটা এক্সট্রাক্ট করা
         double lat = 0.0;
         double lng = 0.0;
 
         if (data['location'] is GeoPoint) {
-          GeoPoint gp = data['location'];
+          final gp = data['location'] as GeoPoint;
           lat = gp.latitude;
           lng = gp.longitude;
         } else {
-          // যদি GeoPoint না থাকে, lat/lng ফিল্ড চেক করবে
           lat = double.tryParse(data['lat']?.toString() ?? '0') ?? 0.0;
           lng = double.tryParse(data['lng']?.toString() ?? '0') ?? 0.0;
         }
@@ -97,19 +109,15 @@ class PostService {
           'id': doc.id,
           'latitude': lat,
           'longitude': lng,
-          // UI এর সুবিধার্থে GeoPoint অবজেক্টও রাখা হলো
-          'geoPoint': data['location'] is GeoPoint
-              ? data['location']
-              : GeoPoint(lat, lng),
+          'geoPoint': data['location'] is GeoPoint ? data['location'] : GeoPoint(lat, lng),
         };
       }).toList();
     }).handleError((error) {
       if (kDebugMode) print("❌ Error streaming posts: $error");
-      return <Map<String, dynamic>>[]; // এরর হলে খালি লিস্ট রিটার্ন করবে
+      return <Map<String, dynamic>>[];
     });
   }
 
-  /// 🗑️ পিন ডিলিট করা
   static Future<void> deletePost(String postId) async {
     try {
       await _db.collection(_collection).doc(postId).delete();
@@ -120,7 +128,6 @@ class PostService {
     }
   }
 
-  /// 🔄 পিন আপডেট করা (Live Status)
   static Future<void> updatePostStatus(String postId, bool isLive) async {
     try {
       await _db.collection(_collection).doc(postId).update({
@@ -131,6 +138,69 @@ class PostService {
     } catch (e) {
       if (kDebugMode) print("❌ Error updating status: $e");
       rethrow;
+    }
+  }
+
+  // ✅ 1. Track Card Click (Tap)
+  static Future<void> trackCardClick(String postId, String ownerId) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    // নিজের কার্ডে নিজে ক্লিক করলে কাউন্ট হবে না
+    if (currentUser != null && currentUser.uid == ownerId) return;
+
+    try {
+      // পোস্টের ক্লিক কাউন্ট বাড়ানো
+      if (postId.isNotEmpty) {
+        await _db.collection(_collection).doc(postId).update({
+          'clicks': FieldValue.increment(1),
+        });
+      }
+
+      // ইউজারের টোটাল প্রোফাইল ভিউ কাউন্ট বাড়ানো
+      await _db.collection('users').doc(ownerId).update({
+        'profileViews': FieldValue.increment(1),
+      });
+
+      debugPrint("✅ Click tracked for Post: $postId, User: $ownerId");
+    } catch (e) {
+      debugPrint("❌ Error tracking click: $e");
+    }
+  }
+
+  // ✅ 2. Track Impression (Visibility)
+  static Future<void> trackImpression(String postId) async {
+    // এখানে আমরা ইউজার আইডি চেক করছি না, কারণ ভিউ যে কেউ করতে পারে।
+    // তবে চাইলে নিজের পোস্ট নিজেরা দেখলে ইগনোর করতে পারেন।
+
+    if (postId.isEmpty) return;
+
+    try {
+      // পোস্টের ইম্প্রেশন কাউন্ট বাড়ানো
+      await _db.collection(_collection).doc(postId).update({
+        'impressions': FieldValue.increment(1),
+      });
+
+      // অপশনাল: পোস্টের মালিকের টোটাল ইম্প্রেশনও বাড়াতে পারেন
+      // তবে সেটা সার্ভার সাইড ফাংশন দিয়ে করা ভালো।
+      // এখানে সিম্পল রাখার জন্য শুধু পোস্ট ডকুমেন্টে আপডেট করা হলো।
+
+      debugPrint("👀 Impression tracked for Post: $postId");
+    } catch (e) {
+      debugPrint("❌ Error tracking impression: $e");
+    }
+  }
+
+  // ✅ 3. Track Profile Click (Direct)
+  static Future<void> trackProfileClick(String targetUserId) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null && currentUser.uid == targetUserId) return;
+
+    try {
+      await _db.collection('users').doc(targetUserId).update({
+        'profileViews': FieldValue.increment(1),
+      });
+      debugPrint("✅ Profile view counted for $targetUserId");
+    } catch (e) {
+      debugPrint("❌ Error counting view: $e");
     }
   }
 }

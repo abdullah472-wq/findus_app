@@ -33,9 +33,10 @@ import 'package:findus_app/screens/settings/subscription_screen.dart';
 import 'package:findus_app/screens/report/report_screen.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/screens/explore/notifications_page.dart'; // Notification Page Import
+import 'package:findus_app/screens/explore/notifications_page.dart';
 import 'package:findus_app/screens/profile/worker_documents_screen.dart';
 import 'package:findus_app/screens/rating_history_screen.dart';
+import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
 import '../../models/worker_model.dart';
 import 'card_theme_bottom_sheet.dart';
 import 'followers_following_screen.dart';
@@ -61,6 +62,8 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   bool isFollowing = false;
   bool isBlocked = false;
   bool isOnline = false;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _postsSectionKey = GlobalKey();
 
   // Theme & Stats
   int _cardThemeIndex = 0;
@@ -110,6 +113,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     BadgeService.badgeNotifier.removeListener(_badgeListener);
     _userSub?.cancel();
     _userStatsSub?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -376,6 +380,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
               child: ScrollConfiguration(
                 behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   physics: const ClampingScrollPhysics(),
                   padding: const EdgeInsets.only(bottom: 20),
                   child: isLoading ? _buildShimmerLoading() : _buildBody(isDark),
@@ -434,83 +439,38 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // 🏞️ Header with Dynamic Theme Support
-  // 🏞️ Final Unified Header (Same for Owner & Viewer)
   Widget _buildHeaderCard(String roleLabel, bool isDark) {
-    // ✅ ফিক্স: userData এর বদলে BadgeService থেকে লেভেল এবং পয়েন্ট নেওয়া হচ্ছে
-    // যদি ওনার হয় তবে সার্ভিস থেকে, নাহলে userData থেকে
+    // ১. ডাটা লোডিং (BadgeService থেকে)
     final badgeProgress = BadgeService.badgeNotifier.value;
 
+    // XP এবং Stars ডাটা নেওয়া
     int xp;
-    BadgeLevel badge;
+    double stars;
 
     if (widget.isOwner) {
-      // ওনার হলে রিয়েল-টাইম সার্ভিস ডাটা
-      xp = badgeProgress.totalPoints;
-      badge = badgeProgress.level;
+      xp = badgeProgress.totalXP;
+      stars = badgeProgress.totalStars;
     } else {
-      // ভিজিটর হলে ফায়ারবেস স্ন্যাপশট ডাটা
-      final rawXp = userData['user_badge_points'] ?? userData['xpPoints'] ?? 0;
-      xp = int.tryParse(rawXp.toString()) ?? 0;
-      badge = AchievementService.getBadgeLevelByPoints(xp);
+      xp = int.tryParse((userData['xpPoints'] ?? 0).toString()) ?? 0;
+      stars = double.tryParse((userData['user_accumulated_stars'] ?? 0.0).toString()) ?? 0.0;
     }
 
-    final double rating = double.tryParse(userData['rating']?.toString() ?? '0.0') ?? 0.0;
-    final int completed = int.tryParse(userData['completedCount']?.toString() ?? '0') ?? 0;
+    // ব্যাজ র‍্যাঙ্ক ক্যালকুলেশন
+    final badgeRank = BadgeService.getBadgeByStars(stars);
+    final numericLevel = BadgeService.getNumericLevel(xp);
+    final badgeColor = badgeProgress.badgeColor; // অথবা _getBadgeColor(badgeRank)
+    final isNewbie = badgeRank == BadgeLevel.newbie;
 
-    // ২. থিম কালার (Dynamic Theme Support)
-    final int themeIdx = _cardThemeIndex.clamp(0, _themeGradients.length - 1);
+    // থিম কালার
+    final int themeIdx = (_cardThemeIndex as int).clamp(0, _themeGradients.length - 1);
     final List<Color> selectedTheme = _themeGradients[themeIdx];
-
-    // টেক্সট কালার লজিক
     final textColor = isDark ? Colors.white : Colors.black87;
-
-    final coverGradient = _getBadgeGradient(badge);
-    final badgeColor = _getBadgeColor(badge);
-    final isNewbie = xp < 1000;
-
-    // ৩. স্ট্যাটাস লজিক
-    final bool isVerified = userData['kyc_completed'] == true;
-
-    final double avgRating = (userStats['avgRating'] is num)
-        ? (userStats['avgRating'] as num).toDouble()
-        : double.tryParse((userStats['avgRating'] ?? '0').toString()) ?? 0.0;
-
-    final int reviewsCount = (userStats['reviewsCount'] is num)
-        ? (userStats['reviewsCount'] as num).toInt()
-        : int.tryParse((userStats['reviewsCount'] ?? '0').toString()) ?? 0;
-
-    final bool isTopRated = avgRating >= 4.8 && reviewsCount >= 10;
-
-// role detect
-    final bool isFinder = _isWorkerRole(); // তোমার naming অনুযায়ী finder=true
-
-    final int hiresCount = (userStats['hiresCount'] ?? 0) is num
-        ? (userStats['hiresCount'] as num).toInt()
-        : int.tryParse((userStats['hiresCount'] ?? '0').toString()) ?? 0;
-
-    final int hiresCompleted = (userStats['hiresCompleted'] ?? 0) is num
-        ? (userStats['hiresCompleted'] as num).toInt()
-        : int.tryParse((userStats['hiresCompleted'] ?? '0').toString()) ?? 0;
-
-    final int jobsCompleted = (userStats['jobsCompleted'] ?? 0) is num
-        ? (userStats['jobsCompleted'] as num).toInt()
-        : int.tryParse((userStats['jobsCompleted'] ?? '0').toString()) ?? 0;
-
-    final double hireSuccessRate = hiresCount > 0 ? (hiresCompleted / hiresCount) : 0.0;
-
-// Trusted logic
-    final bool isTrusted = isFinder
-        ? (jobsCompleted >= 50) // এখন milestone-based (পরে successRate add করতে পারবে)
-        : (hiresCount >= 20 && hireSuccessRate >= 0.90);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        // থিম গ্রেডিয়েন্ট ব্যবহার করা হয়েছে
         gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E1E1E), const Color(0xFF121212)] // ডার্ক মোড ডিফল্ট
-              : selectedTheme, // লাইট মোডে সিলেক্টেড থিম
+          colors: isDark ? [const Color(0xFF1E1E1E), const Color(0xFF121212)] : selectedTheme,
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
@@ -535,7 +495,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 height: 130,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  gradient: coverGradient,
+                  gradient: _getBadgeGradient(badgeRank),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Stack(
@@ -543,12 +503,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                     Positioned(top: -30, left: -30, child: CircleAvatar(radius: 70, backgroundColor: Colors.white.withOpacity(0.1))),
 
                     // Badge (Top Right)
-                    // Badge (Top Right)
-                    // Badge (Top Right) with Tap Logic
                     Positioned(
                       top: 20, right: 20,
                       child: GestureDetector(
-                        onTap: () => _showBadgeDetails(badge, xp), // ✅ এখানে ডায়ালগ কল করা হয়েছে
+                        onTap: () => _showBadgeDetails(badgeRank, xp, stars), // ✅ আপডেটেড মেথড কল
                         child: Column(
                           children: [
                             Container(
@@ -565,14 +523,12 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                                 ],
                               ),
                               child: Icon(
-                                Icons.workspace_premium,
-                                size: 48,
-                                color: isNewbie ? Colors.white : badgeColor,
+                                Icons.workspace_premium, // আপনার পছন্দের নতুন আইকন
+                                color: badgeColor,       // কালার ভেরিয়েবল যা আছে তাই থাকবে
+                                size: 36,                // সাইজ প্রয়োজনে বাড়াতে/কমাতে পারেন
                               ),
                             ),
-
                             const SizedBox(height: 6),
-
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                               decoration: BoxDecoration(
@@ -580,13 +536,13 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                  badge.name.toUpperCase(),
-                                  style: TextStyle(
-                                      color: isNewbie ? Colors.white : badgeColor,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.2
-                                  )
+                                badgeRank.toString().split('.').last.toUpperCase(),
+                                style: TextStyle(
+                                  color: isNewbie ? Colors.white : badgeColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                ),
                               ),
                             ),
                           ],
@@ -597,32 +553,60 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 ),
               ),
 
-              // Avatar
+              // Avatar Section
               Positioned(
                 bottom: -55,
                 child: Stack(
-                  alignment: Alignment.bottomRight,
+                  alignment: Alignment.bottomCenter,
+                  clipBehavior: Clip.none,
                   children: [
+                    // Profile Image
                     Container(
                       width: 110, height: 110,
                       decoration: BoxDecoration(
-                        // Avatar Border matches Theme
-                          color: selectedTheme[0],
-                          shape: BoxShape.circle,
-                          border: Border.all(color: selectedTheme[0], width: 5),
-                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 5))]
+                        color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: isDark ? const Color(0xFF2C2C2C) : Colors.white, width: 5),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 5))],
                       ),
                       child: ClipOval(child: _buildCoverProfileImage()),
                     ),
+
+                    // 🔥 LEVEL BADGE (Bottom Center)
+                    Positioned(
+                      bottom: -10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandMain,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                        ),
+                        child: Text(
+                          "LVL $numericLevel", // ✅ Level Display
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Online Status
                     if (isOnline)
-                      Container(
-                          margin: const EdgeInsets.all(6),
-                          width: 20, height: 20,
+                      Positioned(
+                        bottom: 10, right: 6,
+                        child: Container(
+                          width: 18, height: 18,
                           decoration: BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3)
-                          )
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -632,12 +616,11 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
 
           const SizedBox(height: 65),
 
-          // 📝 Info Section
+          // Name and Stats
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               children: [
-                // Name & Icons
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -645,125 +628,23 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                       child: Text(
                         _getSafeString(userData['name']).toUpperCase(),
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: textColor,
-                          letterSpacing: 0.5,
+                          fontSize: 24, fontWeight: FontWeight.w800, color: textColor, letterSpacing: 0.5,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (userData['accountLocked'] == true)
-                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 18, color: Colors.redAccent)),
-                    if (userData['workPaused'] == true)
-                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.pause_circle_outline, size: 18, color: Colors.amber)),
-                    if (userData['profileHidden'] == true)
-                      const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.visibility_off_outlined, size: 18, color: Colors.grey)),
+                    if (userData['accountLocked'] == true) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.lock_outline, size: 18, color: Colors.redAccent)),
                   ],
                 ),
-
                 const SizedBox(height: 4),
                 Text(
                   roleLabel.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.brandMain,
-                    letterSpacing: 1.5,
-                  ),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.brandMain, letterSpacing: 1.5),
                 ),
-
                 const SizedBox(height: 25),
 
-                // Social & Status Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Social Buttons (Followers/Following)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.black.withOpacity(0.05)),
-                      ),
-                      child: Row(
-                        children: [
-                          _buildStylishSocialBtn(
-                              count: _followersCountLive,
-                              label: "Followers",
-                              icon: Icons.people_alt_rounded,
-                              color: Colors.blueAccent,
-                              isDark: isDark,
-                              onTap: _showFollowersList
-                          ),
-                          Container(height: 20, width: 1, color: Colors.grey.withOpacity(0.3), margin: const EdgeInsets.symmetric(horizontal: 12)),
-                          _buildStylishSocialBtn(
-                              count: _followingCountLive,
-                              label: "Following",
-                              icon: Icons.person_add_alt_1_rounded,
-                              color: Colors.purpleAccent,
-                              isDark: isDark,
-                              onTap: _showFollowingList
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Status Icons
-                    Row(
-                      children: [
-                        _buildCleanStatusIcon(Icons.verified, isVerified, Colors.blue, "Verified"),
-                        const SizedBox(width: 5),
-                        _buildCleanStatusIcon(Icons.star, isTopRated, Colors.orange, "Top Rated"),
-                        const SizedBox(width: 5),
-                        _buildCleanStatusIcon(Icons.shield, isTrusted, Colors.green, "Trusted"),
-                      ],
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 25),
-
-                // Stats Boxes (Transparent background)
-                // 📊 Stats Boxes
-                Row(
-                  children: [
-                    // 1. Rating (Now Clickable)
-                    _buildFloatingStatBox(
-                      "RATING",
-                      rating.toStringAsFixed(1),
-                      Icons.star_rounded,
-                      Colors.amber,
-                      isDark,
-                      onTap: _openRatingHistory, // ✅ অ্যাকশন যোগ করা হলো
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // 2. Jobs / Hired
-                    _buildFloatingStatBox(
-                        _isWorkerRole() ? "JOBS" : "HIRED",
-                        "$completed",
-                        _isWorkerRole() ? Icons.work_outline : Icons.handshake_rounded,
-                        Colors.blue,
-                        isDark
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // 3. XP Points
-                    _buildFloatingStatBox(
-                        "XP",
-                        _formatNumber(xp),
-                        Icons.bolt,
-                        Colors.purple,
-                        isDark
-                    ),
-                  ],
-                ),
-
+                // Social Row & Stats
+                _buildHeaderStatsRow(isDark, stars.toInt(), xp), // ✅ নতুন হেল্পার মেথড
                 const SizedBox(height: 24),
               ],
             ),
@@ -773,145 +654,168 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
-  // ---------------- HELPER METHODS ----------------
+  // --- Header Stats Row Helper ---
 
-// --- Badge Helper Methods ---
+  Widget _buildHeaderStatsRow(bool isDark, int stars, int xp) {
+    // 1. Rating & Completed Count
+    final double rating = double.tryParse(userData['rating']?.toString() ?? '0.0') ?? 0.0;
+    final int completed = int.tryParse(userData['completedCount']?.toString() ?? '0') ?? 0;
 
-  // UnifiedProfileScreenState class-এর ভিতরে, অন্যান্য helper methods-এর পরে যোগ করুন:
+    // 2. Get Leaderboard Rank from userStats
+    // যদি র‍্যাঙ্ক না থাকে তবে 'N/A' দেখাবে
+    final int rank = int.tryParse(userStats['leaderboardRank']?.toString() ?? '0') ?? 0;
+    final String rankDisplay = rank > 0 ? "#$rank" : "N/A";
 
-// --- Badge Helper Methods ---
+    return Row(
+      children: [
+        // 1. Rating Box
+        _buildFloatingStatBox(
+          "RATING",
+          rating.toStringAsFixed(1),
+          Icons.star_rounded,
+          Colors.amber,
+          isDark,
+          onTap: _openRatingHistory,
+        ),
 
-  void _showBadgeDetails(BadgeLevel badge, int xp) {
+        const SizedBox(width: 12),
+
+        // 2. Jobs / Hired Box
+        _buildFloatingStatBox(
+          _isWorkerRole() ? "JOBS" : "HIRED",
+          "$completed",
+          _isWorkerRole() ? Icons.work_outline : Icons.handshake_rounded,
+          Colors.blue,
+          isDark,
+        ),
+
+        const SizedBox(width: 12),
+
+        // 3. RANK BOX (Replaces XP) ✅
+        _buildFloatingStatBox(
+          "RANK",
+          rankDisplay,
+          // ✅ এখানে আইকন চেঞ্জ করা হয়েছে
+          Icons.workspace_premium,
+          const Color(0xFFFFD700),
+          isDark,
+          onTap: () {
+            // ✅ Rank এ ক্লিক করলে AppBar সহ লিডারবোর্ড ওপেন হবে
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const LeaderboardScreen(isStandalone: true),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  // --- Badge Details Dialog (Updated for Dual System) ---
+  void _showBadgeDetails(BadgeLevel badge, int xp, double stars) {
     final badgeColor = _getBadgeColor(badge);
     final badgeName = badge.toString().split('.').last.toUpperCase();
-    final nextLevelPoints = _getNextLevelPoints(badge);
-    final progress = _calculateBadgeProgress(badge, xp);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Next Rank Threshold (Stars)
+    final double nextStarThreshold = _getNextStarThreshold(badge);
+    final double starProgress = _calculateStarProgress(stars, badge);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: isDark
-            ? const Color(0xFF2C2C2C)
-            : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            Icon(
-              Icons.workspace_premium,
-              color: badgeColor,
-              size: 28,
-            ),
+            Icon(Icons.workspace_premium, color: badgeColor, size: 30),
             const SizedBox(width: 12),
-            Text(
-              badgeName,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: badgeColor,
-              ),
-            ),
+            Expanded(child: Text("$badgeName RANK", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: badgeColor))),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Progress Bar
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation(badgeColor),
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(4),
-            ),
-
-            const SizedBox(height: 8),
-
-            // XP Info
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "$xp XP",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: isDark ? Colors.white : Colors.black,
-                  ),
-                ),
-                Text(
-                  "${(progress * 100).toStringAsFixed(0)}%",
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Next Level Info
-            if (badge != BadgeLevel.diamond)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: badgeColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: badgeColor.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.arrow_upward,
-                      color: badgeColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Next Level: ${_getNextLevelName(badge)}",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: badgeColor,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            "Need ${nextLevelPoints - xp} more XP",
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Rank Progress (Stars)
+            _buildDialogProgressRow("Rank Progress", stars, nextStarThreshold, starProgress, badgeColor, "Stars", isDark),
+            const SizedBox(height: 20),
+            // Level Progress (XP)
+            _buildDialogXPInfo(xp, isDark),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              "CLOSE",
-              style: TextStyle(
-                color: isDark ? Colors.white70 : Colors.black54,
-              ),
-            ),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text("CLOSE", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogProgressRow(String title, double current, double target, double progress, Color color, String unit, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black54)),
+        const SizedBox(height: 6),
+        LinearProgressIndicator(value: progress, backgroundColor: Colors.grey[300], valueColor: AlwaysStoppedAnimation(color), minHeight: 6, borderRadius: BorderRadius.circular(4)),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text("${current.toStringAsFixed(0)} $unit", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black)),
+            Text("Goal: ${target.toStringAsFixed(0)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDialogXPInfo(int xp, bool isDark) {
+    final lvl = BadgeService.getNumericLevel(xp);
+    final nextLvlXp = BadgeService.getXpForLevel(lvl + 1);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          const Icon(Icons.bolt, color: Colors.orange),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("Current Level: $lvl", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+              Text("$xp / $nextLvlXp XP", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
           ),
         ],
       ),
     );
   }
+
+  // Helpers
+  double _getNextStarThreshold(BadgeLevel level) {
+    switch (level) {
+      case BadgeLevel.newbie: return 100;
+      case BadgeLevel.bronze: return 500;
+      case BadgeLevel.silver: return 2000;
+      case BadgeLevel.gold: return 5000;
+      case BadgeLevel.platinum: return 10000;
+      default: return 10000;
+    }
+  }
+
+  double _calculateStarProgress(double stars, BadgeLevel level) {
+    double next = _getNextStarThreshold(level);
+    double prev = (level == BadgeLevel.newbie) ? 0 : _getNextStarThreshold(BadgeLevel.values[level.index - 1]);
+    if (next <= prev) return 1.0;
+    return ((stars - prev) / (next - prev)).clamp(0.0, 1.0);
+  }
+
+  // ---------------- HELPER METHODS ----------------
+
+
 
 // Helper: Get next level points
   int _getNextLevelPoints(BadgeLevel currentLevel) {
@@ -949,38 +853,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     }
   }
 
-// Helper: Calculate badge progress
-  double _calculateBadgeProgress(BadgeLevel level, int xp) {
-    final currentThreshold = _getLevelThreshold(level);
-    final nextThreshold = _getNextLevelPoints(level);
-
-    if (level == BadgeLevel.diamond) return 1.0;
-    if (nextThreshold == currentThreshold) return 1.0;
-
-    final progress = (xp - currentThreshold) / (nextThreshold - currentThreshold);
-    return progress.clamp(0.0, 1.0);
-  }
-
-// Helper: Get level threshold
-  int _getLevelThreshold(BadgeLevel level) {
-    switch (level) {
-      case BadgeLevel.newbie:
-        return 0;
-      case BadgeLevel.bronze:
-        return 1000;
-      case BadgeLevel.silver:
-        return 10000;
-      case BadgeLevel.gold:
-        return 50000;
-      case BadgeLevel.platinum:
-        return 100000;
-      case BadgeLevel.diamond:
-        return 1000000;
-    }
-  }
-
-
-  // ✨ Helper: Stylish Glassy Social Button
   // ✨ Helper: Stylish Glassy Social Button (Count Highlighted)
   Widget _buildStylishSocialBtn({
     required int count,
@@ -1044,7 +916,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
-  // 👉 Helper: Status Icon (Color if Active, Gray if Inactive)
   // ✨ Helper: Clean Status Icon (Only Icon, No BG)
   Widget _buildCleanStatusIcon(IconData icon, bool isActive, Color color, String tooltip) {
     // ইনঅ্যাক্টিভ হলে গ্রে আইকন দেখাবে
@@ -1093,7 +964,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     }
   }
 
-  // 🎨 Helper: Badge Color (For Icon)
   // 🎨 Helper: Badge Color
   Color _getBadgeColor(BadgeLevel level) {
     switch (level) {
@@ -1120,7 +990,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     return Container(color: Colors.grey[200], child: const Icon(Icons.person, color: Colors.grey));
   }
 
-  // 📦 Helper: Stat Box
   // 📦 Helper: Stat Box with Tap Support
   Widget _buildFloatingStatBox(
       String label,
@@ -1174,9 +1043,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
 
-
-  // --- Action Buttons (Equal Size) ---
-  // এই মেথডটি আপডেট করুন
   // _buildActionButton মেথডটি আপডেট করুন (নোটিফিকেশন ব্যাজ সাপোর্ট সহ)
   Widget _buildActionButton(
       IconData icon,
@@ -1490,13 +1356,29 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                     child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                            onTap: paused ? null : () => _handleHireOrRequest(isWorker),
+                            onTap: paused
+                                ? null
+                                : () {
+                              final ctx = _postsSectionKey.currentContext;
+                              if (ctx != null) {
+                                Scrollable.ensureVisible(
+                                  ctx,
+                                  duration: const Duration(milliseconds: 450),
+                                  curve: Curves.easeInOut,
+                                  alignment: 0.05,
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Select a post below to apply.")),
+                                );
+                              }
+                            },
                             borderRadius: BorderRadius.circular(15),
                             child: Center(
-                                child: Text(
-                                    isWorker ? 'HIRE NOW' : 'SEND REQUEST',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)
-                                )
+                              child: const Text(
+                                'VIEW POSTS',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
                             )
                         )
                     )
@@ -1755,7 +1637,31 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       });
     }
   }
-  Future<void> _shareProfile() async { final userName = _getSafeString(userData['name'], defaultValue: 'FindUs User'); final profileLink = 'https://findus.app/profile/${widget.uid}'; await Share.share('Check out $userName on FindUs!\n$profileLink'); }
+  Future<void> _shareProfile() async {
+    final String link = "https://findus.app/profile/${widget.uid}";
+    await Share.share("Check out my profile on FindUs: $link");
+
+    // ==================================================
+    // ✅ ACHIEVEMENT & QUEST UPDATES
+    // ==================================================
+
+    // 1. Daily Share Quest
+    await AchievementService.incrementProgress('daily_share');
+
+    // 2. Long Term Invite/Share Chain
+    await AchievementService.incrementProgress('lt_invite_s1');
+    await AchievementService.incrementProgress('lt_invite_s2');
+    await AchievementService.incrementProgress('lt_invite_s3');
+
+    // 3. Sync Weekly Chest
+    await AchievementService.syncWeeklyChestFromServer();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Shared successfully! Quest progress updated.")),
+      );
+    }
+  }
   void _showUpgradeToPremiumPopup() { showDialog(context: context, builder: (context) => AlertDialog(title: const Text('Upgrade to Premium'), content: const Text('Unlock exclusive features like Locking Account, Custom Themes, and more!'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')), ElevatedButton(onPressed: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen())); }, child: const Text('Upgrade'))])); }
   void _showUpgradeToBusinessPopup() { showDialog(context: context, builder: (context) => AlertDialog(title: const Text('Upgrade to Business'), content: const Text('Unlock Team Management and other business features!'), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')), ElevatedButton(onPressed: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionScreen())); }, child: const Text('Upgrade'))])); }
   void _openChat(String roleLabel) async { final cid = await FirestoreChatService.getOrCreateConversation(otherUserId: widget.uid); if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(conversationId: cid, userName: _getSafeString(userData['name']), userRole: roleLabel, userImage: _getSafeString(userData['image'])))); }
@@ -1858,8 +1764,10 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _sectionTitle('User Posts', isDark),
-        _buildOwnerPostsStream(isDark), // ইউজারের পোস্ট
-
+        Container(
+          key: _postsSectionKey, // ✅ add
+          child: _buildOwnerPostsStream(isDark),
+        ),
         const SizedBox(height: 20),
 
         _sectionTitle(isWorker ? 'Similar Workers' : 'Similar Supporters', isDark),

@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
@@ -123,6 +124,10 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     super.dispose();
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // DATA LOAD
+  // ═══════════════════════════════════════════════════════════════
+
   Future<void> _loadUserData() async {
     try {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
@@ -176,7 +181,6 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
 
       _workStartTime = _parseTimeOfDay(data['workStart']?.toString());
       _workEndTime = _parseTimeOfDay(data['workEnd']?.toString());
-
     } catch (e) {
       _showError("Failed to load profile: $e");
     } finally {
@@ -184,107 +188,26 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     }
   }
 
-  // ... (Helper Methods: _generateLocationKeys, _pickAndUploadProfileImage, etc. - keep same logic)
-  // Logic code is same, only UI part updated below.
+  // ═══════════════════════════════════════════════════════════════
+  // HELPER METHODS
+  // ═══════════════════════════════════════════════════════════════
 
-  Future<XFile> _compressIfNeeded(
-      XFile file, {
-        required int maxSizeInBytes,
-      }) async {
-    final originalBytes = await file.readAsBytes();
-
-    // আগে থেকেই যদি ছোট হয়, compress করার দরকার নাই
-    if (originalBytes.lengthInBytes <= maxSizeInBytes) {
-      return file;
-    }
-
-    int quality = 90;
-    Uint8List compressedBytes = originalBytes;
-
-    // ধাপে ধাপে quality কমিয়ে compress করি
-    while (quality >= 30) {
-      compressedBytes = await FlutterImageCompress.compressWithList(
-        originalBytes,
-        quality: quality,
-      );
-
-      if (compressedBytes.lengthInBytes <= maxSizeInBytes) {
-        break;
-      }
-
-      quality -= 10;
-    }
-
-    // যদি কম্প্রেশন তেমন লাভ না দেয়, অরিজিনালটাই রিটার্ন করি
-    if (compressedBytes.lengthInBytes >= originalBytes.lengthInBytes) {
-      return file;
-    }
-
-    return XFile.fromData(
-      compressedBytes,
-      name: file.name,
-      mimeType: file.mimeType,
-    );
-  }
-
-  Future<void> _pickAndUploadProfileImage() async {
-    if (_isUploadingImage) return;
-
-    // imageQuality না দিলেও চলবে, আমরা নিজেই compress করবো
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 100,
-    );
-    if (picked == null) return;
-
-    setState(() => _isUploadingImage = true);
-
-    try {
-      // ✅ 300KB limit ধরলাম profile picture এর জন্য
-      const int maxSize = 300 * 1024;
-      final compressed = await _compressIfNeeded(
-        picked,
-        maxSizeInBytes: maxSize,
-      );
-
-      final bytes = await compressed.readAsBytes();
-
-      setState(() {
-        _profileImageBytes = bytes; // preview এর জন্য compressed bytes
-      });
-
-      final uploaded = await CloudinaryService.uploadXFile(
-        compressed,
-        folder: 'findus/profile_images',
-        resourceType: 'image',
-        tags: const ['profile'],
-      );
-
-      final url = uploaded['secure_url']?.toString();
-      if (url == null) throw Exception('No secure_url returned');
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_image', url);
-
-      if (mounted) {
-        setState(() {
-          _profileImageUrl = url;
-          _isUploadingImage = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isUploadingImage = false);
-      _showError("Upload failed: $e");
-    }
-  }
-
-  // ... (rest of logic methods remain same) ...
   List<String> _generateLocationKeys(String location) {
     return location.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((s) => s.isNotEmpty).toList();
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.redAccent));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+    );
+  }
+
+  void _showSuccess(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.green),
+    );
   }
 
   TimeOfDay? _parseTimeOfDay(String? s) {
@@ -315,26 +238,262 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     return _toMinutes(end) > _toMinutes(start);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // TIME PICKERS
+  // ═══════════════════════════════════════════════════════════════
+
   Future<void> _pickStartTime() async {
-    final picked = await showTimePicker(context: context, initialTime: _workStartTime ?? TimeOfDay.now());
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _workStartTime ?? TimeOfDay.now(),
+    );
     if (picked == null) return;
+
     setState(() => _workStartTime = picked);
-    if (_workEndTime != null && !_isEndAfterStart(picked, _workEndTime!)) setState(() => _workEndTime = null);
+    if (_workEndTime != null && !_isEndAfterStart(picked, _workEndTime!)) {
+      setState(() => _workEndTime = null);
+    }
   }
 
   Future<void> _pickEndTime() async {
     if (_workStartTime == null) {
-      _showError('Please select start time first');
+      _showError('আগে Start Time সিলেক্ট করো');
       return;
     }
-    final picked = await showTimePicker(context: context, initialTime: _workEndTime ?? _workStartTime!);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _workEndTime ?? _workStartTime!,
+    );
     if (picked == null) return;
+
     if (!_isEndAfterStart(_workStartTime!, picked)) {
-      _showError('End time must be after start time');
+      _showError('End Time অবশ্যই Start Time এর পরে হতে হবে');
       return;
     }
     setState(() => _workEndTime = picked);
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // IMAGE COMPRESSION & UPLOAD
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<XFile> _compressIfNeeded(XFile file, {required int maxSizeInBytes}) async {
+    final originalBytes = await file.readAsBytes();
+
+    // যদি আগে থেকেই ছোট হয়, তাহলে compress করার দরকার নেই
+    if (originalBytes.lengthInBytes <= maxSizeInBytes) {
+      return file;
+    }
+
+    int quality = 90;
+    Uint8List compressedBytes = originalBytes;
+
+    // ধাপে ধাপে quality কমিয়ে compress করবো
+    while (quality >= 30) {
+      compressedBytes = await FlutterImageCompress.compressWithList(
+        originalBytes,
+        quality: quality,
+      );
+
+      if (compressedBytes.lengthInBytes <= maxSizeInBytes) {
+        break;
+      }
+      quality -= 10;
+    }
+
+    // যদি compression কাজ না করে, original ই return করো
+    if (compressedBytes.lengthInBytes >= originalBytes.lengthInBytes) {
+      return file;
+    }
+
+    return XFile.fromData(
+      compressedBytes,
+      name: file.name,
+      mimeType: file.mimeType,
+    );
+  }
+
+  Future<void> _pickAndUploadProfileImage() async {
+    if (_isUploadingImage) return;
+
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 100,
+    );
+    if (picked == null) return;
+
+    setState(() => _isUploadingImage = true);
+
+    try {
+      // ✅ Profile picture এর জন্য 300KB limit
+      const int maxSize = 300 * 1024;
+      final compressed = await _compressIfNeeded(picked, maxSizeInBytes: maxSize);
+
+      final bytes = await compressed.readAsBytes();
+      setState(() => _profileImageBytes = bytes);
+
+      final uploaded = await CloudinaryService.uploadXFile(
+        compressed,
+        folder: 'findus/profile_images',
+        resourceType: 'image',
+        tags: const ['profile'],
+      );
+
+      final url = uploaded['secure_url']?.toString();
+      if (url == null) throw Exception('No secure_url returned');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_image', url);
+
+      if (mounted) {
+        setState(() {
+          _profileImageUrl = url;
+          _isUploadingImage = false;
+        });
+        _showSuccess("প্রোফাইল ছবি আপলোড হয়েছে!");
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isUploadingImage = false);
+      _showError("আপলোড ব্যর্থ: $e");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CV UPLOAD
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<void> _pickAndUploadCv() async {
+    if (_isUploadingCv) return;
+
+    setState(() => _isUploadingCv = true);
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        if (mounted) setState(() => _isUploadingCv = false);
+        return;
+      }
+
+      final file = result.files.single;
+
+      if (file.size > 5 * 1024 * 1024) {
+        _showError('ফাইল অনেক বড়। সর্বোচ্চ 5MB হতে হবে।');
+        if (mounted) setState(() => _isUploadingCv = false);
+        return;
+      }
+
+      // Raw file upload (PDF/Doc Cloudinary তে 'raw' হিসেবে যায়)
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/${CloudinaryService.cloudName}/raw/upload',
+      );
+
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['upload_preset'] = CloudinaryService.uploadPreset
+        ..fields['folder'] = 'findus/cv';
+
+      if (file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name),
+        );
+      } else if (file.path != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('file', file.path!, filename: file.name),
+        );
+      } else {
+        throw Exception("File data not found");
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 200) {
+        throw Exception("Upload failed: ${response.body}");
+      }
+
+      final data = jsonDecode(response.body);
+      final url = data['secure_url'];
+
+      if (url != null) {
+        await FirebaseFirestore.instance.collection('users').doc(widget.uid).set({
+          'cvUrl': url,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        if (mounted) {
+          setState(() => _cvUrl = url);
+          _showSuccess("CV সফলভাবে আপলোড হয়েছে!");
+        }
+      }
+    } catch (e) {
+      _showError("CV আপলোড ব্যর্থ: $e");
+    } finally {
+      if (mounted) setState(() => _isUploadingCv = false);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PORTFOLIO UPLOAD
+  // ═══════════════════════════════════════════════════════════════
+
+  Future<void> _pickAndUploadPortfolio() async {
+    if (_isUploadingPortfolio) return;
+
+    try {
+      final List<XFile> files = await _picker.pickMultiImage(imageQuality: 100);
+      if (files.isEmpty) return;
+
+      setState(() => _isUploadingPortfolio = true);
+
+      final List<String> newUrls = [];
+
+      for (final file in files) {
+        try {
+          // ✅ প্রতিটা portfolio image এর জন্য 1MB limit
+          const int maxSize = 1024 * 1024;
+          final compressed = await _compressIfNeeded(file, maxSizeInBytes: maxSize);
+
+          final uploaded = await CloudinaryService.uploadXFile(
+            compressed,
+            folder: 'findus/portfolio',
+            resourceType: 'image',
+            tags: const ['portfolio'],
+          );
+
+          final url = uploaded['secure_url']?.toString();
+          if (url != null && url.isNotEmpty) {
+            newUrls.add(url);
+          }
+        } catch (e) {
+          debugPrint("Single file upload failed: $e");
+        }
+      }
+
+      if (newUrls.isEmpty) throw Exception('কোনো ছবি আপলোড হয়নি');
+
+      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
+        'portfolioUrls': FieldValue.arrayUnion(newUrls),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        setState(() => _portfolioUrls.addAll(newUrls));
+        _showSuccess("${newUrls.length}টি ছবি পোর্টফোলিওতে যোগ হয়েছে");
+      }
+    } catch (e) {
+      _showError('পোর্টফোলিও আপলোড ব্যর্থ: $e');
+    } finally {
+      if (mounted) setState(() => _isUploadingPortfolio = false);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SAVE PROFILE
+  // ═══════════════════════════════════════════════════════════════
 
   Future<void> _saveProfile() async {
     final name = _nameController.text.trim();
@@ -342,22 +501,22 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
     if (currentUid == null || currentUid != widget.uid) {
-      _showError("Unauthorized");
+      _showError("Unauthorized - তুমি এই প্রোফাইল এডিট করতে পারবে না");
       return;
     }
     if (name.isEmpty || location.isEmpty) {
-      _showError("Name and location are required");
+      _showError("নাম এবং লোকেশন দিতেই হবে");
       return;
     }
 
     final role = (_userRole ?? 'finder').toLowerCase().trim();
     if (role == 'finder') {
       if (_selectedServiceType == null) {
-        _showError('Please select service type');
+        _showError('সার্ভিস টাইপ সিলেক্ট করো');
         return;
       }
       if (_workStartTime == null || _workEndTime == null) {
-        _showError('Please select working time');
+        _showError('কাজের সময় সিলেক্ট করো');
         return;
       }
     }
@@ -385,8 +544,11 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
       if (role == 'finder') {
         final numericPrice = num.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
         updateData.addAll({
-          'userRole': 'finder', 'isWorker': true, 'isSupporter': false,
-          'price': numericPrice, 'priceText': "৳$numericPrice / day",
+          'userRole': 'finder',
+          'isWorker': true,
+          'isSupporter': false,
+          'price': numericPrice,
+          'priceText': "৳$numericPrice / day",
           'role': _selectedServiceType!.toUpperCase(),
           'roleKey': _selectedServiceType!.toLowerCase(),
           'experienceYears': int.tryParse(_experienceController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0,
@@ -399,168 +561,37 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
         });
       } else {
         updateData.addAll({
-          'userRole': 'maker', 'isSupporter': true, 'isWorker': false,
+          'userRole': 'maker',
+          'isSupporter': true,
+          'isWorker': false,
           'companyName': _companyNameController.text.trim(),
           'companyContact': _companyContactController.text.trim(),
           'companyAddress': _companyAddressController.text.trim(),
         });
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(currentUid).set(updateData, SetOptions(merge: true));
-      if (mounted) Navigator.pop(context);
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .set(updateData, SetOptions(merge: true));
+
+      // ✅ Achievement sync - এইখানে করতে হবে, save এর পরে
+      await AchievementService.syncProfileChainFromUserDoc(uid: currentUid);
+
+      if (mounted) {
+        _showSuccess("প্রোফাইল সেভ হয়েছে!");
+        Navigator.pop(context);
+      }
     } catch (e) {
-      _showError("Save failed: $e");
+      _showError("সেভ করতে ব্যর্থ: $e");
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  // --- CV & Portfolio upload logic (shortened for brevity, same as before) ---
-  Future<void> _pickAndUploadCv() async {
-    if (_isUploadingCv) return;
-
-    try {
-      // ১. ফাইল পিকার ওপেন করা
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx'],
-        withData: true,
-      );
-
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.single;
-
-      if (file.size > 5 * 1024 * 1024) {
-        _showError('File too large. Max 5MB allowed.');
-        return;
-      }
-
-      // ✅ XFile এ কনভার্ট করা (কারণ CloudinaryService XFile সাপোর্ট করে)
-      // অথবা সরাসরি বাইটস আপলোড করা
-
-      // আমরা এখানে CloudinaryService ব্যবহার না করে সরাসরি http ব্যবহার করছি
-      // কারণ PDF/Doc 'image' টাইপ নয়, 'raw' টাইপ হিসেবে আপলোড করতে হয়।
-
-      final uri = Uri.parse(
-        'https://api.cloudinary.com/v1_1/${CloudinaryService.cloudName}/raw/upload',
-      );
-
-      final request = http.MultipartRequest('POST', uri)
-        ..fields['upload_preset'] = CloudinaryService.uploadPreset
-        ..fields['folder'] = 'findus/cv';
-
-      if (file.bytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            file.bytes!,
-            filename: file.name,
-          ),
-        );
-      } else if (file.path != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            file.path!,
-            filename: file.name,
-          ),
-        );
-      } else {
-        throw Exception("File data not found");
-      }
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode != 200) {
-        throw Exception("Upload failed: ${response.body}");
-      }
-
-      final data = jsonDecode(response.body);
-      final url = data['secure_url'];
-
-      if (url != null) {
-        await FirebaseFirestore.instance.collection('users').doc(widget.uid).set({
-          'cvUrl': url,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        if (mounted) {
-          setState(() => _cvUrl = url);
-          _showError("CV uploaded successfully!"); // Success message (Error method used for simplicity)
-        }
-      }
-    } catch (e) {
-      _showError("CV Upload Failed: $e");
-    } finally {
-      if (mounted) setState(() => _isUploadingCv = false);
-    }
-  }
-
-
-  Future<void> _pickAndUploadPortfolio() async {
-    if (_isUploadingPortfolio) return;
-
-    try {
-      final List<XFile> files = await _picker.pickMultiImage(
-        imageQuality: 100,
-      );
-
-      if (files.isEmpty) return;
-
-      setState(() => _isUploadingPortfolio = true);
-
-      final List<String> newUrls = [];
-
-      for (final file in files) {
-        try {
-          // ✅ 1MB limit প্রতিটা portfolio ইমেজের জন্য
-          const int maxSize = 1024 * 1024;
-          final compressed = await _compressIfNeeded(
-            file,
-            maxSizeInBytes: maxSize,
-          );
-
-          final uploaded = await CloudinaryService.uploadXFile(
-            compressed,
-            folder: 'findus/portfolio',
-            resourceType: 'image',
-            tags: const ['portfolio'],
-          );
-
-          final url = uploaded['secure_url']?.toString();
-          if (url != null && url.isNotEmpty) {
-            newUrls.add(url);
-          }
-        } catch (e) {
-          debugPrint("Single file upload failed: $e");
-        }
-      }
-
-      if (newUrls.isEmpty) throw Exception('No images uploaded');
-
-      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
-        'portfolioUrls': FieldValue.arrayUnion(newUrls),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (mounted) {
-        setState(() {
-          _portfolioUrls.addAll(newUrls);
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("${newUrls.length} images added to portfolio"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      _showError('Portfolio upload failed: $e');
-    } finally {
-      if (mounted) setState(() => _isUploadingPortfolio = false);
-    }
-  }
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD UI
+  // ═══════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -587,8 +618,16 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
           child: TextButton(
             onPressed: _isSaving ? null : _saveProfile,
             child: _isSaving
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text("SAVE", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : Text(
+              "SAVE",
+              style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
+            ),
+            // ✅ এখানে আর await নেই - সেটা _saveProfile() এর ভিতরে আছে
           ),
         ),
       ],
@@ -611,15 +650,21 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
               children: [
                 Expanded(
                   child: _buildDropdownField<String>(
-                      _selectedGender, _genders, "Gender", Icons.wc,
-                          (v) => setState(() => _selectedGender = v),
-                      isDark
+                    _selectedGender,
+                    _genders,
+                    "Gender",
+                    Icons.wc,
+                        (v) => setState(() => _selectedGender = v),
+                    isDark,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildDropdownField<int>(
-                    _selectedAge, List.generate(53, (i) => i + 18), "Age", Icons.cake,
+                    _selectedAge,
+                    List.generate(53, (i) => i + 18),
+                    "Age",
+                    Icons.cake,
                         (v) => setState(() => _selectedAge = v),
                     isDark,
                     itemLabel: (age) => age.toString(),
@@ -648,18 +693,33 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
             if (isFinder) ...[
               _buildLabel("Worker Information", textColor),
               _buildDropdownField<String>(
-                  _selectedServiceType, _serviceTypes, "Service Type", Icons.work,
-                      (v) => setState(() => _selectedServiceType = v),
-                  isDark
+                _selectedServiceType,
+                _serviceTypes,
+                "Service Type",
+                Icons.work,
+                    (v) => setState(() => _selectedServiceType = v),
+                isDark,
               ),
               const SizedBox(height: 12),
 
               _buildLabel("Working Time", textColor),
               Row(
                 children: [
-                  Expanded(child: _buildTimeButton("Start: ${_formatDisplay(_workStartTime)}", _pickStartTime, isDark)),
+                  Expanded(
+                    child: _buildTimeButton(
+                      "Start: ${_formatDisplay(_workStartTime)}",
+                      _pickStartTime,
+                      isDark,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildTimeButton("End: ${_formatDisplay(_workEndTime)}", _pickEndTime, isDark)),
+                  Expanded(
+                    child: _buildTimeButton(
+                      "End: ${_formatDisplay(_workEndTime)}",
+                      _pickEndTime,
+                      isDark,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -688,18 +748,36 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _isUploadingCv ? null : _pickAndUploadCv,
-                      icon: _isUploadingCv ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.upload_file),
+                      icon: _isUploadingCv
+                          ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : const Icon(Icons.upload_file),
                       label: Text(_cvUrl == null ? "Upload CV" : "Re-upload CV"),
-                      style: OutlinedButton.styleFrom(foregroundColor: textColor, side: BorderSide(color: textColor)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textColor,
+                        side: BorderSide(color: textColor),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _isUploadingPortfolio ? null : _pickAndUploadPortfolio,
-                      icon: _isUploadingPortfolio ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.photo_library),
+                      icon: _isUploadingPortfolio
+                          ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : const Icon(Icons.photo_library),
                       label: Text("Portfolio (${_portfolioUrls.length})"),
-                      style: OutlinedButton.styleFrom(foregroundColor: textColor, side: BorderSide(color: textColor)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textColor,
+                        side: BorderSide(color: textColor),
+                      ),
                     ),
                   ),
                 ],
@@ -710,27 +788,39 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () {
-                    final String priceText = _priceController.text.trim().isNotEmpty ? "৳${_priceController.text.trim()} / day" : "Negotiable";
-                    final num? priceNum = num.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9.]'), ''));
+                    final String priceText = _priceController.text.trim().isNotEmpty
+                        ? "৳${_priceController.text.trim()} / day"
+                        : "Negotiable";
+                    final num? priceNum =
+                    num.tryParse(_priceController.text.replaceAll(RegExp(r'[^0-9.]'), ''));
 
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => WorkerCVCreateScreen(
-                      worker: Worker(
-                        uid: widget.uid,
-                        userRole: 'finder',
-                        name: _nameController.text.trim(),
-                        image: _profileImageUrl ?? '',
-                        about: _aboutController.text.trim(),
-                        rating: 0.0,
-                        location: _locationController.text.trim(),
-                        priceText: priceText,
-                        price: priceNum,
-                        kycCompleted: false,
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => WorkerCVCreateScreen(
+                          worker: Worker(
+                            uid: widget.uid,
+                            userRole: 'finder',
+                            name: _nameController.text.trim(),
+                            image: _profileImageUrl ?? '',
+                            about: _aboutController.text.trim(),
+                            rating: 0.0,
+                            location: _locationController.text.trim(),
+                            priceText: priceText,
+                            price: priceNum,
+                            kycCompleted: false,
+                          ),
+                        ),
                       ),
-                    )));
+                    );
                   },
                   icon: const Icon(Icons.edit_document, color: AppColors.brandMain),
                   label: const Text("Create Digital CV"),
-                  style: OutlinedButton.styleFrom(foregroundColor: textColor, side: BorderSide(color: textColor), padding: const EdgeInsets.symmetric(vertical: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: textColor,
+                    side: BorderSide(color: textColor),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -759,21 +849,43 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // UI WIDGETS
+  // ═══════════════════════════════════════════════════════════════
+
   Widget _buildProfileImage() {
     final ImageProvider<Object>? img = _profileImageBytes != null
         ? MemoryImage(_profileImageBytes!)
-        : (_profileImageUrl != null && _profileImageUrl!.trim().isNotEmpty ? NetworkImage(_profileImageUrl!) : null);
+        : (_profileImageUrl != null && _profileImageUrl!.trim().isNotEmpty
+        ? NetworkImage(_profileImageUrl!)
+        : null);
 
     return Center(
       child: Stack(
         children: [
-          CircleAvatar(radius: 50, backgroundColor: Colors.grey[200]!, backgroundImage: img, child: img == null ? const Icon(Icons.person, size: 50, color: Colors.grey) : null),
-          if (_isUploadingImage) const Positioned.fill(child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.grey[200]!,
+            backgroundImage: img,
+            child: img == null ? const Icon(Icons.person, size: 50, color: Colors.grey) : null,
+          ),
+          if (_isUploadingImage)
+            const Positioned.fill(
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
           Positioned(
-            bottom: 0, right: 0,
+            bottom: 0,
+            right: 0,
             child: GestureDetector(
               onTap: _isUploadingImage ? null : _pickAndUploadProfileImage,
-              child: Container(padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: AppColors.brandMain, shape: BoxShape.circle), child: const Icon(Icons.camera_alt, color: Colors.white, size: 20)),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: AppColors.brandMain,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+              ),
             ),
           ),
         ],
@@ -784,11 +896,20 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
   Widget _buildLabel(String text, Color color) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(text, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+      ),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, IconData icon, bool isDark, {int maxLines = 1}) {
+  Widget _buildTextField(
+      TextEditingController controller,
+      String hint,
+      IconData icon,
+      bool isDark, {
+        int maxLines = 1,
+      }) {
     return TextField(
       controller: controller,
       maxLines: maxLines,
@@ -799,29 +920,48 @@ class _UnifiedProfileEditScreenState extends State<UnifiedProfileEditScreen> {
         prefixIcon: Icon(icon, color: AppColors.brandMain),
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
 
-  Widget _buildDropdownField<T>(T? value, List<T> items, String hint, IconData icon, ValueChanged<T?> onChanged, bool isDark, {String Function(T)? itemLabel}) {
+  Widget _buildDropdownField<T>(
+      T? value,
+      List<T> items,
+      String hint,
+      IconData icon,
+      ValueChanged<T?> onChanged,
+      bool isDark, {
+        String Function(T)? itemLabel,
+      }) {
     final validItems = items.whereType<T>().toList();
     T? safeValue = (value != null && validItems.contains(value)) ? value : null;
 
     return DropdownButtonFormField<T>(
-      initialValue: safeValue,
+      value: safeValue, // ✅ "value" ব্যবহার করতে হবে, "initialValue" নয়
       hint: Text(hint, style: TextStyle(color: isDark ? Colors.grey : Colors.black54)),
       dropdownColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: AppColors.brandMain),
         filled: true,
         fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
-      items: validItems.map((item) => DropdownMenuItem<T>(
+      items: validItems
+          .map((item) => DropdownMenuItem<T>(
         value: item,
-        child: Text(itemLabel?.call(item) ?? item.toString(), style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
-      )).toList(),
+        child: Text(
+          itemLabel?.call(item) ?? item.toString(),
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
+      ))
+          .toList(),
       onChanged: onChanged,
     );
   }
