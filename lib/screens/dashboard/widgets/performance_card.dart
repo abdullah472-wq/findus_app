@@ -5,7 +5,7 @@ import 'package:shimmer/shimmer.dart';
 
 class PerformanceCard extends StatelessWidget {
   final String userId;
-  final String userRole; // 'finder' or 'supporter'
+  final String userRole;
 
   const PerformanceCard({
     super.key,
@@ -20,122 +20,243 @@ class PerformanceCard extends StatelessWidget {
     final textColor = isDark ? Colors.white : Colors.black87;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.grey;
 
-    // ✅ এখানে users কালেকশন চেক করা হচ্ছে কারণ বেশিরভাগ ডাটা সেখানেই আপডেট হয়
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(userId).snapshots(),
+    if (userId.isEmpty) {
+      return _buildEmptyCard(cardColor, textColor, isDark);
+    }
+
+    // ✅ Combined streams from both collections
+    return StreamBuilder<_CombinedData>(
+      stream: _getCombinedStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildShimmerLoading(cardColor);
+          return _buildShimmerLoading(cardColor, isDark);
         }
 
-        Map<String, dynamic> data = {};
-        if (snapshot.hasData && snapshot.data!.exists) {
-          data = snapshot.data!.data() as Map<String, dynamic>;
+        if (snapshot.hasError) {
+          debugPrint('PerformanceCard error: ${snapshot.error}');
+          return _buildErrorCard(cardColor, textColor, isDark);
         }
 
-        // ✅ ডাইনামিক লজিক শুরু
-        final bool isFinder = userRole.toLowerCase() == 'finder' || userRole.toLowerCase() == 'worker';
+        final combinedData = snapshot.data ?? _CombinedData({}, {});
+        final userData = combinedData.userData;
+        final statsData = combinedData.statsData;
 
-        // ১. ইম্প্রেশন (যদি পোস্ট ইম্প্রেশন আলাদা কালেকশনে থাকে, তবে টোটাল যোগ করা জটিল।
-        // তাই ইউজারের প্রোফাইল ডকুমেন্টেই 'totalImpressions' সেভ করা ভালো।)
-        final impressions = data['totalImpressions'] ?? data['impressions'] ?? 0;
+        // ✅ Role check
+        final bool isFinder = userRole.toLowerCase() == 'finder' ||
+            userRole.toLowerCase() == 'worker';
 
-        // ২. প্রোফাইল ভিউ (এটি user_stats এ থাকতে পারে, তাই ফলব্যাক রাখা হলো)
-        final views = data['profileViews'] ?? 0;
+        // ✅ Impressions (from users or user_stats)
+        final impressions = _toInt(userData['totalImpressions']) +
+            _toInt(statsData['totalImpressions']);
 
-        final int hiresCount = _toInt(data['hiresCount']);
-        final int jobsCompleted = _toInt(data['jobsCompleted']);
+        // ✅ Profile Views
+        final views = _toInt(userData['profileViews']) +
+            _toInt(statsData['profileViews']);
 
-        // ✅ role-based 3rd metric
-        final String thirdLabel = isFinder ? "Jobs Done" : "Total Hires";
-        final int thirdValue = isFinder ? jobsCompleted : hiresCount;
-        final IconData thirdIcon = isFinder ? Icons.work_outline : Icons.handshake_outlined;
-        final Color thirdColor = isFinder ? Colors.blue : Colors.orange;
+        // ✅ Role-based third metric
+        String thirdLabel;
+        int thirdValue;
+        IconData thirdIcon;
+        Color thirdColor;
 
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
-            border: Border.all(
-              color: isDark ? Colors.white10 : Colors.grey.shade200,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.brandMain.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.insights_rounded, color: AppColors.brandMain, size: 18),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        "Performance",
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: textColor
-                        ),
-                      ),
-                    ],
-                  ),
+        if (isFinder) {
+          // Finder: Jobs Completed
+          thirdLabel = "Jobs Done";
+          thirdValue = _toInt(statsData['jobsCompleted']) > 0
+              ? _toInt(statsData['jobsCompleted'])
+              : _toInt(userData['jobsCompleted']);
+          thirdIcon = Icons.work_outline;
+          thirdColor = Colors.blue;
+        } else {
+          // Supporter: Hires Completed
+          thirdLabel = "Hires Done";
+          thirdValue = _toInt(statsData['hiresCompleted']) > 0
+              ? _toInt(statsData['hiresCompleted'])
+              : _toInt(userData['hiresCompleted']);
+          thirdIcon = Icons.handshake_outlined;
+          thirdColor = Colors.orange;
+        }
 
-                  // Trend (এটি ফিক্সড রাখা হলো, ডাইনামিক করতে চাইলে গত মাসের ডাটা লাগবে)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.trending_up, color: Colors.green, size: 14),
-                        SizedBox(width: 4),
-                        Text("Live", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Stats Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _perfItem("Impressions", _format(impressions), Icons.visibility_outlined, Colors.purpleAccent, textColor, subTextColor),
-                  _verticalDivider(isDark),
-                  _perfItem("Profile Views", _format(views), Icons.person_search_outlined, Colors.teal, textColor, subTextColor),
-                  _verticalDivider(isDark),
-                  _perfItem(thirdLabel, _format(thirdValue), thirdIcon, thirdColor, textColor, subTextColor),
-                ],
-              ),
-            ],
-          ),
+        return _buildCard(
+          context,
+          isDark: isDark,
+          cardColor: cardColor,
+          textColor: textColor,
+          subTextColor: subTextColor,
+          impressions: impressions,
+          views: views,
+          thirdLabel: thirdLabel,
+          thirdValue: thirdValue,
+          thirdIcon: thirdIcon,
+          thirdColor: thirdColor,
         );
       },
     );
   }
 
-  // ✅ সেইফ ইন্টিজার কনভার্সন
+  // ✅ Combined Stream from users + user_stats
+  Stream<_CombinedData> _getCombinedStream() {
+    final usersStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .snapshots();
+
+    final statsStream = FirebaseFirestore.instance
+        .collection('user_stats')
+        .doc(userId)
+        .snapshots();
+
+    return usersStream.asyncMap((userDoc) async {
+      final statsDoc = await FirebaseFirestore.instance
+          .collection('user_stats')
+          .doc(userId)
+          .get();
+
+      final userData = userDoc.exists
+          ? userDoc.data() as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      final statsData = statsDoc.exists
+          ? statsDoc.data() as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      return _CombinedData(userData, statsData);
+    });
+  }
+
+  Widget _buildCard(
+      BuildContext context, {
+        required bool isDark,
+        required Color cardColor,
+        required Color textColor,
+        required Color subTextColor,
+        required int impressions,
+        required int views,
+        required String thirdLabel,
+        required int thirdValue,
+        required IconData thirdIcon,
+        required Color thirdColor,
+      }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.brandMain.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.insights_rounded,
+                      color: AppColors.brandMain,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    "Performance",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ],
+              ),
+
+              // Live indicator
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      "Live",
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Stats Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _perfItem(
+                "Impressions",
+                _format(impressions),
+                Icons.visibility_outlined,
+                Colors.purpleAccent,
+                textColor,
+                subTextColor,
+              ),
+              _verticalDivider(isDark),
+              _perfItem(
+                "Profile Views",
+                _format(views),
+                Icons.person_search_outlined,
+                Colors.teal,
+                textColor,
+                subTextColor,
+              ),
+              _verticalDivider(isDark),
+              _perfItem(
+                thirdLabel,
+                _format(thirdValue),
+                thirdIcon,
+                thirdColor,
+                textColor,
+                subTextColor,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   int _toInt(dynamic val) {
     if (val == null) return 0;
     if (val is int) return val;
@@ -158,43 +279,54 @@ class PerformanceCard extends StatelessWidget {
     );
   }
 
-  Widget _perfItem(String label, String val, IconData icon, Color iconColor, Color textColor, Color subTextColor) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
-            shape: BoxShape.circle,
+  Widget _perfItem(
+      String label,
+      String val,
+      IconData icon,
+      Color iconColor,
+      Color textColor,
+      Color subTextColor,
+      ) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-          child: Icon(icon, color: iconColor, size: 20),
-        ),
-        const SizedBox(height: 8),
-        Text(
+          const SizedBox(height: 8),
+          Text(
             val,
             style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-                color: textColor
-            )
-        ),
-        const SizedBox(height: 4),
-        Text(
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
             label,
             style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: subTextColor
-            )
-        ),
-      ],
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: subTextColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildShimmerLoading(Color cardColor) {
+  // ✅ Shimmer with Dark Mode Support
+  Widget _buildShimmerLoading(Color cardColor, bool isDark) {
     return Shimmer.fromColors(
-      baseColor: Colors.grey[300]!,
-      highlightColor: Colors.grey[100]!,
+      baseColor: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+      highlightColor: isDark ? Colors.grey[700]! : Colors.grey[100]!,
       child: Container(
         height: 160,
         margin: const EdgeInsets.symmetric(vertical: 8),
@@ -205,4 +337,76 @@ class PerformanceCard extends StatelessWidget {
       ),
     );
   }
+
+  // ✅ Empty State
+  Widget _buildEmptyCard(Color cardColor, Color textColor, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.insights_outlined,
+              size: 40,
+              color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "No performance data yet",
+              style: TextStyle(
+                color: isDark ? Colors.white54 : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ Error State
+  Widget _buildErrorCard(Color cardColor, Color textColor, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.red.withOpacity(0.3),
+        ),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 40,
+              color: Colors.red.shade300,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Failed to load performance",
+              style: TextStyle(
+                color: isDark ? Colors.white54 : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ✅ Helper class for combined data
+class _CombinedData {
+  final Map<String, dynamic> userData;
+  final Map<String, dynamic> statsData;
+
+  _CombinedData(this.userData, this.statsData);
 }

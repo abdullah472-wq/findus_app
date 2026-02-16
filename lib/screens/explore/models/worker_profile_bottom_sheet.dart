@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'package:findus_app/services/saved_service.dart';
+import 'package:findus_app/services/post_service.dart';
+import 'package:findus_app/services/firestore_chat_service.dart';
+import 'package:findus_app/services/profile_lock_service.dart';
 
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/services/saved_service.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
-import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/models/worker_model.dart';
-import 'package:findus_app/screens/profile/unified_profile_screen.dart';
-import 'package:findus_app/screens/profile/worker_job_details_screen.dart';
-import 'package:findus_app/services/profile_lock_service.dart';
-import 'package:findus_app/services/firestore_chat_service.dart';
-
 import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/badge/badge_model.dart';
+
+import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/screens/auth/login_screen.dart';
+import 'package:findus_app/screens/profile/unified_profile_screen.dart';
+import 'package:findus_app/screens/profile/worker_job_details_screen.dart';
+
 
 Future<void> showWorkerProfileBottomSheet({
   required BuildContext context,
@@ -25,7 +29,35 @@ Future<void> showWorkerProfileBottomSheet({
   bool isSaved = SavedService.isSaved(data);
   final NavigatorState rootNav = Navigator.of(context, rootNavigator: true);
 
-  // ✅ login check helper
+  // ✅ CONSOLIDATED DATA EXTRACTION
+  // Priority: workerModel -> data map -> fallback
+
+  // 1. Name
+  String displayName = workerModel.name.isNotEmpty
+      ? workerModel.name
+      : (data['name'] ?? data['workerName'] ?? 'Unknown User').toString();
+
+  // 2. Image
+  String displayImage = workerModel.image.isNotEmpty
+      ? workerModel.image
+      : (data['image'] ?? data['imageUrl'] ?? '').toString();
+
+  // Fallback for empty/null image strings
+  if (displayImage.isEmpty || displayImage == 'null') {
+    displayImage = 'https://i.pravatar.cc/150';
+  }
+
+  // 3. Role
+  final String displayRole = workerModel.userRole.isNotEmpty
+      ? workerModel.userRole
+      : (data['role'] ?? data['roleLabel'] ?? 'Worker').toString();
+
+  // 4. Address
+  final String displayAddress = workerModel.location.isNotEmpty
+      ? workerModel.location
+      : (data['address'] ?? data['location'] ?? 'Location not available').toString();
+
+  // ✅ Login Check Helper
   bool checkLogin(BuildContext ctx) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -42,8 +74,8 @@ Future<void> showWorkerProfileBottomSheet({
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(dialogCtx);
-                Navigator.pop(ctx); // close bottom sheet
+                Navigator.pop(dialogCtx); // Close Dialog
+                Navigator.pop(ctx);       // Close Bottom Sheet
                 Navigator.push(ctx, MaterialPageRoute(builder: (_) => const LoginScreen()));
               },
               style: ElevatedButton.styleFrom(
@@ -60,20 +92,25 @@ Future<void> showWorkerProfileBottomSheet({
     return true;
   }
 
-  // ✅ suggestion list (exclude current)
+  // ✅ Suggestions (Exclude Current)
   final currentId = (data['ownerId'] ?? data['id'] ?? workerModel.uid).toString();
   final suggestions = allWorkers.where((w) {
     final wId = (w['ownerId'] ?? w['id'] ?? '').toString();
     return wId.isNotEmpty && wId != currentId;
   }).take(5).toList();
 
+  // --- Action Handlers ---
+
   Future<void> openProfile() async {
     if (!checkLogin(context)) return;
-    Navigator.pop(context);
 
     final uid = workerModel.uid.trim();
     if (uid.isEmpty) return;
 
+    // ✅ STEP 1: Track Profile View
+    await PostService.trackProfileClick(uid);
+
+    // ✅ STEP 2: Check Lock & Navigate
     final locked = await ProfileLockService.isLocked(uid);
     if (locked) {
       ScaffoldMessenger.of(rootNav.context).showSnackBar(
@@ -82,6 +119,8 @@ Future<void> showWorkerProfileBottomSheet({
       return;
     }
 
+    Navigator.pop(context); // Close bottom sheet
+
     rootNav.push(
       MaterialPageRoute(
         builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: false, showBack: true),
@@ -89,25 +128,26 @@ Future<void> showWorkerProfileBottomSheet({
     );
   }
 
-  // ✅ FIXED: always open WorkerJobDetailsScreen (post-centric flow)
-  // ✅ FIXED: Directly open WorkerJobDetailsScreen (No loading/ad delay)
   Future<void> openJobDetails() async {
     if (!checkLogin(context)) return;
 
-    final postId = workerModel.postId.toString().trim();
+    final postId = workerModel.postId?.toString().trim() ?? '';
     if (postId.isEmpty) {
       ScaffoldMessenger.of(rootNav.context).showSnackBar(
-        const SnackBar(content: Text("No post found. Please select a post to view details.")),
+        const SnackBar(content: Text("No post found.")),
       );
       return;
     }
 
-    // ১. বটম শিট বন্ধ করা
+    // ✅ STEP 1: Track Click & Impression in Database
+    // নোট: নিজের পোস্টে ক্লিক করলে সার্ভিস অটোমেটিক ইগনোর করবে
+    await PostService.trackCardClick(postId, workerModel.uid);
+
+    // ✅ STEP 2: Navigate
     if (context.mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
 
-    // ২. সরাসরি জব ডিটেইলস পেজে যাওয়া
     if (rootNav.context.mounted) {
       rootNav.push(
         MaterialPageRoute(
@@ -116,6 +156,8 @@ Future<void> showWorkerProfileBottomSheet({
       );
     }
   }
+
+  // --- Bottom Sheet UI ---
 
   await showModalBottomSheet(
     context: context,
@@ -169,13 +211,13 @@ Future<void> showWorkerProfileBottomSheet({
                       ),
                     ),
 
-                    // 🔹 Main card
+                    // 🔹 Main Card
                     UniversalWorkerCard(
                       id: workerModel.uid,
-                      name: (data['name'] ?? 'Unknown').toString(),
-                      role: (data['role'] ?? 'Worker').toString(),
-                      imageUrl: (data['image'] ?? "https://i.pravatar.cc/150").toString(),
-                      address: (data['address'] ?? 'Bangladesh').toString(),
+                      name: displayName, // ✅ Using validated variable
+                      role: displayRole,
+                      imageUrl: displayImage, // ✅ Using validated variable
+                      address: displayAddress,
                       rating: ratingVal.toStringAsFixed(1),
                       completed: completedJobs.toString(),
                       reviews: reviewsStr,
@@ -188,8 +230,6 @@ Future<void> showWorkerProfileBottomSheet({
                       isSaved: isSaved,
 
                       onTap: openProfile,
-
-                      // ✅ Primary button is "VIEW DETAILS"
                       primaryButtonText: "View Details",
                       onViewProfileTap: openJobDetails,
                       showActionButtons: true,
@@ -202,19 +242,27 @@ Future<void> showWorkerProfileBottomSheet({
 
                       onChatTap: () async {
                         if (!checkLogin(context)) return;
+
                         final otherUid = workerModel.uid.trim();
-                        final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUid);
-                        if (rootNav.canPop()) rootNav.pop();
-                        rootNav.push(
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              conversationId: convId,
-                              userName: workerModel.name,
-                              userRole: workerModel.userRole,
-                              userImage: workerModel.image,
+                        if (otherUid.isEmpty) return;
+
+                        try {
+                          final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUid);
+                          if (rootNav.canPop()) rootNav.pop();
+
+                          rootNav.push(
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                conversationId: convId,
+                                userName: displayName,
+                                userRole: displayRole,
+                                userImage: displayImage,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } catch (e) {
+                          debugPrint("Chat Error: $e");
+                        }
                       },
                     ),
 
@@ -237,11 +285,12 @@ Future<void> showWorkerProfileBottomSheet({
                         children: suggestions.map((s) {
                           final sRating = AchievementService.getRating(s);
                           final sCompleted = AchievementService.getCompletedCount(s);
+                          final sId = (s['ownerId'] ?? s['id'] ?? '').toString();
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                             child: UniversalWorkerCard(
-                              id: (s['ownerId'] ?? s['id'] ?? '').toString(),
+                              id: sId,
                               name: (s['name'] ?? 'Unknown').toString(),
                               role: (s['role'] ?? 'Worker').toString(),
                               imageUrl: (s['image'] ?? "https://i.pravatar.cc/150").toString(),
@@ -253,19 +302,19 @@ Future<void> showWorkerProfileBottomSheet({
                               time: "Available now",
                               isVerifiedWorker: true,
 
-                              // open suggestion sheet
+                              // Recursive call for suggestions
                               onTap: () {
                                 Navigator.pop(sheetCtx);
                                 showWorkerProfileBottomSheet(
                                   context: rootNav.context,
                                   data: s,
-                                  isWorker: isWorker,
+                                  isWorker: true, // Assuming suggestions are workers
                                   allWorkers: allWorkers,
                                   workerModel: Worker(
-                                    uid: (s['ownerId'] ?? s['id'] ?? '').toString(),
-                                    postId: (s['id'] ?? '').toString(), // best-effort; suggestions no actions anyway
+                                    uid: sId,
+                                    postId: (s['id'] ?? '').toString(),
                                     name: (s['name'] ?? '').toString(),
-                                    userRole: 'finder',
+                                    userRole: (s['role'] ?? 'finder').toString(),
                                     image: (s['image'] ?? '').toString(),
                                     location: (s['address'] ?? '').toString(),
                                     priceText: (s['price'] ?? s['priceLabel'] ?? 'Negotiable').toString(),

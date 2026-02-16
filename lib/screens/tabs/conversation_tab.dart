@@ -1,12 +1,16 @@
-// lib/screens/tabs/conversation_tab.dart
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/screens/profile/unified_profile_screen.dart';
-import 'package:findus_app/services/conversation_storage.dart';
-import 'package:findus_app/screens/auth/log_in_chacker_screen.dart'; // লগইন চেক স্ক্রিন
+import 'package:findus_app/screens/auth/log_in_chacker_screen.dart';
+import 'package:findus_app/badge/badge_model.dart';
+import 'package:findus_app/badge/badge_service.dart';
+
+
 
 class ConversationTab extends StatefulWidget {
   const ConversationTab({super.key});
@@ -16,46 +20,15 @@ class ConversationTab extends StatefulWidget {
 }
 
 class _ConversationTabState extends State<ConversationTab> {
-  List<Map<String, dynamic>> _conversations = [];
   int _tabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   final String? _currentUid = FirebaseAuth.instance.currentUser?.uid;
 
   @override
-  void initState() {
-    super.initState();
-    if (_currentUid != null) {
-      _loadConversations();
-    }
-  }
-
-  Future<void> _loadConversations() async {
-    final data = await ConversationStorage.load();
-    if (!mounted) return;
-    setState(() {
-      _conversations = data;
-    });
-  }
-
-  List<Map<String, dynamic>> get _filteredConversations {
-    List<Map<String, dynamic>> base;
-    if (_tabIndex == 1) {
-      base = _conversations.where((c) => c['userType'] == 'supporter').toList();
-    } else if (_tabIndex == 2) {
-      base = _conversations.where((c) => c['userType'] == 'earner').toList();
-    } else {
-      base = List<Map<String, dynamic>>.from(_conversations);
-    }
-
-    final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return base;
-
-    return base.where((c) {
-      final name = (c['name'] ?? '').toString().toLowerCase();
-      final role = (c['role'] ?? '').toString().toLowerCase();
-      return name.contains(q) || role.contains(q);
-    }).toList();
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _openUserProfile() {
@@ -63,14 +36,13 @@ class _ConversationTabState extends State<ConversationTab> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => UnifiedProfileScreen(uid: _currentUid, isOwner: true, showBack: true),
+        builder: (_) => UnifiedProfileScreen(uid: _currentUid!, isOwner: true, showBack: true),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ১. লগইন চেক
     if (_currentUid == null) {
       return const ProfileNotLoggedIn(title: "Messages", showBackButton: false);
     }
@@ -90,10 +62,7 @@ class _ConversationTabState extends State<ConversationTab> {
           elevation: 0.5,
           title: Text("Messages", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: textColor)),
           actions: [
-            IconButton(
-              icon: Icon(Icons.person_outline, color: textColor),
-              onPressed: _openUserProfile,
-            ),
+            IconButton(icon: Icon(Icons.person_outline, color: textColor), onPressed: _openUserProfile),
             const SizedBox(width: 10),
           ],
           bottom: TabBar(
@@ -102,16 +71,11 @@ class _ConversationTabState extends State<ConversationTab> {
             labelColor: AppColors.brandMain,
             unselectedLabelColor: Colors.grey,
             labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-            tabs: const [
-              Tab(text: "All"),
-              Tab(text: "Supporters"),
-              Tab(text: "Earners"),
-            ],
+            tabs: const [Tab(text: "All"), Tab(text: "Supporters"), Tab(text: "Earners")],
           ),
         ),
         body: Column(
           children: [
-            // সার্চ বার
             Container(
               padding: const EdgeInsets.all(12),
               color: cardColor,
@@ -130,17 +94,37 @@ class _ConversationTabState extends State<ConversationTab> {
                 ),
               ),
             ),
-
-            // চ্যাট লিস্ট
             Expanded(
-              child: _filteredConversations.isEmpty
-                  ? Center(child: Text("No conversations found", style: TextStyle(color: Colors.grey.shade500)))
-                  : ListView.builder(
-                itemCount: _filteredConversations.length,
-                padding: const EdgeInsets.only(top: 8),
-                itemBuilder: (context, index) {
-                  final chat = _filteredConversations[index];
-                  return _buildChatItem(chat, isDark, cardColor, textColor);
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('conversations')
+                    .where('participants', arrayContains: _currentUid)
+                    .orderBy('updatedAt', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) return _buildErrorState(snapshot.error.toString());
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
+
+                  final docs = snapshot.data?.docs ?? [];
+                  List<Map<String, dynamic>> conversations = docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>? ?? {};
+                    data['id'] = doc.id;
+                    return data;
+                  }).toList();
+
+                  conversations = _filterByTab(conversations);
+                  conversations = _filterByQuery(conversations);
+
+                  if (conversations.isEmpty) return Center(child: Text("No conversations found", style: TextStyle(color: Colors.grey.shade500)));
+
+                  return ListView.separated(
+                    itemCount: conversations.length,
+                    padding: const EdgeInsets.only(top: 8),
+                    separatorBuilder: (_, __) => Divider(height: 1, color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                    itemBuilder: (context, index) {
+                      return _buildChatItem(conversations[index], isDark, cardColor, textColor);
+                    },
+                  );
                 },
               ),
             ),
@@ -150,11 +134,38 @@ class _ConversationTabState extends State<ConversationTab> {
     );
   }
 
-  // ✅ ২. কাস্টম চ্যাট আইটেম (কার্ডের বদলে লিস্ট টাইল)
   Widget _buildChatItem(Map<String, dynamic> chat, bool isDark, Color cardColor, Color textColor) {
-    final lastMsg = chat['lastMessage'] ?? 'Start chatting...';
-    final time = chat['time'] ?? '';
-    final unread = (chat['unread'] ?? 0) > 0;
+    final lastMsg = (chat['lastMsg'] ?? 'Start chatting...').toString();
+
+    // ✅ টাইম ফরম্যাটিং
+    String timeStr = '';
+    if (chat['updatedAt'] != null && chat['updatedAt'] is Timestamp) {
+      final dt = (chat['updatedAt'] as Timestamp).toDate();
+      timeStr = DateFormat('h:mm a').format(dt); // e.g. 10:30 AM
+    }
+
+    final unreadCount = (chat['unread'] ?? 0) as int;
+    final unread = unreadCount > 0;
+    final img = (chat['image'] ?? '').toString();
+    final name = (chat['name'] ?? 'User').toString();
+    final role = (chat['role'] ?? '').toString();
+    final otherUid = (chat['userId'] ?? '').toString();
+
+    // ✅ ব্যাজ লজিক (BadgeService থেকে লেভেল অনুযায়ী আইকন/কালার)
+    // এখানে ধরে নিচ্ছি chat ডকুমেন্টে 'badgeLevel' বা 'xp' আছে। না থাকলে ডিফল্ট শো করবে।
+    final badgeLevelStr = (chat['badgeLevel'] ?? 'newbie').toString();
+    final badgeLevel = BadgeLevel.values.firstWhere(
+          (e) => e.name == badgeLevelStr,
+      orElse: () => BadgeLevel.newbie,
+    );
+
+// totalXP / totalStars এখানে না থাকলে শুধু ০/০ দিয়েও রঙ পাওয়া যাবে
+    final badgeProgress = BadgeProgress(
+      badgeLevel: badgeLevel,
+      totalXP: 0,
+      totalStars: 0.0,
+    );
+    final badgeColor = badgeProgress.badgeColor;
 
     return InkWell(
       onTap: () {
@@ -162,46 +173,32 @@ class _ConversationTabState extends State<ConversationTab> {
           context,
           MaterialPageRoute(
             builder: (_) => ChatScreen(
-              conversationId: chat['id'],
-              userName: chat['name'],
-              userImage: chat['image'],
-              userRole: chat['role'],
+              conversationId: chat['id'].toString(),
+              userName: name,
+              userImage: img,
+              userRole: role,
             ),
           ),
-        ).then((_) => _loadConversations()); // ফিরে আসলে রিফ্রেশ হবে
+        );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: cardColor,
-          border: Border(bottom: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200)),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        color: cardColor,
         child: Row(
           children: [
-            // প্রোফাইল ছবি
             GestureDetector(
               onTap: () {
-                final uid = chat['userId'] ?? chat['id'];
-                if (uid != null) {
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => UnifiedProfileScreen(uid: uid, isOwner: false, showBack: true)
-                      )
-                  );
+                if (otherUid.isNotEmpty) {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: otherUid, isOwner: false, showBack: true)));
                 }
               },
               child: Stack(
                 children: [
                   CircleAvatar(
-                    radius: 28,
+                    radius: 26,
                     backgroundColor: AppColors.brandLight,
-                    backgroundImage: (chat['image'] != null && chat['image'].isNotEmpty)
-                        ? NetworkImage(chat['image'])
-                        : null,
-                    child: (chat['image'] == null || chat['image'].isEmpty)
-                        ? const Icon(Icons.person, color: AppColors.brandDark)
-                        : null,
+                    backgroundImage: img.isNotEmpty ? NetworkImage(img) : null,
+                    child: img.isEmpty ? const Icon(Icons.person, color: AppColors.brandDark) : null,
                   ),
                   if (chat['isVerified'] == true)
                     Positioned(
@@ -217,68 +214,101 @@ class _ConversationTabState extends State<ConversationTab> {
               ),
             ),
             const SizedBox(width: 14),
-
-            // নাম ও মেসেজ
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        chat['name'] ?? 'User',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: unread ? FontWeight.w900 : FontWeight.w600,
-                          color: textColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        time,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: unread ? AppColors.brandMain : Colors.grey,
-                          fontWeight: unread ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
+                      Flexible(
                         child: Text(
-                          lastMsg,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: unread ? textColor : Colors.grey,
-                            fontWeight: unread ? FontWeight.bold : FontWeight.normal,
-                          ),
+                          name,
+                          style: TextStyle(fontSize: 16, fontWeight: unread ? FontWeight.w900 : FontWeight.w600, color: textColor),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (unread)
-                        Container(
-                          margin: const EdgeInsets.only(left: 8),
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: AppColors.brandMain,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+                      const SizedBox(width: 6),
+
+                      // ✅ Badge Icon Display
+                      Icon(Icons.workspace_premium, size: 16, color: badgeColor),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    lastMsg,
+                    style: TextStyle(fontSize: 13, color: unread ? textColor : Colors.grey, fontWeight: unread ? FontWeight.bold : FontWeight.normal),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
+            ),
+
+            // ডান পাশের অংশ (Time + 3 Dot)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(timeStr, style: TextStyle(fontSize: 11, color: unread ? AppColors.brandMain : Colors.grey, fontWeight: unread ? FontWeight.bold : FontWeight.normal)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (unread)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(color: AppColors.brandMain, shape: BoxShape.circle),
+                      ),
+
+                    // ✅ 3-Dot Menu
+                    _buildMoreOptions(otherUid, chat['id']),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  // ✅ 3-Dot Menu Button
+  Widget _buildMoreOptions(String userId, String convId) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_horiz, size: 20, color: Colors.grey),
+      onSelected: (value) {
+        if (value == 'profile') {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => UnifiedProfileScreen(uid: userId, isOwner: false, showBack: true)));
+        } else if (value == 'delete') {
+          // TODO: Delete Logic
+        } else if (value == 'block') {
+          // TODO: Block Logic
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'profile', child: Row(children: [Icon(Icons.person, size: 18), SizedBox(width: 8), Text("View Profile")])),
+        const PopupMenuItem(value: 'pin', child: Row(children: [Icon(Icons.push_pin, size: 18), SizedBox(width: 8), Text("Pin Chat")])),
+        const PopupMenuItem(value: 'mute', child: Row(children: [Icon(Icons.volume_off, size: 18), SizedBox(width: 8), Text("Mute")])),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'block', child: Row(children: [Icon(Icons.block, size: 18, color: Colors.red), SizedBox(width: 8), Text("Block", style: TextStyle(color: Colors.red))])),
+      ],
+    );
+  }
+
+  List<Map<String, dynamic>> _filterByTab(List<Map<String, dynamic>> base) {
+    if (_tabIndex == 1) return base.where((c) => (c['userType'] ?? c['role'] ?? '').toString().toLowerCase() == 'supporter').toList();
+    if (_tabIndex == 2) return base.where((c) => (c['userType'] ?? c['role'] ?? '').toString().toLowerCase() == 'earner').toList();
+    return base;
+  }
+
+  List<Map<String, dynamic>> _filterByQuery(List<Map<String, dynamic>> base) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return base;
+    return base.where((c) => (c['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+  }
+
+  Widget _buildErrorState(String err) {
+    return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text("Error: $err", style: const TextStyle(color: Colors.redAccent))));
   }
 }

@@ -15,7 +15,7 @@ import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/screens/ads/ad_display_screen.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class EarnPostScreen extends StatefulWidget {
   const EarnPostScreen({super.key});
@@ -37,8 +37,8 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
   LatLng? _selectedLatLng;
   double _expectedCharge = 800.0;
 
-  // ✅ NEW: slots
-  int _slots = 1;
+  // ❌ Removed: slots variable
+  // int _slots = 1;
 
   final List<Map<String, dynamic>> _categories = const [
     {"icon": Icons.electric_bolt, "name": "Electrician"},
@@ -218,24 +218,6 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
       return;
     }
 
-    // Ad check (unchanged)
-    try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final subscription = (userDoc.data()?['subscription_type'] ?? 'free').toString();
-      final bool isPremium = subscription == 'pro' || subscription == 'business';
-
-      if (!isPremium && mounted) {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AdDisplayScreen(onAdDismissed: () {}),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint("Ad check error: $e");
-    }
-
     setState(() => _isSaving = true);
 
     try {
@@ -270,8 +252,8 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         isPromoted: false,
         status: 'open',
 
-        // ✅ NEW
-        slots: _slots,
+        // ✅ Slots default 1 (Worker offers himself, so 1 slot)
+        slots: 1,
         approvedCount: 0,
       );
 
@@ -282,6 +264,9 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
         type: "job_post",
         data: {'roleLabel': _selectedCategory},
       );
+
+      await AchievementService.incrementProgress('weekly_post_free');
+      await AchievementService.syncWeeklyChestFromServer();
 
       if (mounted) {
         _showSnack("Posted successfully", AppColors.brandMain);
@@ -398,28 +383,7 @@ class _EarnPostScreenState extends State<EarnPostScreen> {
             const SizedBox(height: 8),
             _buildTextField(_descController, "Describe your skills...", isDark, cardColor, textColor, hintColor, maxLines: 4),
 
-            // ✅ NEW: Slots selector
-            const SizedBox(height: 20),
-            Text("How many people do you want to approve?",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                IconButton(
-                  onPressed: _slots > 1 ? () => setState(() => _slots--) : null,
-                  icon: const Icon(Icons.remove_circle_outline),
-                  color: AppColors.brandMain,
-                ),
-                Text("$_slots", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
-                IconButton(
-                  onPressed: _slots < 10 ? () => setState(() => _slots++) : null,
-                  icon: const Icon(Icons.add_circle_outline),
-                  color: AppColors.brandMain,
-                ),
-                const SizedBox(width: 8),
-                Text("(max 10)", style: TextStyle(color: hintColor, fontSize: 12)),
-              ],
-            ),
+            // ❌ Removed: Slots UI Section
 
             const SizedBox(height: 20),
             Container(

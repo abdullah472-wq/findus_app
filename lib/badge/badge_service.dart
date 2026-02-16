@@ -10,8 +10,7 @@ class BadgeService {
   );
 
   static const String _xpKey = 'user_xp_points';
-  static const String _starsKey = 'user_accumulated_stars';
-
+  static const String _starsKey = 'accumulated_stars'; // ✅ Simple & consistent
   // ✅ Legacy Thresholds (এরর ফিক্স করার জন্য রাখা হলো)
   static const int diamondThreshold = 1000000;
   static const int platinumThreshold = 100000;

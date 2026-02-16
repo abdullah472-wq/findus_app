@@ -17,7 +17,8 @@ import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/services/post_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/screens/ads/ad_display_screen.dart'; // ✅ অ্যাড স্ক্রিন ইমপোর্ট
+// import 'package:findus_app/screens/ads/ad_display_screen.dart'; // Ad disabled
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class SupportPostScreen extends StatefulWidget {
   const SupportPostScreen({super.key});
@@ -38,6 +39,8 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
   String _locationName = "Detecting location...";
   LatLng? _selectedLatLng;
   double _budget = 1200.0;
+
+  // ✅ Slots State
   int _slots = 1;
 
   final List<Map<String, dynamic>> _categories = const [
@@ -66,6 +69,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     super.dispose();
   }
 
+  // --- Location Logic (Same as before) ---
   Future<void> _initLocation() async {
     if (!_useCurrentLocation) return;
     await _determineInitialPosition();
@@ -142,6 +146,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
       setState(() => _locationName = "Selected Location");
     }
   }
+  // --- End Location Logic ---
 
   void _showSnack(String msg, Color color) {
     if (!mounted) return;
@@ -185,7 +190,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     }
   }
 
-  // ✅ আপডেটেড পোস্ট লজিক (অ্যাড সিস্টেম ইন্টিগ্রেটেড)
   Future<void> _handlePost() async {
     if (_isSaving) return;
     if (AppConfigService.isPostingDisabled) {
@@ -207,30 +211,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
       return;
     }
 
-    // --- অ্যাড লজিক শুরু ---
-    try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final subscription = (userDoc.data()?['subscription_type'] ?? 'free').toString();
-      final bool isPremium = subscription == 'pro' || subscription == 'business';
-
-      if (!isPremium && mounted) {
-        // ফ্রি ইউজার হলে অ্যাড পেজে পাঠাবে
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AdDisplayScreen(
-              onAdDismissed: () {
-                // অ্যাড শেষ হওয়ার পর নিচের কোড রান হবে
-              },
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint("Ad check error: $e");
-    }
-    // --- অ্যাড লজিক শেষ ---
-
     setState(() => _isSaving = true);
 
     try {
@@ -240,8 +220,6 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
       await PostService.createPost(
         ownerId: user.uid,
         ownerRole: meta['userRole'],
-        slots: _slots,
-        approvedCount: 0,
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
         roleLabel: _selectedCategory.toUpperCase(),
@@ -262,6 +240,10 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
         verified: meta['verified'],
         isPromoted: false,
         status: 'open',
+
+        // ✅ Slots passing
+        slots: _slots,
+        approvedCount: 0,
       );
 
       await NotificationService.sendNotificationToUser(
@@ -271,6 +253,9 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
         type: "support_post",
         data: {'roleLabel': _selectedCategory},
       );
+
+      await AchievementService.incrementProgress('weekly_post_free');
+      await AchievementService.syncWeeklyChestFromServer();
 
       if (mounted) {
         _showSnack("Posted successfully", AppColors.brandMain);
@@ -283,6 +268,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
     }
   }
 
+  // --- Media Pickers ---
   void _showMediaOptions() {
     showModalBottomSheet(
       context: context,
@@ -366,6 +352,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Category Section
             Text("Select Worker Type", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
             const SizedBox(height: 10),
             SizedBox(
@@ -378,15 +365,41 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
             ),
             const SizedBox(height: 20),
 
+            // Title
             Text("Job Title", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
             const SizedBox(height: 8),
             _buildTextField(_titleController, "e.g. Need a full day cleaner...", isDark, cardColor, textColor, hintColor),
 
+            // Description
             const SizedBox(height: 20),
             Text("Description", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
             const SizedBox(height: 8),
             _buildTextField(_descController, "Describe the work details...", isDark, cardColor, textColor, hintColor, maxLines: 4),
 
+            // ✅ NEW: Slots Selector UI
+            const SizedBox(height: 20),
+            Text("How many people do you want to approve?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _slots > 1 ? () => setState(() => _slots--) : null,
+                  icon: const Icon(Icons.remove_circle_outline),
+                  color: AppColors.brandMain,
+                ),
+                Text("$_slots", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
+                IconButton(
+                  onPressed: _slots < 10 ? () => setState(() => _slots++) : null,
+                  icon: const Icon(Icons.add_circle_outline),
+                  color: AppColors.brandMain,
+                ),
+                const SizedBox(width: 8),
+                Text("(max 10)", style: TextStyle(color: hintColor, fontSize: 12)),
+              ],
+            ),
+
+            // Location
             const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.all(12),
@@ -420,6 +433,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
               ),
             ),
 
+            // Media
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -437,6 +451,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
             ),
             _buildAttachmentsSection(),
 
+            // Budget
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -453,6 +468,7 @@ class _SupportPostScreenState extends State<SupportPostScreen> {
               onChanged: (val) => setState(() => _budget = val),
             ),
 
+            // Submit Button
             const SizedBox(height: 30),
             SizedBox(
               width: double.infinity,

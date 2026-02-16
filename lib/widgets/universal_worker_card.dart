@@ -11,6 +11,7 @@ import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/badge/badge_theme.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
+import 'package:findus_app/services/chat_service.dart';
 
 class UniversalWorkerCard extends StatefulWidget {
   final String? id;
@@ -210,6 +211,7 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     if (widget.id == null) return;
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    // নিজের সাথে চ্যাট করতে না দিলে এই চেক থাকুক
     if (currentUid == null || currentUid == widget.id) return;
 
     // Loading dialog দেখাও
@@ -220,8 +222,24 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     );
 
     try {
-      final cid = await FirestoreChatService.getOrCreateConversation(
-        otherUserId: widget.id!,
+      final otherUid = widget.id!.trim();
+      if (otherUid.isEmpty) {
+        if (mounted) Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid user for chat'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      final cid = await ChatService.getOrCreateConversation(
+        otherUserId: otherUid,
+        otherName: widget.name,
+        otherRole: widget.role,
+        otherImage: widget.imageUrl,
+        // চাইলে postId/postTitle এখানে পাঠাতে পারো
       );
 
       if (!mounted) return;
@@ -242,7 +260,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
       if (!mounted) return;
       Navigator.pop(context); // Dialog বন্ধ করো
 
-      // ✅ User কে error জানাও
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Chat খুলতে সমস্যা হয়েছে: $e"),
@@ -282,8 +299,8 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     final badgeName = activeBadge.name.toUpperCase();
 
     final bool isNegotiableText = widget.price.toLowerCase().contains('negotiable');
-    final String followersDisplay =
-    widget.followersCount != null ? "${widget.followersCount}" : widget.reviews;
+
+    final String followersDisplay = (widget.followersCount ?? 0).toString();
 
     return Container(
       margin: widget.margin,
@@ -561,10 +578,10 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // STATS ROW
+  // STATS ROW (Updated)
   // ═══════════════════════════════════════════════════════════════
 
-  Widget _buildStatsRow(bool isDark, String followersDisplay) {
+  Widget _buildStatsRow(bool isDark, String followersValue) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
@@ -581,7 +598,8 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           _verticalDivider(isDark),
           _buildStat(widget.rating, "RATING", isDark),
           _verticalDivider(isDark),
-          _buildStat(followersDisplay, "FOLLOWERS", isDark),
+          // ✅ এখানে সবসময় FOLLOWERS লেবেল থাকবে
+          _buildStat(followersValue, "FOLLOWERS", isDark),
         ],
       ),
     );
@@ -680,23 +698,9 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
   Widget _buildStat(String value, String label, bool isDark) {
     return Column(
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white : Colors.black87,
-          ),
-        ),
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
         const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            color: isDark ? Colors.white54 : Colors.grey.shade500,
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isDark ? Colors.white54 : Colors.grey.shade500)),
       ],
     );
   }

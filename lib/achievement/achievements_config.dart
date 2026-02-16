@@ -151,42 +151,6 @@ class AchievementsConfig {
       xpReward: 1200,
     ),
 
-    // 🏆 LONG-TERM CHAINS (Job Journey - Worker)
-    const AchievementDef(
-      id: 'lt_jobs_s1',
-      chainKey: 'lt_jobs',
-      chainStage: 1,
-      title: 'Job Journey I',
-      description: 'Complete 1 job',
-      target: 1,
-      xpReward: 500,
-      workerOnly: true,
-    ),
-    const AchievementDef(
-      id: 'lt_jobs_s2',
-      chainKey: 'lt_jobs',
-      chainStage: 2,
-      title: 'Job Journey II',
-      description: 'Complete 10 jobs',
-      target: 10,
-      xpReward: 2000,
-      workerOnly: true,
-    ),
-    const AchievementDef(
-      id: 'lt_jobs_s3',
-      chainKey: 'lt_jobs',
-      chainStage: 3,
-      title: 'Job Journey III',
-      description: 'Complete 50 jobs',
-      target: 50,
-      xpReward: 5000,
-      workerOnly: true,
-    ),
-
-    // ==================================================
-    // 🏆 EXISTING LONG-TERM CHAINS (Profile & Jobs)
-    // ==================================================
-    // ... আপনার আগের lt_profile এবং lt_jobs কোডগুলো এখানে থাকবে ...
 
     // ==================================================
     // 🌟 NEW 1: REPUTATION BUILDER (Ratings - Everyone)
@@ -206,7 +170,7 @@ class AchievementsConfig {
       chainStage: 2,
       title: 'Trusted User',
       description: 'Receive 500 positive ratings',
-      target: 500,
+      target: 200,
       xpReward: 2500,
     ),
     const AchievementDef(
@@ -216,7 +180,7 @@ class AchievementsConfig {
       title: 'Community Legend',
       description: 'Receive 1000 positive ratings',
       target: 1000,
-      xpReward: 5000, // Big Reward!
+      xpReward: 10000, // Big Reward!
     ),
 
     // ==================================================
@@ -237,7 +201,7 @@ class AchievementsConfig {
       chainStage: 2,
       title: 'Community Builder',
       description: 'Refer 500 friends',
-      target: 500,
+      target: 200,
       xpReward: 5000,
     ),
     const AchievementDef(
@@ -374,39 +338,6 @@ class AchievementsConfig {
       workerOnly: true,
       resetPeriod: ResetPeriod.weekly,
     ),
-
-    // 3. Long-Term Chain (লাইফটাইম প্রগ্রেস)
-    const AchievementDef(
-      id: 'lt_jobs_s1',
-      chainKey: 'lt_jobs',
-      chainStage: 1,
-      title: 'First Earnings',
-      description: 'Complete 20 jobs',
-      target: 20,
-      xpReward: 2500,
-      workerOnly: true,
-    ),
-    const AchievementDef(
-      id: 'lt_jobs_s2',
-      chainKey: 'lt_jobs',
-      chainStage: 2,
-      title: 'Professional',
-      description: 'Complete 50 jobs',
-      target: 50,
-      xpReward: 10000,
-      workerOnly: true,
-    ),
-    const AchievementDef(
-      id: 'lt_jobs_s3',
-      chainKey: 'lt_jobs',
-      chainStage: 3,
-      title: 'Veteran Worker',
-      description: 'Complete 200 jobs',
-      target: 200,
-      xpReward: 15000,
-      workerOnly: true,
-    ),
-
     // ==================================================
     // 💼 EMPLOYER: HIRING CHAIN
     // ==================================================
@@ -440,7 +371,7 @@ class AchievementsConfig {
       chainStage: 1,
       title: 'First Hire',
       description: 'Hire 20 people',
-      target: 20,
+      target: 50,
       xpReward: 2500,
       supporterOnly: true,
     ),
@@ -450,7 +381,7 @@ class AchievementsConfig {
       chainStage: 2,
       title: 'Team Builder',
       description: 'Hire 50 people',
-      target: 50,
+      target: 200,
       xpReward: 10000,
       supporterOnly: true,
     ),
@@ -460,7 +391,7 @@ class AchievementsConfig {
       chainStage: 3,
       title: 'Business Tycoon',
       description: 'Hire 200 people',
-      target: 200,
+      target: 1000,
       xpReward: 20000,
       supporterOnly: true,
     ),

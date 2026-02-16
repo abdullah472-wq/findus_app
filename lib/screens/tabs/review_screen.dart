@@ -62,17 +62,38 @@ class _ReviewScreenState extends State<ReviewScreen> {
       return;
     }
 
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (myUid == null) {
+      _showSnack("Please login first", Colors.orange);
+      return;
+    }
+
     setState(() => _isSaving = true);
     HapticFeedback.mediumImpact();
 
     try {
+      // ✅ 1. Check for duplicate review
+      final existingReview = await FirebaseFirestore.instance
+          .collection('reviews')
+          .where('fromUserId', isEqualTo: myUid)
+          .where('postId', isEqualTo: widget.postId)
+          .limit(1)
+          .get();
+
+      if (existingReview.docs.isNotEmpty) {
+        _showSnack("You've already reviewed this job!", Colors.orange);
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      // ✅ 2. Prepare comment with tags
       final baseComment = _commentController.text.trim();
       String fullComment = baseComment;
       if (_selectedTags.isNotEmpty) {
         fullComment += "\n\nFeedback: ${_selectedTags.join(', ')}";
       }
 
-      // 1. Submit Review (সাধারণ রিভিউ ডাটাবেসে সেভ)
+      // ✅ 3. Submit review to database
       await ReviewService.addReview(
         targetUserId: widget.workerId,
         postId: widget.postId,
@@ -81,54 +102,77 @@ class _ReviewScreenState extends State<ReviewScreen> {
         targetRole: 'worker',
         fromRole: 'supporter',
         isAnonymous: false,
+        wouldHireAgain: _wouldHireAgain,
+        tags: _selectedTags.toList(),
       );
 
-      // 2. Send Notification
-      final myUid = FirebaseAuth.instance.currentUser?.uid;
+      // ✅ 4. Update Worker's Badge Stars (users collection)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.workerId)
+          .set({
+        'accumulated_stars': FieldValue.increment(_rating),
+        'total_ratings': FieldValue.increment(1),
+        'last_rating_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // ✅ 5. Update Worker's Stats (user_stats collection for avg rating)
+      final statsRef = FirebaseFirestore.instance
+          .collection('user_stats')
+          .doc(widget.workerId);
+
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final statsSnap = await tx.get(statsRef);
+        final stats = statsSnap.data() ?? {};
+
+        final int oldCount = (stats['reviewsCount'] ?? 0) as int;
+        final double oldAvg = ((stats['avgRating'] ?? 0.0) as num).toDouble();
+        final int newCount = oldCount + 1;
+        final double newAvg = ((oldAvg * oldCount) + _rating) / newCount;
+
+        tx.set(statsRef, {
+          'reviewsCount': newCount,
+          'avgRating': double.parse(newAvg.toStringAsFixed(2)),
+          'totalRatingPoints': FieldValue.increment(_rating),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+
+      // ✅ 6. Send notification to worker
       await NotificationService.sendNotification(
         toUserId: widget.workerId,
-        fromUserId: myUid ?? 'system',
+        fromUserId: myUid,
         title: "New Review Received! ⭐",
         body: "You received a ${_rating.toStringAsFixed(1)} star review!",
         type: "review",
       );
 
-      // ============================================================
-      // 🔥🔥 NEW BADGE LOGIC IMPLEMENTATION 🔥🔥
-      // ============================================================
+      // ✅ 7. Reward Reviewer with XP (Dynamic based on rating)
+      int xpReward = (_rating * 10).toInt(); // 5 star = 50 XP
+      await BadgeService.addXP(xpReward);
 
-      // A. WORKER UPDATE (যাকে রিভিউ দিলেন):
-      // তার 'totalStars' বা 'accumulated_stars' ফিল্ডে রেটিং যোগ হবে।
-      // সে যখন অ্যাপ ওপেন করবে, BadgeService এই ডাটা পড়ে তার ব্যাজ (Bronze/Gold) আপডেট করবে।
-      try {
-        await FirebaseFirestore.instance.collection('users').doc(widget.workerId).update({
-          // এখানে rating সরাসরি যোগ হবে (যেমন: 4.5 বা 5)
-          // 'user_accumulated_stars' নামটি BadgeService এর _starsKey এর সাথে মিল রাখতে হবে যদি সার্ভার সিঙ্ক থাকে
-          'user_accumulated_stars': FieldValue.increment(_rating),
-          'rating_count': FieldValue.increment(1),
-        });
-        debugPrint("✅ Worker's Accumulated Stars Updated by +$_rating");
-      } catch (e) {
-        debugPrint("Failed to update worker stats: $e");
-      }
-
-      // B. REVIEWER UPDATE (আপনি):
-      // ১. রিভিউ দেওয়ার জন্য আপনি কিছু XP পাবেন (লেভেল ১-১০০ বাড়ার জন্য)
-      await BadgeService.addXP(50);
-
-      // ২. ডেইলি কুয়েস্ট বা অ্যাচিভমেন্ট আপডেট (যদি থাকে)
-      await AchievementService.incrementProgress('daily_review', amount: 1);
+      // ✅ 8. Update Reviewer's Achievement Progress
+      await AchievementService.incrementProgress('daily_give_review');
+      await AchievementService.incrementProgress('weekly_give_reviews');
+      await AchievementService.incrementProgress('lt_reviews_s1');
+      await AchievementService.incrementProgress('lt_reviews_s2');
+      await AchievementService.incrementProgress('lt_reviews_s3');
       await AchievementService.syncWeeklyChestFromServer();
 
-      debugPrint("🏆 Reviewer rewarded with XP & Quest Progress");
-
-      // ============================================================
+      debugPrint("✅ Review submitted successfully");
+      debugPrint("✅ Worker's stars: +$_rating");
+      debugPrint("✅ Reviewer's XP: +$xpReward");
 
       if (!mounted) return;
-      _showSnack("Review submitted successfully!", Colors.green);
-      Navigator.pop(context);
+      _showSnack("✅ Review submitted! You earned $xpReward XP!", Colors.green);
+
+      // Small delay for better UX
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) Navigator.pop(context, true); // Return true to indicate success
+
     } catch (e) {
-      _showSnack("Error: $e", Colors.red);
+      debugPrint("❌ Review submission error: $e");
+      _showSnack("Failed to submit review. Please try again.", Colors.red);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

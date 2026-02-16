@@ -176,19 +176,31 @@ class AchievementService {
     if (uid == null) return;
 
     final state = _stateById[id];
-    if (state == null) return;
+    if (state == null) {
+      debugPrint("claim($id): state not found");
+      return;
+    }
 
-    if (!state.isCompleted || state.claimed) return;
+    if (!state.isCompleted || state.claimed) {
+      debugPrint("claim($id): not completed or already claimed");
+      return;
+    }
+
+    debugPrint("claim($id): COMPLETED, resetPeriod=${state.def.resetPeriod}");
 
     final updatedState = state.copyWith(claimed: true);
     _stateById[id] = updatedState;
     await _saveAll();
 
+    // লোকাল XP / ব্যাজ পয়েন্ট আপডেট
     await BadgeService.addPoints(state.def.xpReward);
 
+    // ✅ শুধু daily quest হলে weekly counter আপডেট হবে
     if (state.def.resetPeriod == ResetPeriod.daily) {
+      debugPrint("claim($id): updating weekly_daily_done_count");
       try {
-        final statsRef = FirebaseFirestore.instance.collection('user_stats').doc(uid);
+        final statsRef =
+        FirebaseFirestore.instance.collection('user_stats').doc(uid);
         final now = DateTime.now();
         final wk = _weekKey(now);
 
@@ -218,12 +230,14 @@ class AchievementService {
             );
           }
         });
+
         await syncWeeklyChestFromServer();
       } catch (e) {
         debugPrint("Weekly counter update failed: $e");
       }
     }
 
+    // Firestore users ডকে XP পয়েন্ট আপডেট
     try {
       final Map<String, dynamic> updateData = {
         'updatedAt': FieldValue.serverTimestamp(),
@@ -235,6 +249,7 @@ class AchievementService {
       debugPrint("Error claiming reward (remote only): $e");
     }
   }
+
 
   static Future<void> incrementProgress(String achievementId, {int amount = 1}) async {
     final def = AchievementsConfig.byId(achievementId);

@@ -1,11 +1,14 @@
-// lib/screens/tabs/dashboard/widgets/posted_pins_list.dart
+// lib/screens/dashboard/widgets/posted_pins_list.dart
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:intl/intl.dart'; // তারিখ ফরম্যাটের জন্য
-import 'package:url_launcher/url_launcher.dart'; // ম্যাপ ওপেন করার জন্য
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart'; // ✅ NEW
+
 import '../../profile/earn_post_screen.dart';
+import '../../dashboard/my_post_applications_screen.dart'; // ✅ NEW
 
 class PostedPinsList extends StatelessWidget {
   final String userId;
@@ -24,7 +27,7 @@ class PostedPinsList extends StatelessWidget {
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('ownerId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true) // নতুন পোস্ট আগে দেখাবে
+          .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         return _buildContent(context, snapshot, isDark);
@@ -32,16 +35,25 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot, bool isDark) {
+  Widget _buildContent(
+      BuildContext context,
+      AsyncSnapshot<QuerySnapshot> snapshot,
+      bool isDark,
+      ) {
     if (snapshot.hasError) {
-      return _buildErrorWidget(snapshot.error.toString());
+      final err = snapshot.error.toString();
+      final needsIndex = err.contains('FAILED_PRECONDITION') ||
+          err.toLowerCase().contains('index');
+
+      return _buildErrorWidget(needsIndex ? 'Index required' : err, needsIndex);
     }
 
     if (snapshot.connectionState == ConnectionState.waiting) {
-      return _buildLoadingWidget();
+      return _buildLoadingWidget(isDark);
     }
 
     final docs = snapshot.data!.docs;
+
     if (docs.isEmpty) {
       return _buildEmptyWidget(context, isDark);
     }
@@ -49,43 +61,73 @@ class PostedPinsList extends StatelessWidget {
     return _buildPinsList(context, docs, isDark);
   }
 
-  Widget _buildErrorWidget(String error) {
+  Widget _buildErrorWidget(String error, bool isIndexError) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: isIndexError ? Colors.orange.shade50 : Colors.red.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade100),
+        border: Border.all(
+          color: isIndexError ? Colors.orange.shade200 : Colors.red.shade200,
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.red),
+          Icon(
+            isIndexError ? Icons.build_rounded : Icons.error_outline,
+            color: isIndexError ? Colors.orange : Colors.red,
+          ),
           const SizedBox(width: 12),
-          Expanded(child: Text('Error: $error', style: const TextStyle(color: Colors.red))),
+          Expanded(
+            child: Text(
+              error,
+              style: TextStyle(
+                color: isIndexError ? Colors.orange.shade900 : Colors.red,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLoadingWidget() {
+  Widget _buildLoadingWidget(bool isDark) {
     return Column(
       children: [
-        _buildShimmerCard(),
+        _buildShimmerCard(isDark),
         const SizedBox(height: 12),
-        _buildShimmerCard(),
+        _buildShimmerCard(isDark),
       ],
     );
   }
 
-  Widget _buildShimmerCard() {
+  Widget _buildShimmerCard(bool isDark) {
+    final shimmerColor = isDark ? Colors.grey[800]! : Colors.grey[300]!;
+
     return Container(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: shimmerColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
-          Container(width: 50, height: 50, decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle)),
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[700] : Colors.grey,
+              shape: BoxShape.circle,
+            ),
+          ),
           const SizedBox(width: 15),
-          Expanded(child: Container(width: double.infinity, height: 20, color: Colors.grey)),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              height: 20,
+              color: isDark ? Colors.grey[700] : Colors.grey,
+            ),
+          ),
         ],
       ),
     );
@@ -97,41 +139,78 @@ class PostedPinsList extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         children: [
-          Icon(Icons.pin_drop_outlined, size: 60, color: Colors.grey.shade400),
+          Icon(
+            Icons.pin_drop_outlined,
+            size: 60,
+            color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+          ),
           const SizedBox(height: 12),
           Text(
             'No pins posted yet',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.grey),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Start by posting your first job',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : Colors.grey.shade600,
+            ),
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EarnPostScreen()),
+              );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandMain),
-            child: const Text('POST NEW PIN', style: TextStyle(color: Colors.white)),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('POST NEW PIN'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandMain,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPinsList(BuildContext context, List<QueryDocumentSnapshot> docs, bool isDark) {
+  Widget _buildPinsList(
+      BuildContext context,
+      List<QueryDocumentSnapshot> docs,
+      bool isDark,
+      ) {
     return Column(
-      children: docs.map((doc) => _buildPinCard(context, doc, isDark)).toList(),
+      children: docs.map((doc) {
+        return _buildPinCard(context, doc, isDark);
+      }).toList(),
     );
   }
 
-  Widget _buildPinCard(BuildContext context, QueryDocumentSnapshot doc, bool isDark) {
+  Widget _buildPinCard(
+      BuildContext context,
+      QueryDocumentSnapshot doc,
+      bool isDark,
+      ) {
     final data = doc.data() as Map<String, dynamic>;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
+    final subColor = isDark ? Colors.white54 : Colors.grey.shade600;
 
-    // ১. তারিখ ফরম্যাটিং
+    // Date formatting
     String dateStr = "";
     if (data['createdAt'] != null) {
       try {
@@ -140,8 +219,10 @@ class PostedPinsList extends StatelessWidget {
       } catch (_) {}
     }
 
-    // ২. স্ট্যাটাস চেক (Active/Expired)
-    final bool isActive = data['isActive'] ?? true; // ডিফল্ট Active
+    // Status
+    final bool isActive = data['isActive'] ?? true;
+    final int viewCount = data['viewCount'] ?? 0;
+    final int applicationsCount = data['applicationsCount'] ?? 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -159,92 +240,164 @@ class PostedPinsList extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _handlePinTap(context, data), // লোকেশনে নিয়ে যাবে
+          onTap: () {
+            // ✅ Navigate to applications screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => MyPostApplicationsScreen(postId: doc.id),
+              ),
+            );
+          },
           borderRadius: BorderRadius.circular(16),
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ৩. ক্যাটাগরি আইকন
-                _buildPinIcon(data),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Category Icon
+                    _buildPinIcon(data),
 
-                const SizedBox(width: 16),
+                    const SizedBox(width: 16),
 
-                // ইনফো সেকশন
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // Info Section
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              data['title'] ?? 'No Title',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  data['title'] ?? 'No Title',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildStatusChip(isActive),
+                            ],
                           ),
-                          // ৪. স্ট্যাটাস চিপ
-                          _buildStatusChip(isActive),
+
+                          const SizedBox(height: 6),
+
+                          // Location
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on_outlined,
+                                size: 14,
+                                color: subColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  data['address'] ?? 'No Location',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: subColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 6),
+
+                          // ✅ Analytics Row
+                          Row(
+                            children: [
+                              Icon(Icons.visibility, size: 12, color: subColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$viewCount views',
+                                style: TextStyle(fontSize: 11, color: subColor),
+                              ),
+
+                              const SizedBox(width: 12),
+
+                              Icon(Icons.person, size: 12, color: subColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$applicationsCount applied',
+                                style: TextStyle(fontSize: 11, color: subColor),
+                              ),
+
+                              if (dateStr.isNotEmpty) ...[
+                                const SizedBox(width: 12),
+                                Icon(Icons.calendar_today, size: 11, color: subColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  dateStr,
+                                  style: TextStyle(fontSize: 10, color: subColor),
+                                ),
+                              ],
+                            ],
+                          ),
                         ],
                       ),
+                    ),
 
-                      const SizedBox(height: 6),
+                    const SizedBox(width: 8),
 
-                      Row(
-                        children: [
-                          Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade600),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              data['address'] ?? 'No Location',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      if (dateStr.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 12, color: Colors.grey.shade400),
-                            const SizedBox(width: 4),
-                            Text(
-                              dateStr,
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
+                    // Price
+                    _buildPriceTag(data, textColor),
+                  ],
                 ),
 
-                const SizedBox(width: 8),
+                const SizedBox(height: 12),
 
-                // প্রাইস এবং ডিলিট বাটন
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                // ✅ Action Buttons Row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildPriceTag(data),
-                    const SizedBox(height: 12),
-                    InkWell(
+                    // View on Map
+                    _ActionButton(
+                      icon: Icons.map_outlined,
+                      label: 'Map',
+                      color: Colors.blue,
+                      onTap: () => _handlePinTap(context, data),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Share
+                    _ActionButton(
+                      icon: Icons.share,
+                      label: 'Share',
+                      color: Colors.green,
+                      onTap: () => _sharePin(context, data),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Edit
+                    _ActionButton(
+                      icon: Icons.edit_outlined,
+                      label: 'Edit',
+                      color: Colors.orange,
+                      onTap: () => _editPin(context, doc.id, data),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Delete
+                    _ActionButton(
+                      icon: Icons.delete_outline,
+                      label: 'Delete',
+                      color: Colors.red,
                       onTap: () => _deletePin(context, doc.id),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                      ),
                     ),
                   ],
                 ),
@@ -256,27 +409,31 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  // ✅ ক্যাটাগরি অনুযায়ী আইকন সাজেশন
   Widget _buildPinIcon(Map<String, dynamic> data) {
     IconData icon = Icons.work_outline;
     Color color = AppColors.brandMain;
 
-    // টাইটেল বা রোল অনুযায়ী আইকন সেট
     final String text = (data['title'] ?? '').toString().toLowerCase() +
         (data['roleLabel'] ?? '').toString().toLowerCase();
 
     if (text.contains('plumb')) {
-      icon = Icons.plumbing; color = Colors.blue;
+      icon = Icons.plumbing;
+      color = Colors.blue;
     } else if (text.contains('electric') || text.contains('bijli')) {
-      icon = Icons.electric_bolt; color = Colors.orange;
+      icon = Icons.electric_bolt;
+      color = Colors.orange;
     } else if (text.contains('clean') || text.contains('wash')) {
-      icon = Icons.cleaning_services; color = Colors.teal;
+      icon = Icons.cleaning_services;
+      color = Colors.teal;
     } else if (text.contains('drive') || text.contains('car')) {
-      icon = Icons.directions_car; color = Colors.indigo;
+      icon = Icons.directions_car;
+      color = Colors.indigo;
     } else if (text.contains('food') || text.contains('cook')) {
-      icon = Icons.restaurant; color = Colors.redAccent;
+      icon = Icons.restaurant;
+      color = Colors.redAccent;
     } else if (text.contains('teach') || text.contains('tutor')) {
-      icon = Icons.school; color = Colors.brown;
+      icon = Icons.school;
+      color = Colors.brown;
     }
 
     return Container(
@@ -291,38 +448,65 @@ class PostedPinsList extends StatelessWidget {
 
   Widget _buildStatusChip(bool isActive) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isActive ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: isActive ? Colors.green.withOpacity(0.3) : Colors.grey.withOpacity(0.3)),
+        color: isActive
+            ? Colors.green.withOpacity(0.1)
+            : Colors.grey.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isActive
+              ? Colors.green.withOpacity(0.3)
+              : Colors.grey.withOpacity(0.3),
+        ),
       ),
       child: Text(
         isActive ? 'Active' : 'Closed',
         style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            color: isActive ? Colors.green : Colors.grey
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: isActive ? Colors.green : Colors.grey,
         ),
       ),
     );
   }
 
-  Widget _buildPriceTag(Map<String, dynamic> data) {
-    return Text(
-      data['priceLabel'] ?? 'N/A',
-      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMain, fontSize: 14),
+  Widget _buildPriceTag(Map<String, dynamic> data, Color textColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          data['priceLabel'] ?? 'N/A',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.brandMain,
+            fontSize: 16,
+          ),
+        ),
+        if (data['priceType'] != null)
+          Text(
+            data['priceType'].toString(),
+            style: TextStyle(
+              fontSize: 9,
+              color: textColor.withOpacity(0.5),
+            ),
+          ),
+      ],
     );
   }
 
-  // ✅ লোকেশনে নিয়ে যাওয়ার লজিক (গুগল ম্যাপ)
-  Future<void> _handlePinTap(BuildContext context, Map<String, dynamic> data) async {
+  // ✅ Open location in Google Maps
+  Future<void> _handlePinTap(
+      BuildContext context,
+      Map<String, dynamic> data,
+      ) async {
     final double? lat = data['latitude'];
     final double? lng = data['longitude'];
 
     if (lat != null && lng != null) {
-      // গুগল ম্যাপ ওপেন করা
-      final Uri googleMapsUrl = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng");
+      final Uri googleMapsUrl = Uri.parse(
+        "https://www.google.com/maps/search/?api=1&query=$lat,$lng",
+      );
 
       try {
         if (await canLaunchUrl(googleMapsUrl)) {
@@ -334,41 +518,167 @@ class PostedPinsList extends StatelessWidget {
         _showError(context, "Error opening map: $e");
       }
     } else {
-      // যদি কোঅর্ডিনেট না থাকে, তবে শুধু মেসেজ দেখাবে
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Location details for '${data['title']}' not available on map."),
+          content: Text(
+            "Location for '${data['title']}' not available.",
+          ),
           backgroundColor: Colors.orange,
         ),
       );
     }
   }
 
-  void _showError(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
+  // ✅ Share pin
+  Future<void> _sharePin(BuildContext context, Map<String, dynamic> data) async {
+    final title = data['title'] ?? 'Job Post';
+    final address = data['address'] ?? 'Location not set';
+    final price = data['priceLabel'] ?? 'N/A';
+
+    final shareText = '''
+🔧 $title
+
+📍 Location: $address
+💰 Price: $price
+
+Apply now on FindUs App!
+''';
+
+    try {
+      await Share.share(shareText, subject: title);
+    } catch (e) {
+      _showError(context, "Failed to share: $e");
+    }
   }
 
+  // ✅ Edit pin
+  Future<void> _editPin(
+      BuildContext context,
+      String pinId,
+      Map<String, dynamic> data,
+      ) async {
+    // Option 1: Show coming soon message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('📝 Edit feature coming soon!'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Option 2: Open existing screen for viewing only
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (_) => const EarnPostScreen(),
+    //   ),
+    // );
+  }
+
+  // ✅ Delete pin
   Future<void> _deletePin(BuildContext context, String pinId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Delete Pin?"),
-        content: const Text("Are you sure you want to delete this post? This cannot be undone."),
+        content: const Text(
+          "Are you sure you want to delete this post?\nThis cannot be undone.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
 
     if (confirm == true) {
-      await FirebaseFirestore.instance.collection('posts').doc(pinId).delete();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Pin deleted successfully")));
+      try {
+        await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(pinId)
+            .delete();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("✅ Pin deleted successfully"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          _showError(context, "Failed to delete: $e");
+        }
       }
     }
+  }
+
+  void _showError(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+
+// ✅ Action Button Widget
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

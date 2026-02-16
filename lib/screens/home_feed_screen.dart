@@ -1,15 +1,17 @@
+// lib/screens/home_feed_screen.dart
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:findus_app/constants/app_colors.dart';
 
-// ট্যাব পেজ ইম্পোর্ট
 import 'package:findus_app/screens/tabs/work_in_progress_tab.dart';
 import 'package:findus_app/screens/tabs/completed_work_tab.dart';
 import 'package:findus_app/screens/tabs/achievements_tab.dart';
 import 'package:findus_app/screens/tabs/leaderboard_screen.dart';
 import 'package:findus_app/screens/dashboard/dashboard_screen.dart';
-import 'package:findus_app/achievement/achievement_service.dart'; // Achievement
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -30,10 +32,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
   late AnimationController _bounceController;
   late Animation<double> _bounceAnimation;
 
-  // 🔴 Badge Counts
+  // Badge Counts
   int _claimableQuestCount = 0;
-  int _ongoingActionCount = 0; // Jobs needing completion
+  int _ongoingActionCount = 0;
   int _pendingReviewCount = 0;
+
+  // ✅ Stream Subscriptions
+  StreamSubscription? _ongoingJobsSubscription;
+  StreamSubscription? _completedJobsSubscription;
 
   final List<Widget> _tabViews = const [
     DashboardScreen(),
@@ -68,14 +74,18 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
       }
     });
 
-    // ✅ Listeners Init
+    // Listeners
     AchievementService.achievementsNotifier.addListener(_updateQuestBadge);
-    _listenToJobStatus();
-    _updateQuestBadge(); // Initial Load
+    _initJobStatusListeners();
+    _updateQuestBadge();
   }
 
   @override
   void dispose() {
+    // ✅ Cancel all subscriptions
+    _ongoingJobsSubscription?.cancel();
+    _completedJobsSubscription?.cancel();
+
     AchievementService.achievementsNotifier.removeListener(_updateQuestBadge);
     _pageController.dispose();
     _spinController.dispose();
@@ -83,63 +93,81 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
     super.dispose();
   }
 
-  // ✅ 1. Quest Badge Logic
   void _updateQuestBadge() {
     final count = AchievementService.achievementsNotifier.value
         .where((st) => st.isCompleted && !st.claimed)
         .length;
+
     if (mounted && count != _claimableQuestCount) {
       setState(() => _claimableQuestCount = count);
     }
   }
 
-  // ✅ 2. Job Status Listener (Ongoing & Review)
-  void _listenToJobStatus() {
+  void _initJobStatusListeners() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // A. Ongoing Jobs (Check if user needs to mark complete)
-    FirebaseFirestore.instance
+    // ✅ 1. Ongoing Jobs - Count jobs where user needs to take action
+    _ongoingJobsSubscription = FirebaseFirestore.instance
         .collection('ongoing_jobs')
         .where('participants', arrayContains: uid)
         .where('status', isEqualTo: 'ongoing')
         .snapshots()
-        .listen((snap) {
-      int actionCount = 0;
-      for (var doc in snap.docs) {
-        // যদি আমি রিসিভার (Finder) হই, তবে আমাকে কমপ্লিট করতে হবে
-        if (doc['receiverId'] == uid) {
-          actionCount++;
+        .listen(
+          (snap) {
+        int actionCount = 0;
+        for (var doc in snap.docs) {
+          final data = doc.data();
+          // ✅ Fixed: User finderId instead of receiverId
+          if (data['finderId'] == uid) {
+            actionCount++;
+          }
         }
-      }
-      if (mounted) setState(() => _ongoingActionCount = actionCount);
-    });
+        if (mounted && actionCount != _ongoingActionCount) {
+          setState(() => _ongoingActionCount = actionCount);
+        }
+      },
+      onError: (e) => debugPrint('Ongoing jobs stream error: $e'),
+    );
 
-    // B. Pending Reviews (Completed Jobs)
-    // Note: This logic assumes if I haven't reviewed yet.
-    // To do this perfectly, you need a subcollection check.
-    // For simplicity, we can just check 'user_stats' -> 'reviewsGiven' vs 'jobsCompleted' count logic
-    // OR just leave it manual.
-    // Here using a simplified placeholder logic:
-    /*
-    FirebaseFirestore.instance
+    // ✅ 2. Completed Jobs - Check for pending reviews
+    _completedJobsSubscription = FirebaseFirestore.instance
         .collection('completed_jobs')
         .where('participants', arrayContains: uid)
         .orderBy('completedAt', descending: true)
-        .limit(10)
+        .limit(20)
         .snapshots()
-        .listen((snap) {
-           // Logic to check if review given... (skipping complex query for now)
-           // You can implement this later.
-    });
-    */
+        .listen(
+          (snap) async {
+        int pendingCount = 0;
+
+        for (var doc in snap.docs) {
+          final jobId = doc.id;
+
+          // Check if user has reviewed this job
+          final reviewSnap = await FirebaseFirestore.instance
+              .collection('reviews')
+              .where('fromUserId', isEqualTo: uid)
+              .where('jobId', isEqualTo: jobId)
+              .limit(1)
+              .get();
+
+          if (reviewSnap.docs.isEmpty) {
+            pendingCount++;
+          }
+        }
+
+        if (mounted && pendingCount != _pendingReviewCount) {
+          setState(() => _pendingReviewCount = pendingCount);
+        }
+      },
+      onError: (e) => debugPrint('Completed jobs stream error: $e'),
+    );
   }
 
   void _onTabTapped(int index) {
     if (_selectedTopIndex != index) {
-      setState(() {
-        _selectedTopIndex = index;
-      });
+      setState(() => _selectedTopIndex = index);
       _bounceController.forward();
       _pageController.animateToPage(
         index,
@@ -160,6 +188,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
       body: SafeArea(
         child: Column(
           children: [
+            // Top Navigation
             Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
@@ -176,45 +205,50 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildTopIcon(Icons.dashboard_rounded, "Dashboard", 0, isDark),
-
+                  _buildTopIcon(
+                    Icons.dashboard_rounded,
+                    "Dashboard",
+                    0,
+                    isDark,
+                  ),
                   _buildTopIcon(
                     Icons.settings_outlined,
                     "Working",
                     1,
                     isDark,
                     isSpinning: true,
-                    badgeCount: _ongoingActionCount, // 🔴 Badge
+                    badgeCount: _ongoingActionCount,
                   ),
-
                   _buildTopIcon(
                     Icons.assignment_turned_in_outlined,
                     "Completed",
                     2,
                     isDark,
-                    badgeCount: _pendingReviewCount, // 🔴 Badge (Future impl)
+                    badgeCount: _pendingReviewCount,
                   ),
-
                   _buildTopIcon(
                     Icons.bar_chart_rounded,
                     "Progress",
                     3,
                     isDark,
-                    badgeCount: _claimableQuestCount, // 🔴 Badge
+                    badgeCount: _claimableQuestCount,
                   ),
-
-                  _buildTopIcon(Icons.emoji_events_outlined, "Rank", 4, isDark),
+                  _buildTopIcon(
+                    Icons.emoji_events_outlined,
+                    "Rank",
+                    4,
+                    isDark,
+                  ),
                 ],
               ),
             ),
 
+            // Page Content
             Expanded(
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (index) {
-                  setState(() {
-                    _selectedTopIndex = index;
-                  });
+                  setState(() => _selectedTopIndex = index);
                   _bounceController.forward();
                 },
                 children: _tabViews,
@@ -232,7 +266,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
       int index,
       bool isDark, {
         bool isSpinning = false,
-        int badgeCount = 0, // ✅ New Parameter
+        int badgeCount = 0,
       }) {
     final bool isActive = _selectedTopIndex == index;
     const activeColor = AppColors.brandMain;
@@ -268,17 +302,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
                 duration: const Duration(milliseconds: 300),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isActive ? activeColor.withOpacity(0.1) : Colors.transparent,
+                  color: isActive
+                      ? activeColor.withOpacity(0.1)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isActive ? activeColor.withOpacity(0.3) : Colors.transparent,
+                    color: isActive
+                        ? activeColor.withOpacity(0.3)
+                        : Colors.transparent,
                     width: 1.5,
                   ),
                 ),
                 child: iconWidget,
               ),
 
-              // ✅ Badge UI Logic
+              // Badge
               if (badgeCount > 0)
                 Positioned(
                   right: -4,
@@ -288,16 +326,22 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> with TickerProviderStat
                     decoration: BoxDecoration(
                       color: Colors.red,
                       shape: BoxShape.circle,
-                      border: Border.all(color: isDark ? Colors.black : Colors.white, width: 1.5),
+                      border: Border.all(
+                        color: isDark ? Colors.black : Colors.white,
+                        width: 1.5,
+                      ),
                     ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
                     child: Center(
                       child: Text(
                         badgeCount > 9 ? '9+' : '$badgeCount',
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),

@@ -661,14 +661,14 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   void _performSearch(String query) {
-    FocusScope.of(context).unfocus();
     final searchText = query.trim();
 
     if (searchText.isEmpty) {
       setState(() {
         _filteredWorkers = List.from(_allWorkers);
         _isSearchingWorker = false;
-        _showSuggestions = false;
+        // এখানে চাইলে suggestions বন্ধ করতে পারো, তবে কিবোর্ড বন্ধ করছো না
+        // _showSuggestions = false;
       });
       return;
     }
@@ -677,6 +677,7 @@ class _ExploreScreenState extends State<ExploreScreen>
 
     Future.delayed(const Duration(milliseconds: 400), () {
       if (!mounted) return;
+
       final searchTextLower = searchText.toLowerCase();
       final locationText = _locationSearchController.text.toLowerCase().trim();
 
@@ -685,14 +686,28 @@ class _ExploreScreenState extends State<ExploreScreen>
         final role = (worker['roleLabel'] ?? worker['role'] ?? '').toString().toLowerCase();
         final address = (worker['address'] ?? '').toString().toLowerCase();
 
-        final matchesMainQuery = searchTextLower.isEmpty || name.contains(searchTextLower) || role.contains(searchTextLower) || address.contains(searchTextLower);
-        final matchesLocationQuery = locationText.isEmpty || address.contains(locationText) || name.contains(locationText);
-        final matchesVerified = !_verifiedOnly || worker['verified'] == true;
-        final matchesLive = !_liveOnly || worker['isLive'] == true;
-        final matchesGender = _selectedGender == "Any" || worker['gender'] == _selectedGender;
-        final matchesExp = (worker['experience'] ?? 0).toDouble() >= _minExperience;
+        final matchesMainQuery =
+            searchTextLower.isEmpty ||
+                name.contains(searchTextLower) ||
+                role.contains(searchTextLower) ||
+                address.contains(searchTextLower);
 
-        return matchesMainQuery && matchesLocationQuery && matchesVerified && matchesLive && matchesGender && matchesExp;
+        final matchesLocationQuery =
+            locationText.isEmpty ||
+                address.contains(locationText) ||
+                name.contains(locationText);
+
+        final matchesVerified = !_verifiedOnly || worker['verified'] == true;
+        final matchesLive     = !_liveOnly     || worker['isLive'] == true;
+        final matchesGender   = _selectedGender == "Any" || worker['gender'] == _selectedGender;
+        final matchesExp      = (worker['experience'] ?? 0).toDouble() >= _minExperience;
+
+        return matchesMainQuery &&
+            matchesLocationQuery &&
+            matchesVerified &&
+            matchesLive &&
+            matchesGender &&
+            matchesExp;
       }).toList();
 
       results.sort((a, b) {
@@ -708,6 +723,7 @@ class _ExploreScreenState extends State<ExploreScreen>
       setState(() {
         _isSearchingWorker = false;
         _filteredWorkers = results;
+        // এখানে কিবোর্ড বন্ধ করছি না; suggestions ও ইচ্ছা হলে রাখা যায়
         _showSuggestions = false;
       });
 
@@ -1025,15 +1041,45 @@ class _ExploreScreenState extends State<ExploreScreen>
           // ✅ Role Switch Button (New Position)
           if (!_isSearchingLocation)
             Positioned(
-              bottom: 180, // Emergency বাটন থেকে উপরে
+              bottom: 180,
               right: 20,
-              child: FloatingActionButton(
-                heroTag: 'roleSwitch',
-                onPressed: _toggleRole,
-                backgroundColor: _isWorker ? Colors.orange : Colors.blueAccent,
-                child: Icon(
-                  _isWorker ? Icons.work : Icons.person_search,
-                  color: Colors.white,
+              child: GestureDetector(
+                onTap: _toggleRole,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: _isWorker ? Colors.deepOrange : Colors.blueAccent,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 5,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // ব্যাকগ্রাউন্ডে হালকা আইকন (watermark feel)
+                      Opacity(
+                        opacity: 0.18,
+                        child: Icon(
+                          _isWorker ? Icons.work_outline : Icons.person_outline,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
+                      // সামনের দিকে মূল আইকন
+                      Icon(
+                        _isWorker ? Icons.currency_exchange : Icons.search,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1076,14 +1122,20 @@ class _ExploreScreenState extends State<ExploreScreen>
                 onPressed: () async {
                   final currentUser = FirebaseAuth.instance.currentUser;
                   if (currentUser == null) {
-                    // Show login dialog...
+                    _showLoginRequiredDialog();   // ✅ এখন popup আসবে
                     return;
                   }
 
                   if (_isWorker) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EarnPostScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EarnPostScreen()),
+                    );
                   } else {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportPostScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SupportPostScreen()),
+                    );
                   }
                 },
                 backgroundColor: _isWorker ? Colors.green : const Color(0xFFFFF59D),
@@ -1150,4 +1202,38 @@ class _ExploreScreenState extends State<ExploreScreen>
       ),
     ),
   );
+
+  void _showLoginRequiredDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Login Required"),
+        content: const Text(
+          "You need to login to create or post jobs.\n\n"
+              "Please login to continue.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx); // dialog বন্ধ
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandMain,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text("LOGIN NOW"),
+          ),
+        ],
+      ),
+    );
+  }
 }

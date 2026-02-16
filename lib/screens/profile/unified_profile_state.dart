@@ -643,9 +643,17 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
                 ),
                 const SizedBox(height: 25),
 
+
+                // ✅✅✅ নতুন যোগ করা হয়েছে: Engagement & Badges Row
+                const SizedBox(height: 20),
+                _buildHeaderEngagementRow(isDark),
+
+                const SizedBox(height: 24),
+
                 // Social Row & Stats
                 _buildHeaderStatsRow(isDark, stars.toInt(), xp), // ✅ নতুন হেল্পার মেথড
                 const SizedBox(height: 24),
+
               ],
             ),
           ),
@@ -713,86 +721,603 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
     );
   }
 
-  // --- Badge Details Dialog (Updated for Dual System) ---
-  void _showBadgeDetails(BadgeLevel badge, int xp, double stars) {
-    final badgeColor = _getBadgeColor(badge);
-    final badgeName = badge.toString().split('.').last.toUpperCase();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  // ═══════════════════════════════════════════════════════════════
+  // HEADER ENGAGEMENT ROW (Followers + Badges)
+  // ═══════════════════════════════════════════════════════════════
 
-    // Next Rank Threshold (Stars)
-    final double nextStarThreshold = _getNextStarThreshold(badge);
-    final double starProgress = _calculateStarProgress(stars, badge);
+  Widget _buildHeaderEngagementRow(bool isDark) {
+    // ১. ব্যাজ লজিক
+    final double rating = double.tryParse(userData['rating']?.toString() ?? '0.0') ?? 0.0;
+    final int completed = int.tryParse(userData['completedCount']?.toString() ?? '0') ?? 0;
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.workspace_premium, color: badgeColor, size: 30),
-            const SizedBox(width: 12),
-            Expanded(child: Text("$badgeName RANK", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: badgeColor))),
-          ],
+    final bool isVerified = userData['kyc_completed'] == true;
+    final bool isTopRated = rating >= 4.9;
+    final bool isTrusted = completed >= 50 && rating >= 4.5;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // 🔹 বাম পাশ: Followers / Following (Engagement)
+        Expanded(
+          child: widget.isOwner
+              ? Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              // Followers Count
+              _buildStatItem(
+                count: _followersCountLive,
+                label: "Followers",
+                isDark: isDark,
+                onTap: _showFollowersList,
+              ),
+              const SizedBox(width: 20),
+              // Following Count
+              _buildStatItem(
+                count: _followingCountLive,
+                label: "Following",
+                isDark: isDark,
+                onTap: _showFollowingList,
+              ),
+            ],
+          )
+              : Row(
+            children: [
+              // Follow Button
+              InkWell(
+                onTap: _toggleFollow,
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                      color: isFollowing
+                          ? (isDark ? Colors.grey[800] : Colors.grey[200])
+                          : AppColors.brandMain,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isFollowing
+                            ? Colors.grey
+                            : AppColors.brandMain,
+                      )
+                  ),
+                  child: Text(
+                    isFollowing ? "Following" : "Follow",
+                    style: TextStyle(
+                      color: isFollowing
+                          ? (isDark ? Colors.white70 : Colors.black87)
+                          : Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Followers Count
+              _buildStatItem(
+                count: _followersCountLive,
+                label: "Followers",
+                isDark: isDark,
+                onTap: _showFollowersList,
+              ),
+            ],
+          ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+
+        // 🔹 ডান পাশ: Status Badges (All Time Visible)
+        Row(
           children: [
-            // Rank Progress (Stars)
-            _buildDialogProgressRow("Rank Progress", stars, nextStarThreshold, starProgress, badgeColor, "Stars", isDark),
-            const SizedBox(height: 20),
-            // Level Progress (XP)
-            _buildDialogXPInfo(xp, isDark),
+            _buildStatusBadge(Icons.verified, isVerified, Colors.blue, "Verified", isDark),
+            const SizedBox(width: 8),
+            _buildStatusBadge(Icons.star, isTopRated, Colors.orange, "Top Rated", isDark),
+            const SizedBox(width: 8),
+            _buildStatusBadge(Icons.shield, isTrusted, Colors.green, "Trusted", isDark),
           ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text("CLOSE", style: TextStyle(color: isDark ? Colors.white70 : Colors.black54))),
+        )
+      ],
+    );
+  }
+
+  // ছোট স্ট্যাট টেক্সট (Followers Count)
+  Widget _buildStatItem({required int count, required String label, required bool isDark, VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _formatNumber(count),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? Colors.white54 : Colors.grey[600],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDialogProgressRow(String title, double current, double target, double progress, Color color, String unit, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : Colors.black54)),
-        const SizedBox(height: 6),
-        LinearProgressIndicator(value: progress, backgroundColor: Colors.grey[300], valueColor: AlwaysStoppedAnimation(color), minHeight: 6, borderRadius: BorderRadius.circular(4)),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text("${current.toStringAsFixed(0)} $unit", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isDark ? Colors.white : Colors.black)),
-            Text("Goal: ${target.toStringAsFixed(0)}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
-          ],
+  // স্ট্যাটাস ব্যাজ (Gray / Colorful Logic)
+  Widget _buildStatusBadge(IconData icon, bool isActive, Color activeColor, String tooltip, bool isDark) {
+    // যদি এক্টিভ না হয় তবে গ্রে কালার, আর এক্টিভ হলে আসল কালার
+    final Color color = isActive ? activeColor : Colors.grey;
+    final Color bgColor = isActive
+        ? activeColor.withOpacity(0.15)
+        : (isDark ? Colors.white10 : Colors.grey[200]!);
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          shape: BoxShape.circle,
         ),
-      ],
+        child: Icon(
+          icon,
+          size: 20,
+          color: color,
+        ),
+      ),
     );
   }
 
-  Widget _buildDialogXPInfo(int xp, bool isDark) {
-    final lvl = BadgeService.getNumericLevel(xp);
-    final nextLvlXp = BadgeService.getXpForLevel(lvl + 1);
+  // --- Badge Details Dialog (UNIQUE DESIGN) ---
+  void _showBadgeDetails(BadgeLevel badge, int xp, double stars) {
+    // Owner হলে live data নাও, যেন সাথে সাথে আপডেট দেখা যায়
+    if (widget.isOwner) {
+      final stats = BadgeService.badgeNotifier.value;
+      badge = stats.badgeLevel;
+      xp = stats.totalXP;
+      stars = stats.totalStars;
+    }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color mainColor = _getBadgeColor(badge);
+    final String badgeName = badge.toString().split('.').last.toUpperCase();
+
+    // Rank (Stars) progress
+    final double nextStarTarget = _getNextStarThreshold(badge);
+    final double starProgress = _calculateStarProgress(stars, badge);
+
+    // Level (XP) progress
+    final int lvl = BadgeService.getNumericLevel(xp);
+    final int prevLvlXp = BadgeService.getXpForLevel(lvl);
+    final int nextLvlXp = BadgeService.getXpForLevel(lvl + 1);
+    double levelProgress = 1.0;
+    if (nextLvlXp > prevLvlXp) {
+      levelProgress = ((xp - prevLvlXp) / (nextLvlXp - prevLvlXp))
+          .clamp(0.0, 1.0);
+    }
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              // 🔹 solid background color
+              color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+              borderRadius: BorderRadius.circular(24),
+
+              // হালকা border, badge color hint দিয়ে
+              border: Border.all(
+                color: mainColor.withOpacity(0.35),
+                width: 1,
+              ),
+
+              // আগের মতোই glow/shadow থাকবে
+              boxShadow: [
+                BoxShadow(
+                  color: mainColor.withOpacity(0.45),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Glow circle behind icon
+                Positioned(
+                  top: -45,
+                  right: -45,
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: mainColor.withOpacity(0.35),
+                    ),
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header row: icon + title
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  mainColor,
+                                  mainColor.withOpacity(0.6),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: mainColor.withOpacity(0.5),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.workspace_premium,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "$badgeName BADGE",
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1,
+                                    color: mainColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  _badgeSubtitle(badge),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Mini badge timeline
+                      _buildBadgeTimeline(badge, isDark),
+
+                      const SizedBox(height: 16),
+
+                      // Rank & Level cards
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildRankCard(
+                              isDark: isDark,
+                              color: mainColor,
+                              stars: stars,
+                              target: nextStarTarget,
+                              progress: starProgress,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildLevelCard(
+                              isDark: isDark,
+                              level: lvl,
+                              xp: xp,
+                              nextXp: nextLvlXp,
+                              progress: levelProgress,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Tips
+                      Text(
+                        _badgeHintText(badge),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? Colors.white60
+                              : Colors.black54,
+                          height: 1.4,
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            "CLOSE",
+                            style: TextStyle(
+                              color: isDark
+                                  ? Colors.white70
+                                  : Colors.black87,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// প্রতিটি badge এর জন্য ছোট tagline
+  String _badgeSubtitle(BadgeLevel level) {
+    switch (level) {
+      case BadgeLevel.newbie:
+        return "Getting started – complete quests & collect stars.";
+      case BadgeLevel.bronze:
+        return "Active member – keep working to reach SILVER.";
+      case BadgeLevel.silver:
+        return "Trusted user – high activity & solid ratings.";
+      case BadgeLevel.gold:
+        return "Top performer – one of the best on FindUs.";
+      case BadgeLevel.platinum:
+        return "Elite member – very high trust & impact.";
+      case BadgeLevel.diamond:
+        return "Legendary – the highest rank on FindUs.";
+    }
+  }
+
+  /// Timeline: সব badge গুলো একসাথে দেখাবে, current হাইলাইট হবে
+  Widget _buildBadgeTimeline(BadgeLevel current, bool isDark) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: isDark ? Colors.white10 : Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
-        children: [
-          const Icon(Icons.bolt, color: Colors.orange),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: BadgeLevel.values.map((lvl) {
+          final bool isCurrent = lvl == current;
+          final bool isPassed = lvl.index < current.index;
+
+          final Color c = _getBadgeColor(lvl);
+          final double dotSize = isCurrent ? 22 : 16;
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Current Level: $lvl", style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
-              Text("$xp / $nextLvlXp XP", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: dotSize,
+                height: dotSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isPassed || isCurrent
+                      ? c
+                      : (isDark ? Colors.white10 : Colors.white),
+                  border: Border.all(
+                    color: c.withOpacity(isCurrent ? 1 : 0.6),
+                    width: isCurrent ? 2 : 1,
+                  ),
+                  boxShadow: isCurrent
+                      ? [
+                    BoxShadow(
+                      color: c.withOpacity(0.6),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    )
+                  ]
+                      : [],
+                ),
+                child: Icon(
+                  Icons.workspace_premium,
+                  color: isPassed || isCurrent
+                      ? Colors.white
+                      : c.withOpacity(0.6),
+                  size: isCurrent ? 14 : 11,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                lvl
+                    .toString()
+                    .split('.')
+                    .last
+                    .substring(0, 1)
+                    .toUpperCase(), // শুধু প্রথম অক্ষর (N / B / S / G / P / D)
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight:
+                  isCurrent ? FontWeight.bold : FontWeight.w500,
+                  color: isCurrent
+                      ? c
+                      : (isDark ? Colors.white54 : Colors.black45),
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Rank (Stars) card
+  Widget _buildRankCard({
+    required bool isDark,
+    required Color color,
+    required double stars,
+    required double target,
+    required double progress,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withOpacity(0.4),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "RANK PROGRESS",
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor: isDark
+                ? Colors.white10
+                : Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "${stars.toStringAsFixed(0)} Stars",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Text(
+                "Goal: ${target.toStringAsFixed(0)}",
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? Colors.white60 : Colors.grey,
+                ),
+              ),
             ],
           ),
         ],
       ),
     );
   }
+
+  /// Level (XP) card
+  Widget _buildLevelCard({
+    required bool isDark,
+    required int level,
+    required int xp,
+    required int nextXp,
+    required double progress,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white24 : Colors.grey.shade300,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "LEVEL PROGRESS",
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 4),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 6,
+            backgroundColor:
+            isDark ? Colors.white10 : Colors.grey.shade200,
+            valueColor:
+            const AlwaysStoppedAnimation(Colors.orange),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Level $level",
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          Text(
+            "$xp / $nextXp XP",
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? Colors.white70 : Colors.grey[700],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// আলাদা hint text – badge অনুযায়ী আলাদা টিপস
+  String _badgeHintText(BadgeLevel level) {
+    switch (level) {
+      case BadgeLevel.newbie:
+        return "Complete more quests and collect good ratings to unlock BRONZE.";
+      case BadgeLevel.bronze:
+        return "Stay active daily and maintain good ratings to reach SILVER.";
+      case BadgeLevel.silver:
+        return "You are trusted by the community – keep completing quality jobs for GOLD.";
+      case BadgeLevel.gold:
+        return "You are among the top workers. Higher ratings & consistency can take you to PLATINUM.";
+      case BadgeLevel.platinum:
+        return "Almost there! Maintain your performance to become a DIAMOND legend.";
+      case BadgeLevel.diamond:
+        return "You already achieved the highest badge. Keep your reputation strong to stay here.";
+    }
+  }
+
+
 
   // Helpers
   double _getNextStarThreshold(BadgeLevel level) {
@@ -1399,16 +1924,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   }
 
   // --- Other Helpers (Unchanged Logic, added isDark if needed) ---
-  Widget _buildEngagementRow(int followersCount, int followingCount, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: isDark ? [Colors.grey.shade800.withOpacity(0.3), Colors.grey.shade900.withOpacity(0.3)] : [Colors.white, Colors.grey.shade50], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: widget.isOwner ? _buildOwnerStats(followersCount, followingCount, isDark) : _buildVisitorEngagement(followersCount, followingCount, isDark),
-    );
-  }
 
   Widget _buildOwnerStats(int followers, int following, bool isDark) {
     return Row(children: [Expanded(child: _statCard(icon: Icons.trending_up, count: followers, label: 'Followers', growth: followers > 100 ? '+12%' : null, isDark: isDark, onTap: _showFollowersList)), const SizedBox(width: 8), Container(width: 1, height: 50, color: Colors.grey.withOpacity(0.3)), const SizedBox(width: 8), Expanded(child: _statCard(icon: Icons.group, count: following, label: 'Following', isDark: isDark, onTap: _showFollowingList))]);
@@ -1550,7 +2065,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
           Icon(icon, size: 20, color: color),
           const SizedBox(width: 12),
           Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w500))),
-          if (showLock) const Icon(Icons.lock, size: 16, color: Colors.grey),
+          if (showLock) const Icon(Icons.workspace_premium, size: 16, color: Colors.deepPurpleAccent),
         ],
       );
     }
@@ -1687,7 +2202,6 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
   Widget _buildShimmerLoading() { return Shimmer.fromColors(baseColor: Colors.grey[300]!, highlightColor: Colors.grey[100]!, child: ListView(shrinkWrap: true, children: [Container(height: 200, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white), Container(height: 100, margin: const EdgeInsets.all(16), color: Colors.white)])); }
   // ✅ Fix for UnifiedProfileState.dart
 
-  // 👁️ Preview Public Card
   // 👁️ Preview Public Card (Updated for Hired Label)
   void _showPublicCardPreviewBottomSheet() {
     final bool isWorker = _isWorkerRole();
@@ -1797,7 +2311,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         final docs = snap.data!.docs;
 
         return SizedBox(
-          height: 340, // ✅ হাইট বাড়ানো হয়েছে যাতে বাটনসহ পুরো কার্ড ধরে
+          height: 290, // ✅ হাইট বাড়ানো হয়েছে যাতে বাটনসহ পুরো কার্ড ধরে
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: docs.length,
@@ -1891,7 +2405,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         if (docs.isEmpty) return const SizedBox.shrink();
 
         return SizedBox(
-          height: 260, // ✅ হাইট ফিক্সড
+          height: 290, // ✅ হাইট ফিক্সড
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: docs.length,
@@ -1952,7 +2466,7 @@ class UnifiedProfileScreenState extends State<UnifiedProfileScreen> {
         final d = doc.data() as Map<String, dynamic>;
 
         return SizedBox(
-          height: 320, // ✅ হাইট ফিক্সড
+          height: 290, // ✅ হাইট ফিক্সড
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

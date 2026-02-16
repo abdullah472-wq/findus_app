@@ -7,6 +7,7 @@ import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 import 'package:findus_app/widgets/universal_worker_card.dart';
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class MyPostApplicationsScreen extends StatelessWidget {
   final String postId;
@@ -348,8 +349,6 @@ class _ApplicationCard extends StatelessWidget {
     }
   }
 
-  /// Approve this application.
-  /// If slots == 1: reject all other pending applications for this post.
   /// If slots > 1: just approve this one (no auto-reject here).
   Future<void> _approveOneAndMaybeRejectRest(BuildContext context) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -358,48 +357,71 @@ class _ApplicationCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Approve application?"),
-        content: Text(postSlots == 1
-            ? "Approving will auto-reject all other pending applications for this post."
-            : "Approve this applicant? You can approve up to $postSlots applicants."),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Approve Application?"),
+        content: Text(
+          postSlots == 1
+              ? "Approving will auto-reject all other pending applications for this post."
+              : "Approve this applicant? You can approve up to $postSlots applicants.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text("Approve", style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text(
+              "Approve",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
-    ) ?? false;
+    );
 
-    if (!confirm) return;
+    if (confirm != true) return;
 
     final db = FirebaseFirestore.instance;
     final postRef = db.collection('posts').doc(postId);
-    final data = doc.data() as Map<String, dynamic>; // Applicant Data
+    final data = doc.data() as Map<String, dynamic>;
 
     try {
       await db.runTransaction((tx) async {
         final postSnap = await tx.get(postRef);
         if (!postSnap.exists) throw Exception("Post not found");
+
         final post = postSnap.data() as Map<String, dynamic>;
         final ownerId = (post['ownerId'] ?? '').toString();
-        if (ownerId != uid) throw Exception("Not allowed");
 
-        final int slots = (post['slots'] is num) ? (post['slots'] as num).toInt() : 1;
-        final int approvedCount = (post['approvedCount'] is num) ? (post['approvedCount'] as num).toInt() : 0;
+        if (ownerId != uid) {
+          throw Exception("Not authorized");
+        }
 
-        if (approvedCount >= slots) throw Exception("Slots full");
+        final int slots = (post['slots'] is num)
+            ? (post['slots'] as num).toInt()
+            : 1;
 
-        // 1. Approve Logic
+        final int approvedCount = (post['approvedCount'] is num)
+            ? (post['approvedCount'] as num).toInt()
+            : 0;
+
+        if (approvedCount >= slots) {
+          throw Exception("All slots are already filled");
+        }
+
+        // ✅ 1. Approve application
         tx.update(doc.reference, {
           'status': 'approved',
           'approvedAt': FieldValue.serverTimestamp(),
+          'approvedBy': uid,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 2. Post Update
+        // ✅ 2. Update post
         final int newApproved = approvedCount + 1;
         final bool isFilled = newApproved >= slots;
 
@@ -407,43 +429,70 @@ class _ApplicationCard extends StatelessWidget {
           'approvedCount': newApproved,
           'status': isFilled ? 'filled' : 'open',
           'updatedAt': FieldValue.serverTimestamp(),
+          if (slots == 1 || isFilled) 'autoRejectPending': true,
         }, SetOptions(merge: true));
 
-        // 3. Create Ongoing Job
+        // ✅ 3. Create ongoing job
         final ongoingRef = db.collection('ongoing_jobs').doc(doc.id);
+
         tx.set(ongoingRef, {
           'participants': [uid, data['senderId']],
-          'receiverId': uid,
-          'workerId': data['senderId'],
-          'workerName': data['senderName'],
-          'workerImage': data['senderImage'],
-          'price': data['offerPrice'] ?? data['price'],
+
+          // ✅ Consistent field names
+          'supporterId': uid,              // Employer
+          'finderId': data['senderId'],    // Worker
+
+          'supporterName': post['ownerName'] ?? 'Employer',
+          'supporterImage': post['ownerImage'] ?? '',
+          'supporterRole': 'Supporter',
+
+          'finderName': data['senderName'] ?? 'Worker',
+          'finderImage': data['senderImage'] ?? '',
+          'finderRole': data['senderRole'] ?? 'Finder',
+
+          'jobTitle': post['title'] ?? 'Job',
+          'description': post['description'] ?? '',
+          'location': post['address'] ?? '',
+          'price': data['offerPrice'] ?? data['price'] ?? '0',
+
           'status': 'ongoing',
           'startTime': FieldValue.serverTimestamp(),
           'originalRequestId': doc.id,
           'postId': postId,
+          'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-        // 4. Auto Reject Flag
-        if (slots == 1 || isFilled) {
-          tx.set(postRef, {'autoRejectPending': true}, SetOptions(merge: true));
-        }
+        // ✅ 4. Update Supporter (Employer) Stats
+        final supporterStatsRef = db.collection('user_stats').doc(uid);
+        tx.set(supporterStatsRef, {
+          'hiresCount': FieldValue.increment(1),
+          'hiresOngoing': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // ✅ 5. Update Finder (Worker) Stats
+        final finderStatsRef = db.collection('user_stats').doc(data['senderId']);
+        tx.set(finderStatsRef, {
+          'jobsAccepted': FieldValue.increment(1),
+          'jobsOngoing': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       });
 
-      // 🔔 NOTIFICATION 1: To the Approved Applicant
+      // ✅ 6. Send notification to approved applicant
       await db.collection('notifications').add({
         'toUserId': data['senderId'],
         'fromUserId': uid,
         'type': 'application_approved',
         'title': 'Application Accepted! 🎉',
-        'body': 'Your application for the job has been approved. Check Ongoing Jobs.',
+        'body': 'Your application has been approved. Check Work in Progress tab.',
         'postId': postId,
         'isRead': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ✅ Employer Quests Update
+      // ✅ 7. Update Employer Achievements
       await AchievementService.incrementProgress('daily_hire');
       await AchievementService.incrementProgress('weekly_hire');
       await AchievementService.incrementProgress('lt_hire_s1');
@@ -451,31 +500,35 @@ class _ApplicationCard extends StatelessWidget {
       await AchievementService.incrementProgress('lt_hire_s3');
       await AchievementService.syncWeeklyChestFromServer();
 
-      // Handling Auto-Rejects (Outside Transaction)
+      // ✅ 8. Handle auto-rejects (if slots filled)
       final postSnap2 = await db.collection('posts').doc(postId).get();
       final post2 = postSnap2.data() ?? {};
       final bool autoReject = (post2['autoRejectPending'] ?? false) == true;
 
       if (autoReject) {
-        final q = await db.collection('hire_requests')
+        final pendingApps = await db
+            .collection('hire_requests')
             .where('postId', isEqualTo: postId)
             .where('status', isEqualTo: 'pending')
             .get();
 
         final batch = db.batch();
-        for (final d in q.docs) {
-          if (d.id == doc.id) continue;
 
-          // Reject Update
+        for (final d in pendingApps.docs) {
+          if (d.id == doc.id) continue; // Skip approved one
+
+          // Reject application
           batch.update(d.reference, {
             'status': 'rejected',
             'rejectedAt': FieldValue.serverTimestamp(),
+            'rejectedBy': 'system',
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          // 🔔 NOTIFICATION 2: To Auto-Rejected Applicants
+          // Send notification
           final rejectedData = d.data();
           final notifRef = db.collection('notifications').doc();
+
           batch.set(notifRef, {
             'toUserId': rejectedData['senderId'],
             'fromUserId': uid,
@@ -487,16 +540,37 @@ class _ApplicationCard extends StatelessWidget {
             'createdAt': FieldValue.serverTimestamp(),
           });
         }
-        batch.set(db.collection('posts').doc(postId), {'autoRejectPending': false}, SetOptions(merge: true));
+
+        // Clear auto-reject flag
+        batch.set(
+          db.collection('posts').doc(postId),
+          {'autoRejectPending': false},
+          SetOptions(merge: true),
+        );
+
         await batch.commit();
       }
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Approved! Job started."), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Application approved! Job started."),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
-
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+      debugPrint('Approve error: $e');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to approve: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

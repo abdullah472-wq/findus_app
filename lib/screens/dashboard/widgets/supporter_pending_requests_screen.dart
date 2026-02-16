@@ -33,7 +33,19 @@ class SupporterPendingRequestsScreen extends StatelessWidget {
         iconColor: textColor,
         scrollable: false,
         bodyPadding: EdgeInsets.zero,
-        body: Center(child: Text('Please login again', style: TextStyle(color: textColor))),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.login, size: 60, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'Please login to view requests',
+                style: TextStyle(color: textColor),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -46,7 +58,7 @@ class SupporterPendingRequestsScreen extends StatelessWidget {
         .snapshots();
 
     return FloatingScaffold(
-      title: 'PENDING • $postTitle',
+      title: postTitle.toUpperCase(),
       backgroundColor: bgColor,
       titleColor: textColor,
       iconColor: textColor,
@@ -57,28 +69,85 @@ class SupporterPendingRequestsScreen extends StatelessWidget {
         builder: (context, snap) {
           if (snap.hasError) {
             final err = snap.error.toString();
-            final needIndex = err.contains('FAILED_PRECONDITION') || err.toLowerCase().contains('index');
+            final needIndex = err.contains('FAILED_PRECONDITION') ||
+                err.toLowerCase().contains('index');
+
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  needIndex ? "Index required (check console link)" : "Error: $err",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      needIndex ? Icons.build_rounded : Icons.error_outline,
+                      size: 60,
+                      color: needIndex ? Colors.orange : Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      needIndex
+                          ? "Firestore index required"
+                          : "Something went wrong",
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.redAccent,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      needIndex
+                          ? "Check console for index creation link"
+                          : err,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.redAccent,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             );
           }
+
           if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.brandMain),
+            );
           }
 
           final docs = snap.data!.docs;
+
           if (docs.isEmpty) {
             return Center(
-              child: Text(
-                "No pending requests for this post",
-                style: TextStyle(color: isDark ? Colors.white60 : Colors.black54),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 80,
+                    color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "No pending requests",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white60 : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Workers haven't responded yet",
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white38 : Colors.grey.shade600,
+                    ),
+                  ),
+                ],
               ),
             );
           }
@@ -106,47 +175,70 @@ class _RequestCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = doc.data();
-
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
 
+    // ✅ সঠিক field names
     final finderId = (data['receiverId'] ?? '').toString();
-    final finderName = (data['receiverName'] ?? data['workerName'] ?? 'Finder').toString(); // fallback
-    final finderImage = (data['receiverImage'] ?? data['workerImage'] ?? '').toString();
+    final finderName = (data['receiverName'] ?? 'Worker').toString();
+    final finderImage = (data['receiverImage'] ?? '').toString();
+    final finderRole = (data['receiverRole'] ?? 'Finder').toString();
 
-    // NOTE: hire_requests currently stores sender info clearly; receiver info maybe not denormalized.
-    // So show the sender card? Actually supporter is sender. We want to show receiver (finder).
-    // If receiverName/receiverImage not present, you can fetch users doc later. For now fallback.
+    final location = (data['location'] ?? 'Not set').toString();
+    final price = data['price'] ?? data['offerPrice'] ?? 'N/A';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         children: [
-          UniversalWorkerCard(
-            id: finderId,
-            name: finderName,
-            role: "Finder",
-            imageUrl: finderImage,
-            address: (data['postLocation'] ?? data['location'] ?? 'Not set').toString(),
-            rating: (data['rating'] ?? 0).toString(),
-            completed: "0",
-            reviews: "0",
-            price: "৳${(data['offerPrice'] ?? 0)}",
-            time: "PENDING",
-            margin: EdgeInsets.zero,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            showActionButtons: false,
-            showSaveButton: false,
-            showShareButton: false,
-            onTap: null,
+          // ✅ Worker Stats সহ
+          FutureBuilder<DocumentSnapshot>(
+            future: finderId.isNotEmpty
+                ? FirebaseFirestore.instance
+                .collection('user_stats')
+                .doc(finderId)
+                .get()
+                : null,
+            builder: (context, statSnap) {
+              final stats = statSnap.data?.data() as Map<String, dynamic>? ?? {};
+
+              return UniversalWorkerCard(
+                id: finderId,
+                name: finderName,
+                role: finderRole,
+                imageUrl: finderImage,
+                address: location,
+                rating: (stats['avgRating'] ?? 0.0).toStringAsFixed(1),
+                completed: (stats['jobsCompleted'] ?? 0).toString(),
+                reviews: (stats['totalReviews'] ?? 0).toString(),
+                price: "৳$price",
+                time: "⏳ PENDING",
+                margin: EdgeInsets.zero,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
+                showActionButtons: false,
+                showSaveButton: false,
+                showShareButton: false,
+                onTap: null,
+              );
+            },
           ),
+
+          // ✅ Action Buttons
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -159,7 +251,9 @@ class _RequestCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.redAccent,
                       side: const BorderSide(color: Colors.redAccent),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
@@ -167,13 +261,23 @@ class _RequestCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: finderId.isEmpty ? null : () => _openChat(context, finderId, finderName, finderImage),
+                    onPressed: finderId.isEmpty
+                        ? null
+                        : () => _openChat(
+                      context,
+                      finderId,
+                      finderName,
+                      finderImage,
+                      finderRole,
+                    ),
                     icon: const Icon(Icons.chat_bubble_outline, size: 18),
                     label: const Text("CHAT"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.brandMain,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       elevation: 0,
                     ),
@@ -187,9 +291,18 @@ class _RequestCard extends StatelessWidget {
     );
   }
 
-  Future<void> _openChat(BuildContext context, String otherUserId, String otherName, String otherImage) async {
+  Future<void> _openChat(
+      BuildContext context,
+      String otherUserId,
+      String otherName,
+      String otherImage,
+      String otherRole,
+      ) async {
     try {
-      final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUserId);
+      final convId = await FirestoreChatService.getOrCreateConversation(
+        otherUserId: otherUserId,
+      );
+
       if (!context.mounted) return;
 
       Navigator.push(
@@ -198,36 +311,55 @@ class _RequestCard extends StatelessWidget {
           builder: (_) => ChatScreen(
             conversationId: convId,
             userName: otherName,
-            userRole: "Finder",
+            userRole: otherRole,
             userImage: otherImage,
           ),
         ),
       );
     } catch (e) {
+      debugPrint('Chat error: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Chat failed: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to open chat")),
+        );
       }
     }
   }
 
-  Future<void> _withdrawRequest(BuildContext context, DocumentReference ref) async {
+  Future<void> _withdrawRequest(
+      BuildContext context,
+      DocumentReference ref,
+      ) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: const Text("Withdraw Request?"),
-        content: const Text("This will remove your pending request."),
+        content: const Text(
+          "This will cancel your pending job request.\nYou can send a new one later.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text("Withdraw", style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+            ),
+            child: const Text(
+              "Withdraw",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
-    ) ?? false;
+    );
 
-    if (!confirm) return;
+    if (confirm != true) return;
 
     try {
       await FirebaseFirestore.instance.runTransaction((tx) async {
@@ -236,22 +368,27 @@ class _RequestCard extends StatelessWidget {
 
         final data = snap.data() as Map<String, dynamic>;
         final receiverId = data['receiverId']; // Worker ID
+        final senderId = FirebaseAuth.instance.currentUser?.uid;
 
-        // 1. Update status
+        // ✅ 1. Update request status
         tx.update(ref, {
           'status': 'withdrawn',
           'withdrawnAt': FieldValue.serverTimestamp(),
+          'withdrawnBy': senderId,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 🔔 NOTIFICATION: To Worker (Receiver)
-        if (receiverId != null) {
-          final notifRef = FirebaseFirestore.instance.collection('notifications').doc();
+        // ✅ 2. Send notification to Worker
+        if (receiverId != null && senderId != null) {
+          final notifRef = FirebaseFirestore.instance
+              .collection('notifications')
+              .doc();
+
           tx.set(notifRef, {
             'toUserId': receiverId,
-            'fromUserId': FirebaseAuth.instance.currentUser?.uid,
+            'fromUserId': senderId,
             'type': 'hire_request_withdrawn',
-            'title': 'Job Request Withdrawn',
+            'title': 'Request Withdrawn',
             'body': 'The employer has withdrawn their job request.',
             'requestId': ref.id,
             'isRead': false,
@@ -261,11 +398,19 @@ class _RequestCard extends StatelessWidget {
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request withdrawn")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ Request withdrawn successfully"),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
+      debugPrint('Withdraw error: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to withdraw: ${e.toString()}")),
+        );
       }
     }
   }

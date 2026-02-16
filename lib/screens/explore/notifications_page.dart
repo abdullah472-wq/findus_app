@@ -64,6 +64,48 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  Future<void> _createWelcomeNotificationIfNeeded() async {
+    // আগেই uid চেক করে রাখা আছে, তবু সেফটি
+    if (_uid.isEmpty) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .get();
+
+    final userData = userDoc.data() ?? {};
+
+    final name = (userData['name'] ?? userData['fullName'] ?? 'User').toString();
+
+    final notifRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('notifications');
+
+    // চেক করো আগে কোনো welcome টাইপ notification আছে কিনা
+    final existing = await notifRef
+        .where('type', isEqualTo: 'welcome')
+        .limit(1)
+        .get();
+
+    if (existing.docs.isNotEmpty) {
+      // আগে থেকেই welcome আছে, আর নতুন করে দেবো না
+      return;
+    }
+
+    // নতুন welcome notification তৈরি
+    await notifRef.add({
+      'title': 'Welcome to FindUs, $name!',
+      'body':
+      'Thanks for joining the FindUs community.\n'
+          'You can complete your profile, explore jobs, and start chatting with other members right away.',
+      'type': 'welcome',              // type: welcome → icon + action handle করতে সহজ হবে
+      'senderId': '',                 // system / admin – চাইলে এখানে "system" লিখতে পারো
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -99,6 +141,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            // প্রথমবার এলে welcome notification তৈরি করার ট্রাই
+            _createWelcomeNotificationIfNeeded();
             return _buildEmptyState(isDark);
           }
 

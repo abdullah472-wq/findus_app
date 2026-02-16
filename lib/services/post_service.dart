@@ -141,17 +141,19 @@ class PostService {
     }
   }
 
-  // ✅ 1. Track Card Click (Tap)
+  // ✅ 1. Track Card Click (Tap) - Updated Logic
   static Future<void> trackCardClick(String postId, String ownerId) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     // নিজের কার্ডে নিজে ক্লিক করলে কাউন্ট হবে না
     if (currentUser != null && currentUser.uid == ownerId) return;
 
     try {
-      // পোস্টের ক্লিক কাউন্ট বাড়ানো
+      // পোস্টের ক্লিক এবং ইম্প্রেশন কাউন্ট বাড়ানো
+      // যেহেতু ইউজার কার্ডে ক্লিক করেছে, তাই এটি একটি ভিউ/ইম্প্রেশন হিসেবেও গণ্য হবে
       if (postId.isNotEmpty) {
         await _db.collection(_collection).doc(postId).update({
           'clicks': FieldValue.increment(1),
+          'impressions': FieldValue.increment(1), // ✅ এখানে ইম্প্রেশন যোগ করা হলো
         });
       }
 
@@ -160,36 +162,13 @@ class PostService {
         'profileViews': FieldValue.increment(1),
       });
 
-      debugPrint("✅ Click tracked for Post: $postId, User: $ownerId");
+      debugPrint("✅ Click & Impression tracked for Post: $postId");
     } catch (e) {
       debugPrint("❌ Error tracking click: $e");
     }
   }
 
-  // ✅ 2. Track Impression (Visibility)
-  static Future<void> trackImpression(String postId) async {
-    // এখানে আমরা ইউজার আইডি চেক করছি না, কারণ ভিউ যে কেউ করতে পারে।
-    // তবে চাইলে নিজের পোস্ট নিজেরা দেখলে ইগনোর করতে পারেন।
-
-    if (postId.isEmpty) return;
-
-    try {
-      // পোস্টের ইম্প্রেশন কাউন্ট বাড়ানো
-      await _db.collection(_collection).doc(postId).update({
-        'impressions': FieldValue.increment(1),
-      });
-
-      // অপশনাল: পোস্টের মালিকের টোটাল ইম্প্রেশনও বাড়াতে পারেন
-      // তবে সেটা সার্ভার সাইড ফাংশন দিয়ে করা ভালো।
-      // এখানে সিম্পল রাখার জন্য শুধু পোস্ট ডকুমেন্টে আপডেট করা হলো।
-
-      debugPrint("👀 Impression tracked for Post: $postId");
-    } catch (e) {
-      debugPrint("❌ Error tracking impression: $e");
-    }
-  }
-
-  // ✅ 3. Track Profile Click (Direct)
+  // ✅ 2. Track Profile Click (Direct)
   static Future<void> trackProfileClick(String targetUserId) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null && currentUser.uid == targetUserId) return;
@@ -203,4 +182,7 @@ class PostService {
       debugPrint("❌ Error counting view: $e");
     }
   }
+
+// নোট: trackImpression ফাংশনটি রিমুভ করা হয়েছে।
+// এখন শুধু কার্ডে ট্যাপ করলেই ইম্প্রেশন গণনা হবে।
 }

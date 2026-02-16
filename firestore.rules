@@ -1,0 +1,216 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ✅ Admin Check: Token or Field based
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
+      );
+    }
+
+    function isBlockedBy(userId, viewerId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/blocked_users/$(viewerId));
+    }
+
+    // -------------------------------
+    // 1. USERS (Profile & Subcollections)
+    // -------------------------------
+    match /users/{userId} {
+      // অন্যের প্রোফাইলও read করা যাবে (phone দিয়ে সার্চ, ইনভাইট ইত্যাদির জন্য)
+      allow read: if isSignedIn(); 
+      
+      // নিজের ডক তৈরি
+      allow create: if isOwner(userId);
+      
+      // নিজের ডক update, আর admin সবাইকে update করতে পারবে
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // শুধু admin user ডক delete করতে পারবে
+      allow delete: if isAdmin();
+
+      // Followers
+      match /followers/{followerId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // Following
+      match /following/{followingId} {
+        allow read, write: if isSignedIn();
+      }
+
+      // Blocked Users
+      match /blocked_users/{blockedId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Saved Profiles
+      match /saved_profiles/{workerId} {
+        allow read, write: if isOwner(userId);
+      }
+      
+      // Personal Notifications (user ডকের ভেতরের সাবকালেকশন)
+      match /notifications/{notifId} { 
+        allow read, write: if isOwner(userId) || isAdmin(); 
+      }
+
+      // ✅ Team Members Subcollection (Team Management Screen এর জন্য)
+      match /team_members/{memberId} {
+        // কেবল owner (userId) বা admin টিম ম্যানেজ করতে পারবে
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      
+      // ✅ Claimed Achievements Subcollection
+      match /claimed_achievements/{achievementId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // -------------------------------
+    // 2. POSTS (Pins on Map)
+    // -------------------------------
+    match /posts/{postId} {
+      // সবাই (লগইন করা) পোস্ট পড়তে পারবে
+      allow read: if isSignedIn();
+      
+      // পোস্ট ক্রিয়েট করতে ownerId == auth.uid হতে হবে
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      
+      // আপডেট/ডিলিট শুধুই owner বা admin
+      allow update: if isOwner(resource.data.ownerId) || isAdmin();
+      allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+    }
+
+    // -------------------------------
+    // 3. GLOBAL NOTIFICATIONS
+    // -------------------------------
+    match /notifications/{notifId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // -------------------------------
+    // 4. HIRE REQUESTS (Pending Jobs)
+    // -------------------------------
+    match /hire_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      ) || isAdmin(); // ✅ Admin read
+
+      allow create: if isSignedIn();
+      
+      allow update: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      ) || isAdmin(); // ✅ Admin update
+    }
+
+    // -------------------------------
+    // 5. ONGOING JOBS (Work in Progress)
+    // -------------------------------
+    match /ongoing_jobs/{jobId} {
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.participants) || isAdmin();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() || isAdmin();
+    }
+
+    // -------------------------------
+    // 6. COMPLETED JOBS (History & Analytics)
+    // -------------------------------
+    match /completed_jobs/{jobId} {
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.participants) || isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin(); // ✅ Only Admin can modify history
+    }
+
+    // -------------------------------
+    // 7. CHAT (Conversations)
+    // -------------------------------
+    match /conversations/{conversationId} {
+    allow read, write: if isSignedIn();
+
+    match /messages/{messageId} {
+    allow read, write: if isSignedIn();
+    }
+    }
+    
+    // -------------------------------
+    // 8. REVIEWS & RATINGS
+    // -------------------------------
+    match /reviews/{reviewId} {
+      allow read: if true;             // সবাই রিভিউ দেখতে পারবে
+      allow create: if isSignedIn();   // শুধু লগইন করা ইউজার রিভিউ দিতে পারবে
+      allow delete: if isAdmin();      // ✅ Admin can delete bad reviews
+    }
+
+    // -------------------------------
+    // 9. USER STATS (Dashboard Analytics)
+    // -------------------------------
+    match /user_stats/{userId} {
+    allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // -------------------------------
+    // 10. EMERGENCY & MISC
+    // -------------------------------
+    match /emergency_directory/{id} { 
+      allow read: if true; 
+      allow write: if isAdmin(); 
+    }
+    
+    match /emergency_requests/{id} { 
+      allow create: if isSignedIn(); 
+      allow read, update, delete: if isAdmin(); // ✅ Admin manages requests
+    }
+
+    match /ads/{adId} { 
+      allow read: if true; 
+      allow write: if isAdmin(); 
+    }
+
+    match /appConfig/{configId} { 
+      allow read: if true; 
+      allow write: if isAdmin(); 
+    }
+
+    match /payment_requests/{id} { 
+      allow create: if isSignedIn(); 
+      allow read, update: if isAdmin(); // ✅ Admin processes payments
+    }
+    
+    match /reports/{reportId} {
+      allow create: if isSignedIn();
+      allow read, update: if isAdmin(); // ✅ Admin handles reports
+    }
+    
+    // -------------------------------
+    // 11. Backend
+    // -------------------------------
+    match /withdrawals/{id} {
+      allow create: if isSignedIn();       // কেউ withdraw রিকোয়েস্ট করতে পারে
+      allow read, update: if isAdmin();    // শুধু অ্যাডমিন সব উইথড্র দেখবে/প্রসেস করবে
+    }
+
+    match /support_tickets/{ticketId} {
+      allow create: if isSignedIn();       // ইউজার টিকেট খুলতে পারবে
+      allow read, update: if isAdmin();    // শুধু অ্যাডমিন সব টিকেট দেখতে/জবাব দিতে পারবে
+    } 
+
+    match /referrals/{referralId} {
+      allow create: if isSignedIn();       // ইউজার রেফারাল জেনারেট করতে পারবে
+      allow read, update, delete: if isAdmin();  // অ্যাডমিন সব রেফারাল ডেটা দেখতে পারবে
+    }
+
+  }
+}

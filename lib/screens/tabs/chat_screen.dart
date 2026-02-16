@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:intl/intl.dart';
+
 import 'package:findus_app/constants/app_colors.dart';
-import 'package:findus_app/achievement/achievement_service.dart'; // Achievement
+import 'package:findus_app/achievement/achievement_service.dart';
+import 'package:findus_app/services/cloudinary_service.dart'; // ✅ আপনার CloudinaryService পাথ চেক করুন
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -24,184 +29,329 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final currentUser = FirebaseAuth.instance.currentUser!;
+  late final User _currentUser;
   late ChatUser _me;
   late ChatUser _otherUser;
-  bool _isFirstMessage = true; // লোকাল ট্র্যাকার
+
+  bool _isFirstMessage = true;
+  bool _checkingFirstMessage = true;
+  bool _isUploading = false;
+  String? _loadError;
+
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    _me = ChatUser(
-      id: currentUser.uid,
-      firstName: currentUser.displayName ?? "Me",
-      profileImage: currentUser.photoURL,
-    );
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _loadError = 'You are not logged in.';
+    } else {
+      _currentUser = user;
+      _me = ChatUser(
+        id: _currentUser.uid,
+        firstName: _currentUser.displayName ?? "You",
+        profileImage: _currentUser.photoURL,
+      );
+    }
+
     _otherUser = ChatUser(
-      id: "other", // আইডি এখানে গুরুত্বপূর্ণ নয়, শুধু ডিসপ্লের জন্য
+      id: 'other',
       firstName: widget.userName,
-      profileImage: widget.userImage,
+      profileImage: widget.userImage.isNotEmpty ? widget.userImage : 'https://i.pravatar.cc/150',
     );
-    _checkIfFirstMessage();
-  }
 
-  // ✅ চেক করা আগে কোনো মেসেজ আছে কি না
-  Future<void> _checkIfFirstMessage() async {
-    final snap = await FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .collection('messages')
-        .limit(1)
-        .get();
-
-    if (snap.docs.isNotEmpty) {
-      _isFirstMessage = false;
+    if (_loadError == null) {
+      _checkIfFirstMessage();
     }
   }
 
-  void _sendMessage(ChatMessage message) async {
-    // 1. Send Message
-    FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .collection('messages')
-        .add({
-      'senderId': currentUser.uid,
-      'text': message.text,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+  Future<void> _checkIfFirstMessage() async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationId)
+          .collection('messages')
+          .limit(1)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _isFirstMessage = snap.docs.isEmpty;
+        _checkingFirstMessage = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _checkingFirstMessage = false;
+        _loadError = 'Unable to load conversation.';
+      });
+    }
+  }
 
-    // 2. Update Conversation Metadata
-    FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .set({
-      'lastMsg': message.text,
-      'time': "Just now",
-      'unread': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  // ✅ Cloudinary Image Selection & Upload
+  Future<void> _handleImageSelection() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70, // সাইজ কমানোর জন্য
+      );
 
-    // ==================================================
-    // ✅ ACHIEVEMENT & QUEST UPDATES
-    // ==================================================
+      if (image != null) {
+        setState(() => _isUploading = true);
+        await _uploadImageToCloudinary(image);
+        setState(() => _isUploading = false);
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Image selection failed: $e")));
+    }
+  }
 
-    // 1. Daily Message Quest (সবসময় বাড়বে)
-    await AchievementService.incrementProgress('daily_message');
-    await AchievementService.syncWeeklyChestFromServer();
+  Future<void> _uploadImageToCloudinary(XFile file) async {
+    try {
+      // ✅ CloudinaryService ব্যবহার করে আপলোড
+      final response = await CloudinaryService.uploadXFile(
+        file,
+        folder: 'chat_images',
+        resourceType: 'image',
+      );
 
-    // 2. Long Term Chat Chain (শুধুমাত্র নতুন কনভারসেশনের জন্য)
-    if (_isFirstMessage) {
-      await AchievementService.incrementProgress('lt_chat_s1');
-      await AchievementService.incrementProgress('lt_chat_s2');
-      await AchievementService.incrementProgress('lt_chat_s3');
-      _isFirstMessage = false; // ফ্ল্যাগ আপডেট
+      final String downloadUrl = response['secure_url']; // URL পাওয়া গেল
+
+      // ইমেজ মেসেজ হিসেবে সেন্ড করা
+      final message = ChatMessage(
+        user: _me,
+        createdAt: DateTime.now(),
+        medias: [
+          ChatMedia(
+            url: downloadUrl,
+            fileName: 'image',
+            type: MediaType.image,
+          ),
+        ],
+      );
+
+      await _sendMessage(message);
+
+    } catch (e) {
+      debugPrint("Cloudinary upload error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
+    }
+  }
+
+  // ✅ Send Message Logic
+  Future<void> _sendMessage(ChatMessage message) async {
+    if (message.text.trim().isEmpty && (message.medias == null || message.medias!.isEmpty)) return;
+
+    try {
+      final msgRef = FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationId)
+          .collection('messages');
+
+      Map<String, dynamic> msgData = {
+        'senderId': _currentUser.uid,
+        'text': message.text,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      if (message.medias != null && message.medias!.isNotEmpty) {
+        msgData['image'] = message.medias!.first.url;
+        msgData['type'] = 'image';
+      } else {
+        msgData['type'] = 'text';
+      }
+
+      await msgRef.add(msgData);
+
+      String previewText = message.text.isNotEmpty ? message.text : '📷 Sent an image';
+
+      final convRef = FirebaseFirestore.instance.collection('conversations').doc(widget.conversationId);
+      await convRef.set(
+        {
+          'lastMsg': previewText,
+          'unread': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'participants': FieldValue.arrayUnion([_currentUser.uid]),
+        },
+        SetOptions(merge: true),
+      );
+
+      await AchievementService.incrementProgress('daily_message');
+      await AchievementService.syncWeeklyChestFromServer();
+
+      if (_isFirstMessage) {
+        await AchievementService.incrementProgress('lt_chat_s1');
+        _isFirstMessage = false;
+      }
+    } catch (e) {
+      debugPrint("Message failed: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1A1A1A) : Colors.white;
-    final appBarColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA);
+    final appBarColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        backgroundColor: appBarColor,
-        elevation: 0.5,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.brandLight,
-              backgroundImage: NetworkImage(widget.userImage.isNotEmpty
-                  ? widget.userImage
-                  : 'https://i.pravatar.cc/150'),
+      appBar: _buildAppBar(isDark, appBarColor, textColor),
+      body: Stack(
+        children: [
+          _buildBody(isDark, textColor),
+
+          if (_isUploading)
+            Positioned(
+              top: 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(20)),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                      SizedBox(width: 8),
+                      Text("Uploading to Cloudinary...", style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.userName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
-                Text(widget.userRole.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('conversations')
-            .doc(widget.conversationId)
-            .collection('messages')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
-          }
+    );
+  }
 
-          List<ChatMessage> messages = [];
-          if (snapshot.hasData) {
-            messages = snapshot.data!.docs.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return ChatMessage(
-                user: data['senderId'] == currentUser.uid ? _me : _otherUser,
-                createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-                text: data['text'] ?? '',
-              );
-            }).toList();
+  PreferredSizeWidget _buildAppBar(bool isDark, Color bgColor, Color textColor) {
+    return AppBar(
+      backgroundColor: bgColor,
+      elevation: 0,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back_rounded, color: textColor),
+        onPressed: () => Navigator.pop(context),
+      ),
+      titleSpacing: 0,
+      title: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AppColors.brandLight,
+            backgroundImage: NetworkImage(_otherUser.profileImage!),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.userName,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+              ),
+              Text(
+                widget.userRole.toUpperCase(),
+                style: TextStyle(fontSize: 11, color: isDark ? Colors.white54 : Colors.grey[600]),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
-            // স্ট্রিম থেকে ডাটা আসলে ফ্ল্যাগ আপডেট করা (সেফটি)
-            if (messages.isNotEmpty) {
-              _isFirstMessage = false;
+  Widget _buildBody(bool isDark, Color textColor) {
+    if (_loadError != null) return Center(child: Text(_loadError!, style: TextStyle(color: textColor)));
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationId)
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && _checkingFirstMessage) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
+        }
+
+        List<ChatMessage> messages = [];
+        if (snapshot.hasData) {
+          messages = snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final senderId = data['senderId'] as String? ?? '';
+            final createdAt = data['createdAt'];
+            final DateTime createdTime = (createdAt is Timestamp) ? createdAt.toDate() : DateTime.now();
+
+            List<ChatMedia>? medias;
+            if (data['image'] != null && data['image'].toString().isNotEmpty) {
+              medias = [
+                ChatMedia(
+                  url: data['image'],
+                  fileName: 'image.jpg',
+                  type: MediaType.image,
+                )
+              ];
             }
-          }
 
-          return DashChat(
+            return ChatMessage(
+              user: senderId == _currentUser.uid ? _me : _otherUser,
+              createdAt: createdTime,
+              text: (data['text'] ?? '').toString(),
+              medias: medias,
+            );
+          }).toList();
+        }
+
+        return DashChat(
             currentUser: _me,
-            onSend: _sendMessage,
             messages: messages,
+            onSend: _sendMessage,
+
             messageOptions: MessageOptions(
               showOtherUsersAvatar: true,
               showTime: true,
-              containerColor: isDark ? const Color(0xFF2C2C2C) : AppColors.brandMain.withOpacity(0.1),
+              containerColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
               currentUserContainerColor: AppColors.brandMain,
+              textColor: isDark ? Colors.white : Colors.black87,
               currentUserTextColor: Colors.white,
-              textColor: textColor,
-              timeFontSize: 10,
-            ),
-            inputOptions: InputOptions(
-              inputTextStyle: TextStyle(color: textColor),
-              cursorStyle: const CursorStyle(color: AppColors.brandMain),
-              inputDecoration: InputDecoration(
-                hintText: "Type a message...",
-                hintStyle: TextStyle(color: Colors.grey.shade500),
-                fillColor: isDark ? const Color(0xFF2C2C2C) : Colors.grey.shade100,
-                filled: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(25),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              ),
-              sendButtonBuilder: (onSend) {
-                return IconButton(
-                  icon: const Icon(Icons.send_rounded, color: AppColors.brandMain),
-                  onPressed: onSend,
-                );
+              timeFormat: DateFormat('hh:mm a'),
+
+              // ✅ FIXED: imageBuilder এর বদলে messageMediaBuilder ব্যবহার করুন
+              messageMediaBuilder: (message, previousMessage, nextMessage) {
+                if (message.medias != null && message.medias!.isNotEmpty) {
+                  final media = message.medias!.first;
+                  if (media.type == MediaType.image) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 5.0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          media.url,
+                          fit: BoxFit.cover,
+                          // লোডিং ইফেক্ট (অপশনাল)
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              height: 150,
+                              width: 200,
+                              color: Colors.grey[300],
+                              child: const Center(child: CircularProgressIndicator()),
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                }
+                return const SizedBox(); // অন্য টাইপ হলে খালি দেখাবে
               },
             ),
-          );
-        },
-      ),
+        );
+      },
     );
   }
 }

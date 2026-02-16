@@ -202,7 +202,14 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
         );
       }
     } catch (e) {
+      // ✅ আসল এররটি কনসোলে প্রিন্ট করুন
+      debugPrint("LOGIN ERROR: $e");
+
       if (!e.toString().contains('CANCELLED')) {
+        // ✅ টেস্টিংয়ের জন্য আসল এরর মেসেজ টোস্টে দেখান
+        _showError("Error: ${e.toString()}");
+
+        // পরে আবার আগের মেসেজ দিতে পারেন:
         _showError("কিছু একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।");
       }
     } finally {

@@ -61,15 +61,31 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Text(
-                  "Firestore index required.\nPlease check console for link.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.red.shade300),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, size: 60, color: Colors.orange),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Firestore index required.\nPlease check Firebase console.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.red.shade300),
+                    ),
+                  ],
                 ),
               ),
             );
           }
-          return const Center(child: Text("Something went wrong"));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 60, color: Colors.red),
+                const SizedBox(height: 16),
+                Text("Error: ${snapshot.error}", textAlign: TextAlign.center),
+              ],
+            ),
+          );
         }
 
         if (!snapshot.hasData) {
@@ -113,26 +129,41 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         required String docId,
         required String currentUid,
       }) {
-    final receiverId = _s(data['receiverId']).trim(); // finder
-    final workerId = _s(data['workerId']).trim(); // supporter (naming legacy)
-    final participants = (data['participants'] is List) ? List.from(data['participants']) : <dynamic>[];
+    // ✅ সঠিক ফিল্ড নাম ব্যবহার
+    final finderId = _s(data['finderId']).trim();       // Worker (কাজ করবে)
+    final supporterId = _s(data['supporterId']).trim(); // Employer (hire করেছে)
 
-    final otherUserId = (currentUid == workerId) ? receiverId : workerId;
-    final bool canComplete = currentUid == receiverId;
+    final participants = (data['participants'] is List)
+        ? List.from(data['participants'])
+        : <dynamic>[];
 
-    final String otherNameFromDoc = (currentUid == workerId) ? _s(data['receiverName']) : _s(data['workerName']);
-    final String otherImageFromDoc = (currentUid == workerId) ? _s(data['receiverImage']) : _s(data['workerImage']);
-    final String otherRoleFromDoc = (currentUid == workerId) ? _s(data['receiverRole']) : _s(data['workerRole']);
+    // ✅ অন্য ইউজার খুঁজে বের করো
+    final otherUserId = (currentUid == supporterId) ? finderId : supporterId;
+
+    // ✅ শুধু Finder complete করতে পারবে
+    final bool canComplete = currentUid == finderId;
+
+    // ✅ সঠিক নাম ফিল্ড
+    final String otherNameFromDoc = (currentUid == supporterId)
+        ? _s(data['finderName'])
+        : _s(data['supporterName']);
+
+    final String otherImageFromDoc = (currentUid == supporterId)
+        ? _s(data['finderImage'])
+        : _s(data['supporterImage']);
+
+    final String otherRoleFromDoc = (currentUid == supporterId)
+        ? _s(data['finderRole'])
+        : _s(data['supporterRole']);
 
     final String location = _s(data['location'], 'Location not available');
     final String price = _s(data['price'], _s(data['offerPrice'], 'Negotiable'));
+    final String jobTitle = _s(data['jobTitle'], 'Job');
 
+    // Stats from ongoing_jobs document (if stored)
     final double ratingVal = _asDouble(data['rating']);
     final String ratingStr = ratingVal == 0 ? '0.0' : ratingVal.toStringAsFixed(1);
-
     final int completedCount = _asInt(data['completedCount']);
-    final bool isVerified = (data['isVerified'] == true) || (completedCount >= 50);
-    final bool isTopRated = ratingVal >= 4.7;
 
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: _needFetchOther(otherNameFromDoc, otherRoleFromDoc, otherImageFromDoc, otherUserId)
@@ -156,7 +187,11 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
             borderRadius: BorderRadius.circular(16),
             color: Theme.of(context).cardColor,
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: Column(
@@ -171,9 +206,9 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                 completed: completedCount.toString(),
                 reviews: _asInt(data['reviewsCount']).toString(),
                 price: price,
-                time: "ONGOING",
-                isVerifiedWorker: isVerified,
-                isTopRated: isTopRated,
+                time: "⏳ ONGOING",
+                isVerifiedWorker: completedCount >= 50,
+                isTopRated: ratingVal >= 4.7,
                 followersCount: _asInt(data['followersCount']),
                 margin: EdgeInsets.zero,
                 borderRadius: const BorderRadius.only(
@@ -185,41 +220,58 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => UnifiedProfileScreen(uid: otherUserId, isOwner: false, showBack: true),
-                      ),
-                    );
-                  }
-                },
-                onChatTap: () async {
-                  if (otherUserId.isEmpty) return;
-
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (_) => const Center(child: CircularProgressIndicator()),
-                  );
-
-                  try {
-                    final convId = await FirestoreChatService.getOrCreateConversation(otherUserId: otherUserId);
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          conversationId: convId,
-                          userName: name,
-                          userRole: role,
-                          userImage: imageUrl,
+                        builder: (_) => UnifiedProfileScreen(
+                          uid: otherUserId,
+                          isOwner: false,
+                          showBack: true,
                         ),
                       ),
                     );
-                  } catch (_) {
-                    if (context.mounted) Navigator.pop(context);
                   }
                 },
+                onChatTap: () => _openChat(context, otherUserId, name, role, imageUrl),
               ),
+
+              // ✅ Job Info Section
+              if (jobTitle.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.black26
+                        : Colors.grey.shade50,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        jobTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (data['description'] != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _s(data['description']),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+              // ✅ Complete Button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: ElevatedButton(
@@ -227,16 +279,20 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                       ? () => _markJobAsCompleted(
                     context,
                     jobId: docId,
-                    receiverId: receiverId,
-                    workerId: workerId,
+                    finderId: finderId,
+                    supporterId: supporterId,
                     participants: participants,
                   )
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: canComplete ? AppColors.brandMain : Colors.grey.shade400,
+                    backgroundColor: canComplete
+                        ? AppColors.brandMain
+                        : Colors.grey.shade400,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     elevation: 0,
                   ),
                   child: Row(
@@ -245,8 +301,13 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
                       const Icon(Icons.check_circle_outline, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        canComplete ? "Mark as Completed" : "Waiting for Finder to Complete",
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        canComplete
+                            ? "Mark as Completed"
+                            : "Waiting for Worker to Complete",
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -264,31 +325,91 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
     return name.isEmpty || role.isEmpty || image.isEmpty || name == 'Unknown';
   }
 
+  Future<void> _openChat(
+      BuildContext context,
+      String otherUserId,
+      String name,
+      String role,
+      String imageUrl,
+      ) async {
+    if (otherUserId.isEmpty) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final convId = await FirestoreChatService.getOrCreateConversation(
+        otherUserId: otherUserId,
+      );
+
+      if (!context.mounted) return;
+      Navigator.pop(context);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: convId,
+            userName: name,
+            userRole: role,
+            userImage: imageUrl,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Chat error: $e');
+      if (context.mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to open chat')),
+        );
+      }
+    }
+  }
+
   Future<void> _markJobAsCompleted(
       BuildContext context, {
         required String jobId,
-        required String receiverId, // Finder (Worker)
-        required String workerId,   // Supporter (Employer)
+        required String finderId,    // ✅ Worker (কাজ করছে)
+        required String supporterId, // ✅ Employer (hire করেছে)
         required List participants,
       }) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
-    if (currentUser.uid != receiverId) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Only Finder can complete this job.")));
+    // ✅ শুধু Finder complete করতে পারবে
+    if (currentUser.uid != finderId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Only the worker can complete this job.")),
+      );
       return;
     }
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text("Complete Job"),
-        content: const Text("Are you sure you want to mark this job as completed?"),
+        content: const Text(
+          "Mark this job as completed?\n\nThis will:\n"
+              "• Move it to Completed tab\n"
+              "• Update your stats\n"
+              "• Notify the employer",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
           TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Complete", style: TextStyle(color: AppColors.brandMain)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandMain,
+            ),
+            child: const Text("Complete", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -314,141 +435,113 @@ class _WorkInProgressTabState extends State<WorkInProgressTab> {
         final data = snap.data() as Map<String, dynamic>;
         final status = _s(data['status']);
 
-        if (_s(data['receiverId']) != currentUser.uid) {
-          throw Exception('Not allowed');
+        // Security checks
+        if (_s(data['finderId']) != currentUser.uid) {
+          throw Exception('Not authorized');
         }
+
         if (status != 'ongoing') {
           throw Exception('Job is not ongoing');
         }
 
-        final List parts = (data['participants'] is List) ? List.from(data['participants']) : List.from(participants);
-        if (parts.isEmpty) {
-          parts.addAll([receiverId, workerId]);
-        }
+        final List parts = (data['participants'] is List)
+            ? List.from(data['participants'])
+            : [finderId, supporterId];
 
-        // 1) Update ongoing -> completed
+        // ✅ 1. Update ongoing_jobs status
         tx.update(ongoingRef, {
           'status': 'completed',
           'endTime': FieldValue.serverTimestamp(),
+          'completedBy': currentUser.uid,
           'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        // 2) Create completed history
-        tx.set(
-          completedRef,
-          {
-            'participants': parts,
-            'receiverId': receiverId,
-            'workerId': workerId,
-            'status': 'completed',
-            'completedAt': FieldValue.serverTimestamp(),
-            'completedBy': currentUser.uid,
-            'originalRequestId': _s(data['originalRequestId'], jobId),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'price': data['price'] ?? data['offerPrice'],
-            'offerPrice': data['offerPrice'],
-            'location': data['location'],
-            'workerName': data['workerName'],
-            'workerImage': data['workerImage'],
-            'receiverName': data['receiverName'],
-            'receiverImage': data['receiverImage'],
-            'workerRole': data['workerRole'],
-            'receiverRole': data['receiverRole'],
-          },
-          SetOptions(merge: true),
-        );
+        // ✅ 2. Create completed_jobs entry
+        tx.set(completedRef, {
+          ...data,
+          'participants': parts,
+          'finderId': finderId,
+          'supporterId': supporterId,
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'completedBy': currentUser.uid,
+          'originalRequestId': _s(data['originalRequestId'], jobId),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
-        // 3) Update hire_requests status
-        tx.set(
-          requestRef,
-          {
-            'status': 'completed',
-            'completedAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        // ✅ 3. Update hire_requests
+        tx.set(requestRef, {
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'completedBy': currentUser.uid,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
-        // 4) Update user_stats
-        final supporterStatsRef = _firestore.collection('user_stats').doc(workerId);
-        final finderStatsRef = _firestore.collection('user_stats').doc(receiverId);
+        // ✅ 4. Update Supporter (Employer) stats
+        final supporterStatsRef = _firestore.collection('user_stats').doc(supporterId);
+        tx.set(supporterStatsRef, {
+          'hiresCompleted': FieldValue.increment(1),
+          'hiresOngoing': FieldValue.increment(-1), // ✅ Decrement!
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
-        tx.set(
-          supporterStatsRef,
-          {
-            'hiresCompleted': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
-
-        tx.set(
-          finderStatsRef,
-          {
-            'jobsCompleted': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        // ✅ 5. Update Finder (Worker) stats
+        final finderStatsRef = _firestore.collection('user_stats').doc(finderId);
+        tx.set(finderStatsRef, {
+          'jobsCompleted': FieldValue.increment(1),
+          'jobsOngoing': FieldValue.increment(-1), // ✅ Decrement!
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       });
 
-      // 5) Notify supporter
-      if (workerId.isNotEmpty) {
+      // ✅ 6. Send notification to Supporter
+      if (supporterId.isNotEmpty) {
         await _firestore.collection('notifications').add({
-          'toUserId': workerId,
-          'fromUserId': receiverId,
+          'toUserId': supporterId,
+          'fromUserId': finderId,
           'type': 'job_completed',
-          'title': 'Job completed',
-          'body': 'Finder marked the job as completed.',
+          'title': 'Job Completed! 🎉',
+          'body': 'The worker has marked your job as completed.',
           'jobId': jobId,
           'isRead': false,
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
 
-      // ==================================================
-      // ✅ ACHIEVEMENT & QUEST UPDATES
-      // ==================================================
-
-      // 🟢 1. WORKER (Finder) - Job Completion Chain
+      // ✅ 7. Update Achievements (WORKER ONLY)
       // Daily
       await AchievementService.incrementProgress('daily_complete_job');
+
       // Weekly
       await AchievementService.incrementProgress('weekly_complete_jobs');
+
       // Long-Term
       await AchievementService.incrementProgress('lt_jobs_s1');
       await AchievementService.incrementProgress('lt_jobs_s2');
       await AchievementService.incrementProgress('lt_jobs_s3');
 
-
-      // 🔵 2. EMPLOYER (Supporter) - Hiring Chain Update
-      // যেহেতু হায়ারটি সাকসেসফুল হয়েছে, তাই এমপ্লয়ারের হায়ার চেইনেও প্রগ্রেস যোগ হবে
-      // (যদিও সে এই মুহূর্তে অনলাইনে নেই, সার্ভারে তার প্রগ্রেস সেভ হবে)
-      /*
-        নোট: AchievementService ডিফল্টভাবে কারেন্ট ইউজারের জন্য কাজ করে।
-        অন্য ইউজারের (Employer) প্রগ্রেস বাড়াতে হলে আমাদের সার্ভিসে অন্য ইউজারের ID সাপোর্টেড থাকতে হবে।
-        যদি আপনার সিস্টেমে সার্ভার সাইড (Cloud Functions) থাকে তবে সেখানে করা ভালো।
-        তবে ক্লায়েন্ট সাইড থেকে করতে চাইলে আমাদের AchievementService এ অন্য ইউজারের জন্য আপডেট করার মেথড লাগবে।
-
-        আপাতত Worker (Current User) এর প্রগ্রেস আপডেট করা হলো। Employer এর আপডেট
-        সাধারণত সে যখন 'Complete' নোটিফিকেশন পেয়ে অ্যাপ ওপেন করবে, তখন সিঙ্ক হতে পারে।
-      */
-
       // Sync Weekly Chest
       await AchievementService.syncWeeklyChestFromServer();
-
 
       if (!context.mounted) return;
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Job completed! Quests updated."), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text("✅ Job completed! Quests updated."),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+        ),
       );
     } catch (e) {
+      debugPrint('Complete job error: $e');
       if (context.mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Failed to complete: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

@@ -24,7 +24,28 @@ class SupporterPendingPostsScreen extends StatelessWidget {
         iconColor: textColor,
         scrollable: false,
         bodyPadding: EdgeInsets.zero,
-        body: Center(child: Text('Please login again', style: TextStyle(color: textColor))),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.login, size: 60, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'Please login to view requests',
+                style: TextStyle(color: textColor),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                icon: const Icon(Icons.login),
+                label: const Text('Go to Login'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandMain,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -36,52 +57,98 @@ class SupporterPendingPostsScreen extends StatelessWidget {
         .snapshots();
 
     return FloatingScaffold(
-      title: 'PENDING (MY POSTS)',
+      title: 'MY PENDING REQUESTS',
       backgroundColor: bgColor,
       titleColor: textColor,
       iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: stream,
-        builder: (context, snap) {
-          if (snap.hasError) {
-            final err = snap.error.toString();
-            final needIndex = err.contains('FAILED_PRECONDITION') || err.toLowerCase().contains('index');
-            return _ErrorBox(message: needIndex ? 'Index required (check console link)' : 'Error: $err', isDark: isDark);
-          }
-          if (!snap.hasData) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.brandMain));
-          }
-
-          final docs = snap.data!.docs;
-          if (docs.isEmpty) {
-            return _EmptyState(isDark: isDark, text: "No pending requests yet.");
-          }
-
-          // group by postId
-          final Map<String, _PostGroup> groups = {};
-          for (final d in docs) {
-            final data = d.data();
-            final postId = (data['postId'] ?? '').toString().trim();
-            if (postId.isEmpty) continue; // since we will enforce postId required
-            final title = (data['postTitle'] ?? 'Untitled Job').toString();
-            final location = (data['postLocation'] ?? '').toString();
-
-            groups.putIfAbsent(postId, () => _PostGroup(postId: postId, title: title, location: location));
-            groups[postId]!.pendingCount++;
-          }
-
-          final list = groups.values.toList()
-            ..sort((a, b) => b.pendingCount.compareTo(a.pendingCount));
-
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-            physics: const BouncingScrollPhysics(),
-            itemCount: list.length,
-            itemBuilder: (context, index) => _PostGroupCard(group: list[index], isDark: isDark),
-          );
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future.delayed(const Duration(milliseconds: 500));
         },
+        color: AppColors.brandMain,
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: stream,
+          builder: (context, snap) {
+            if (snap.hasError) {
+              final err = snap.error.toString();
+              final needIndex = err.contains('FAILED_PRECONDITION') ||
+                  err.toLowerCase().contains('index');
+              return _ErrorBox(
+                message: needIndex
+                    ? 'Firestore index required.\nCheck console for link.'
+                    : 'Error: $err',
+                isDark: isDark,
+              );
+            }
+
+            if (!snap.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.brandMain),
+              );
+            }
+
+            final docs = snap.data!.docs;
+            if (docs.isEmpty) {
+              return _EmptyState(
+                isDark: isDark,
+                text: "No pending requests yet.",
+              );
+            }
+
+            // ✅ Group by postId with fallback
+            final Map<String, _PostGroup> groups = {};
+
+            for (final d in docs) {
+              final data = d.data();
+
+              // ✅ Multiple fallbacks for postId
+              String postId = (data['postId'] ??
+                  data['originalRequestId'] ??
+                  '').toString().trim();
+
+              if (postId.isEmpty) {
+                postId = d.id; // Use request ID itself
+              }
+
+              final title = (data['jobTitle'] ??
+                  data['postTitle'] ??
+                  'Untitled Job').toString();
+
+              final location = (data['location'] ??
+                  data['postLocation'] ??
+                  'Not set').toString();
+
+              groups.putIfAbsent(
+                postId,
+                    () => _PostGroup(
+                  postId: postId,
+                  title: title,
+                  location: location,
+                ),
+              );
+              groups[postId]!.pendingCount++;
+            }
+
+            final list = groups.values.toList()
+              ..sort((a, b) => b.pendingCount.compareTo(a.pendingCount));
+
+            return ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              itemCount: list.length,
+              itemBuilder: (context, index) {
+                return _PostGroupCard(
+                  group: list[index],
+                  isDark: isDark,
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -132,9 +199,15 @@ class _PostGroupCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: cardColor,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+          border: Border.all(
+            color: isDark ? Colors.white10 : Colors.grey.shade200,
+          ),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Row(
@@ -146,36 +219,82 @@ class _PostGroupCard extends StatelessWidget {
                 color: AppColors.brandMain.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.work_outline, color: AppColors.brandMain),
+              child: const Icon(
+                Icons.work_outline,
+                color: AppColors.brandMain,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(group.title, style: TextStyle(fontWeight: FontWeight.w900, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 3),
                   Text(
-                    group.location.isEmpty ? "Location not set" : group.location,
-                    style: TextStyle(color: subColor, fontSize: 11),
+                    group.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: textColor,
+                      fontSize: 15,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 12,
+                        color: subColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          group.location,
+                          style: TextStyle(
+                            color: subColor,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: Colors.orange.withOpacity(0.25)),
-              ),
-              child: Text(
-                "${group.pendingCount} Pending",
-                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
+            Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.orange.withOpacity(0.25),
+                    ),
+                  ),
+                  child: Text(
+                    "${group.pendingCount} Pending",
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 12,
+                  color: subColor,
+                ),
+              ],
             ),
           ],
         ),
@@ -196,11 +315,44 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_outlined, size: 80, color: isDark ? Colors.grey.shade700 : Colors.grey.shade300),
+          Icon(
+            Icons.inbox_outlined,
+            size: 80,
+            color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+          ),
           const SizedBox(height: 16),
           Text(
             text,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : Colors.grey),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white60 : Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Workers will send requests to your posts",
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.white38 : Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushNamed(context, '/create_post');
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Create Job Post'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandMain,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
+            ),
           ),
         ],
       ),
@@ -219,7 +371,22 @@ class _ErrorBox extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 60,
+              color: Colors.redAccent,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ],
+        ),
       ),
     );
   }
