@@ -7,13 +7,15 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:findus_app/achievement/achievement_service.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/worker_model.dart';
 import 'package:findus_app/services/cloudinary_service.dart';
 import 'package:findus_app/screens/profile/worker_cv_create_screen.dart';
+import 'package:findus_app/screens/profile/cv_viewer_screen.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class WorkerDocumentsScreen extends StatefulWidget {
@@ -49,6 +51,10 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
     _loadDocuments();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HELPER METHODS
+  // ═══════════════════════════════════════════════════════════════════════════
+
   List<String> _safeStringList(dynamic value) {
     if (value is Iterable) {
       try {
@@ -62,6 +68,55 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
     }
     return <String>[];
   }
+
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return 'N/A';
+    if (timestamp is Timestamp) {
+      final date = timestamp.toDate();
+      return "${date.day}/${date.month}/${date.year}";
+    }
+    return 'N/A';
+  }
+
+  void _showSuccess(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(msg)),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(msg)),
+          ],
+        ),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOAD DATA
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _loadDocuments() async {
     try {
@@ -92,22 +147,26 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // URL LAUNCHER
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<void> _launchUrl(String url) async {
     try {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cannot open link')),
-        );
+        _showError('Cannot open link');
       }
     } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot open link')),
-      );
+      _showError('Cannot open link');
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GALLERY
+  // ═══════════════════════════════════════════════════════════════════════════
 
   void _openGallery(int initialIndex) {
     Navigator.push(
@@ -116,12 +175,16 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         builder: (_) => _PortfolioGalleryScreen(
           urls: _portfolioUrls,
           initialIndex: initialIndex,
+          isOwner: widget.isOwner,
+          onDelete: (url) => _deletePortfolioImage(url),
         ),
       ),
     );
   }
 
-  // ---------- CV Upload / Delete ----------
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CV UPLOAD / DELETE
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _pickAndUploadCv() async {
     if (_isUploadingCv) return;
@@ -136,6 +199,33 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
       if (result == null || result.files.isEmpty) return;
 
       setState(() => _isUploadingCv = true);
+
+      // ✅ Show progress dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: AppColors.brandMain),
+                SizedBox(height: 20),
+                Text(
+                  "Uploading CV...",
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "Please wait",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
 
       final file = result.files.single;
       Uint8List? bytes = file.bytes;
@@ -169,49 +259,74 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         SetOptions(merge: true),
       );
 
-// ✅ add this
+      // ✅ Achievement sync
       await AchievementService.syncProfileChainFromUserDoc(uid: widget.uid);
+
+      // ✅ Close progress dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
 
       if (!mounted) return;
       setState(() {
         _cvUrl = url;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('CV uploaded successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSuccess('CV uploaded successfully!');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('CV upload failed: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      // ✅ Close progress dialog on error
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      _showError('CV upload failed: $e');
     } finally {
       if (mounted) setState(() => _isUploadingCv = false);
     }
   }
 
   Future<void> _deleteCv() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete CV'),
-        content: const Text('Are you sure you want to remove your CV link?'),
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.delete_forever, color: Colors.red[400]),
+            const SizedBox(width: 10),
+            Text(
+              'Delete CV?',
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to remove your CV? This action cannot be undone.',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Colors.red),
+            child: Text(
+              'CANCEL',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
             ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[400],
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('DELETE'),
           ),
         ],
       ),
@@ -233,23 +348,33 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         _cvUrl = '';
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('CV removed'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSuccess('CV removed');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to delete CV: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showError('Failed to delete CV: $e');
     }
   }
 
-  // ---------- Portfolio Upload / Delete ----------
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CV VIEWER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _openCvViewer() {
+    if (_cvUrl.isEmpty) {
+      _showError('No CV uploaded yet');
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CvViewerScreen(pdfUrl: _cvUrl),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PORTFOLIO UPLOAD / DELETE
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _pickAndUploadPortfolio() async {
     if (_isUploadingPortfolio) return;
@@ -262,6 +387,33 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
       if (files.isEmpty) return;
 
       setState(() => _isUploadingPortfolio = true);
+
+      // ✅ Show progress dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: AppColors.brandMain),
+                const SizedBox(height: 20),
+                Text(
+                  "Uploading ${files.length} image${files.length > 1 ? 's' : ''}...",
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Please wait",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
 
       final List<String> newUrls = [];
 
@@ -291,49 +443,75 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         'portfolioUrls': FieldValue.arrayUnion(newUrls),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      // ✅ Sync profile long-term chain (stage-3) after CV upload
+
+      // ✅ Achievement sync
       await AchievementService.syncProfileChainFromUserDoc(uid: widget.uid);
+
+      // ✅ Close progress dialog
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
 
       if (!mounted) return;
       setState(() {
         _portfolioUrls.addAll(newUrls);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("${newUrls.length} images added to portfolio"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSuccess("${newUrls.length} image${newUrls.length > 1 ? 's' : ''} added to portfolio");
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Portfolio upload failed: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      // ✅ Close progress dialog on error
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      _showError('Portfolio upload failed: $e');
     } finally {
       if (mounted) setState(() => _isUploadingPortfolio = false);
     }
   }
 
   Future<void> _deletePortfolioImage(String url) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove image'),
-        content: const Text('Remove this image from your portfolio?'),
+        backgroundColor: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.delete_forever, color: Colors.red[400]),
+            const SizedBox(width: 10),
+            Text(
+              'Remove Image?',
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'This image will be removed from your portfolio. This action cannot be undone.',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : Colors.black54,
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'REMOVE',
-              style: TextStyle(color: Colors.red),
+            child: Text(
+              'CANCEL',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
             ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[400],
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('REMOVE'),
           ),
         ],
       ),
@@ -355,25 +533,17 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
         _portfolioUrls.remove(url);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Image removed from portfolio'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSuccess('Image removed from portfolio');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to delete image: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showError('Failed to delete image: $e');
     }
   }
 
-  // ---------- Digital CV ----------
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DIGITAL CV EDITOR
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  void _openDigitalCvEditor() {
+  void _openDigitalCvEditor() async {
     final name = (_userData['name'] ?? 'User').toString();
     final image = (_userData['image'] ?? '').toString();
     final about = (_userData['about'] ?? '').toString();
@@ -411,17 +581,20 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
       kycCompleted: (_userData['kyc_completed'] ?? false) == true,
     );
 
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => WorkerCVCreateScreen(worker: worker),
       ),
     );
+
     // ফিরে আসার পর ডাটা রিফ্রেশ করুন
     _loadDocuments();
   }
 
-  // ---------- BUILD (FloatingScaffold) ----------
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BUILD UI
+  // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
@@ -438,7 +611,16 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
       scrollable: true,
       bodyPadding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppColors.brandMain),
+            SizedBox(height: 16),
+            Text("Loading documents..."),
+          ],
+        ),
+      )
           : _error != null
           ? _buildError(isDark)
           : _buildContent(isDark),
@@ -448,13 +630,51 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
   Widget _buildError(bool isDark) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          _error!,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isDark ? Colors.white70 : Colors.black87,
-          ),
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 60,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Failed to load documents",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error ?? "Unknown error",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white60 : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _loading = true;
+                  _error = null;
+                });
+                _loadDocuments();
+              },
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              label: const Text("Retry", style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandMain,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -467,45 +687,52 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ----- CV Section -----
-        Text(
-          'Uploaded CV',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
-        ),
+        _buildSectionTitle('Uploaded CV', textColor),
         const SizedBox(height: 8),
         _buildCvSection(isDark),
         const SizedBox(height: 24),
 
         // ----- Digital CV Section -----
-        Text(
-          'Digital CV',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: textColor,
-          ),
-        ),
+        _buildSectionTitle('Digital CV', textColor),
         const SizedBox(height: 8),
         _buildDigitalCvSection(isDark),
         const SizedBox(height: 24),
 
         // ----- Portfolio Section -----
+        _buildSectionTitle('Portfolio (${_portfolioUrls.length})', textColor),
+        const SizedBox(height: 8),
+        _buildPortfolioSection(isDark),
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle(String title, Color textColor) {
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: AppColors.brandMain,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
         Text(
-          'Portfolio',
+          title,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
             color: textColor,
           ),
         ),
-        const SizedBox(height: 8),
-        _buildPortfolioSection(isDark),
       ],
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CV SECTION
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildCvSection(bool isDark) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
@@ -513,46 +740,80 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
 
     return Card(
       color: cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            ListTile(
-              leading: const Icon(
-                Icons.description_outlined,
-                color: AppColors.brandMain,
-              ),
-              title: Text(
-                _cvUrl.isNotEmpty ? 'CV / Resume' : 'No CV uploaded',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+            Row(
+              children: [
+                // Icon
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _cvUrl.isNotEmpty
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _cvUrl.isNotEmpty ? Icons.description : Icons.upload_file,
+                    color: _cvUrl.isNotEmpty ? Colors.green : Colors.grey,
+                    size: 24,
+                  ),
                 ),
-              ),
-              subtitle: Text(
-                _cvUrl.isNotEmpty
-                    ? 'Tap to open your CV'
-                    : 'Upload your CV in PDF/DOC format',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : Colors.grey[600],
+
+                const SizedBox(width: 16),
+
+                // Text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _cvUrl.isNotEmpty ? 'CV / Resume Uploaded' : 'No CV Uploaded',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _cvUrl.isNotEmpty
+                            ? 'Tap to view your CV'
+                            : 'Upload your CV in PDF/DOC format',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white60 : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              trailing: _cvUrl.isNotEmpty
-                  ? IconButton(
-                icon: const Icon(Icons.open_in_new),
-                color: AppColors.brandMain,
-                onPressed: () => _launchUrl(_cvUrl),
-              )
-                  : null,
+
+                // View Button
+                if (_cvUrl.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.visibility, color: AppColors.brandMain),
+                    tooltip: "View CV",
+                    onPressed: _openCvViewer,
+                  ),
+              ],
             ),
+
             if (widget.isOwner) ...[
-              const Divider(height: 8),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+
               Row(
                 children: [
+                  // Upload / Replace Button
                   Expanded(
-                    child: TextButton.icon(
+                    child: OutlinedButton.icon(
                       onPressed: _isUploadingCv ? null : _pickAndUploadCv,
                       icon: _isUploadingCv
                           ? const SizedBox(
@@ -561,21 +822,43 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                           : const Icon(Icons.upload_file),
-                      label: Text(
-                        _cvUrl.isEmpty ? 'Upload CV' : 'Replace CV',
-                        style: TextStyle(color: textColor),
+                      label: Text(_cvUrl.isEmpty ? 'Upload CV' : 'Replace CV'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brandMain,
+                        side: const BorderSide(color: AppColors.brandMain),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ),
+
+                  // Download Button
                   if (_cvUrl.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: _deleteCv,
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      label: const Text(
-                        'Delete',
-                        style: TextStyle(color: Colors.red),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _launchUrl(_cvUrl),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text("Download"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
+                    ),
+                  ],
+
+                  // Delete Button
+                  if (_cvUrl.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    IconButton(
+                      onPressed: _deleteCv,
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      tooltip: "Delete CV",
                     ),
                   ],
                 ],
@@ -587,141 +870,251 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DIGITAL CV SECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Widget _buildDigitalCvSection(bool isDark) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black87;
 
-    // চেক করুন সিভি আছে কি না (ফায়ারবেস ডাটা থেকে)
     final bool hasDigitalCv = (_userData['has_created_cv'] ?? false) == true;
+    final String? templateName = _userData['cv_template']?.toString();
 
     return Card(
       color: cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                hasDigitalCv ? Icons.check_circle : Icons.edit_document,
-                color: hasDigitalCv ? Colors.green : AppColors.brandMain,
-              ),
-              title: Text(
-                hasDigitalCv ? 'Digital CV Created' : 'Create Digital CV',
-                style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
-              ),
-              subtitle: Text(
-                hasDigitalCv
-                    ? 'Last updated: ${_formatDate(_userData['cv_updated_at'])}'
-                    : 'Create a professional CV within the app.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : Colors.grey[600],
+            Row(
+              children: [
+                // Icon
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: hasDigitalCv
+                        ? Colors.green.withOpacity(0.1)
+                        : AppColors.brandMain.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasDigitalCv ? Icons.check_circle : Icons.edit_document,
+                    color: hasDigitalCv ? Colors.green : AppColors.brandMain,
+                    size: 24,
+                  ),
                 ),
-              ),
-              // প্রিভিউ বাটন (যদি সিভি থাকে)
-              trailing: hasDigitalCv
-                  ? IconButton(
-                icon: const Icon(Icons.visibility, color: AppColors.brandMain),
-                onPressed: () {
-                  // TODO: ডিজিটাল সিভি ভিউয়ার পেজ ওপেন করুন
-                  // Navigator.push(context, MaterialPageRoute(builder: (_) => DigitalCvViewerScreen(uid: widget.uid)));
-                },
-              )
-                  : null,
+
+                const SizedBox(width: 16),
+
+                // Text
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasDigitalCv ? 'Digital CV Created' : 'Create Digital CV',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        hasDigitalCv
+                            ? 'Template: ${templateName ?? 'Modern'} • Updated: ${_formatDate(_userData['cv_updated_at'])}'
+                            : 'Create a professional CV within the app',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white60 : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Preview Button
+                if (hasDigitalCv && _cvUrl.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.visibility, color: AppColors.brandMain),
+                    tooltip: "Preview CV",
+                    onPressed: _openCvViewer,
+                  ),
+              ],
             ),
-            if (widget.isOwner)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
+
+            if (widget.isOwner) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
                   onPressed: _openDigitalCvEditor,
-                  icon: const Icon(Icons.edit, size: 18, color: AppColors.brandMain),
+                  icon: Icon(
+                    hasDigitalCv ? Icons.edit : Icons.add,
+                    color: Colors.white,
+                  ),
                   label: Text(
-                    hasDigitalCv ? 'Edit CV' : 'Create Now',
-                    style: const TextStyle(color: AppColors.brandMain),
+                    hasDigitalCv ? 'Edit Digital CV' : 'Create Digital CV',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brandMain,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  String _formatDate(Timestamp? timestamp) {
-    if (timestamp == null) return 'N/A';
-    final date = timestamp.toDate();
-    return "${date.day}/${date.month}/${date.year}";
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PORTFOLIO SECTION
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildPortfolioSection(bool isDark) {
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
 
     return Card(
       color: cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ Empty State
             if (_portfolioUrls.isEmpty)
-              Text(
-                'No portfolio images yet.',
-                style: TextStyle(
-                  color: isDark ? Colors.white60 : Colors.grey[600],
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? Colors.white12 : Colors.grey[300]!,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.photo_library_outlined,
+                      size: 60,
+                      color: isDark ? Colors.white38 : Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No portfolio images yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white60 : Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Showcase your work by adding images',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white38 : Colors.grey[500],
+                      ),
+                    ),
+                    if (widget.isOwner) ...[
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: _isUploadingPortfolio ? null : _pickAndUploadPortfolio,
+                        icon: _isUploadingPortfolio
+                            ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                            : const Icon(Icons.add_photo_alternate, color: Colors.white),
+                        label: const Text(
+                          'Add Images',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandMain,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               )
-            else
+
+            // ✅ Portfolio Grid
+            else ...[
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _portfolioUrls.length,
-                gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
                 ),
                 itemBuilder: (context, index) {
                   final url = _portfolioUrls[index];
                   return GestureDetector(
                     onTap: () => _openGallery(index),
                     child: Stack(
+                      fit: StackFit.expand,
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           child: CachedNetworkImage(
                             imageUrl: url,
                             fit: BoxFit.cover,
                             placeholder: (ctx, _) => Container(
-                              color: Colors.grey[200],
+                              color: isDark ? Colors.grey[800] : Colors.grey[200],
                               child: const Center(
-                                child: Icon(Icons.image, color: Colors.grey),
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                             errorWidget: (ctx, _, __) => Container(
-                              color: Colors.grey[200],
+                              color: isDark ? Colors.grey[800] : Colors.grey[200],
                               child: const Center(
-                                child: Icon(Icons.broken_image,
-                                    color: Colors.grey),
+                                child: Icon(Icons.broken_image, color: Colors.grey),
                               ),
                             ),
                           ),
                         ),
+
+                        // Delete Button
                         if (widget.isOwner)
                           Positioned(
-                            top: 4,
-                            right: 4,
+                            top: 6,
+                            right: 6,
                             child: GestureDetector(
                               onTap: () => _deletePortfolioImage(url),
                               child: Container(
-                                padding: const EdgeInsets.all(2),
+                                padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.black.withOpacity(0.6),
+                                  shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.close,
@@ -736,27 +1129,33 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
                   );
                 },
               ),
-            if (widget.isOwner) ...[
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed:
-                  _isUploadingPortfolio ? null : _pickAndUploadPortfolio,
-                  icon: _isUploadingPortfolio
-                      ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                      : const Icon(Icons.add_photo_alternate,
-                      color: AppColors.brandMain),
-                  label: const Text(
-                    'Add Images',
-                    style: TextStyle(color: AppColors.brandMain),
+
+              // Add More Button
+              if (widget.isOwner) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isUploadingPortfolio ? null : _pickAndUploadPortfolio,
+                    icon: _isUploadingPortfolio
+                        ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.add_photo_alternate),
+                    label: const Text('Add More Images'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandMain,
+                      side: const BorderSide(color: AppColors.brandMain),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ],
         ),
@@ -765,31 +1164,74 @@ class _WorkerDocumentsScreenState extends State<WorkerDocumentsScreen> {
   }
 }
 
-// ---------- Portfolio Gallery Screen (আগের মতই রাখা) ----------
+// ═══════════════════════════════════════════════════════════════════════════
+// PORTFOLIO GALLERY SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _PortfolioGalleryScreen extends StatefulWidget {
   final List<String> urls;
   final int initialIndex;
+  final bool isOwner;
+  final Function(String)? onDelete;
 
   const _PortfolioGalleryScreen({
     required this.urls,
     this.initialIndex = 0,
+    this.isOwner = false,
+    this.onDelete,
   });
 
   @override
-  State<_PortfolioGalleryScreen> createState() =>
-      _PortfolioGalleryScreenState();
+  State<_PortfolioGalleryScreen> createState() => _PortfolioGalleryScreenState();
 }
 
 class _PortfolioGalleryScreenState extends State<_PortfolioGalleryScreen> {
   late PageController _pageController;
   late int _index;
+  late List<String> _urls;
 
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
+    _urls = List.from(widget.urls);
     _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _shareImage() {
+    if (_urls.isEmpty) return;
+    Share.share(
+      'Check out my work: ${_urls[_index]}',
+      subject: 'Portfolio Image',
+    );
+  }
+
+  void _deleteImage() async {
+    if (_urls.isEmpty || widget.onDelete == null) return;
+
+    final url = _urls[_index];
+
+    // Call parent delete
+    widget.onDelete!(url);
+
+    // Update local list
+    setState(() {
+      _urls.removeAt(_index);
+      if (_index >= _urls.length && _index > 0) {
+        _index = _urls.length - 1;
+      }
+    });
+
+    // If no images left, go back
+    if (_urls.isEmpty) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -798,33 +1240,66 @@ class _PortfolioGalleryScreenState extends State<_PortfolioGalleryScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
+        elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
-          '${_index + 1}/${widget.urls.length}',
+          '${_index + 1} / ${_urls.length}',
           style: const TextStyle(color: Colors.white),
         ),
+        centerTitle: true,
+        actions: [
+          // Share Button
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            tooltip: "Share",
+            onPressed: _shareImage,
+          ),
+
+          // Delete Button (Owner only)
+          if (widget.isOwner && widget.onDelete != null)
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              tooltip: "Delete",
+              onPressed: _deleteImage,
+            ),
+        ],
       ),
-      body: PageView.builder(
+      body: _urls.isEmpty
+          ? const Center(
+        child: Text(
+          "No images",
+          style: TextStyle(color: Colors.white),
+        ),
+      )
+          : PageView.builder(
         controller: _pageController,
-        itemCount: widget.urls.length,
+        itemCount: _urls.length,
         onPageChanged: (i) => setState(() => _index = i),
         itemBuilder: (ctx, i) {
-          return Center(
-            child: CachedNetworkImage(
-              imageUrl: widget.urls[i],
-              fit: BoxFit.contain,
-              placeholder: (context, url) =>
-              const CircularProgressIndicator(color: Colors.white),
-              errorWidget: (context, url, error) => const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.broken_image, color: Colors.white, size: 50),
-                  SizedBox(height: 10),
-                  Text(
-                    "Failed to load image",
-                    style: TextStyle(color: Colors.white),
+          return GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: CachedNetworkImage(
+                  imageUrl: _urls[i],
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
                   ),
-                ],
+                  errorWidget: (context, url, error) => const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.broken_image, color: Colors.white54, size: 60),
+                      SizedBox(height: 16),
+                      Text(
+                        "Failed to load image",
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           );

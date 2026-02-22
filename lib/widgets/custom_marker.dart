@@ -1,9 +1,9 @@
 // lib/widgets/custom_marker.dart
 
 import 'package:flutter/material.dart';
-import 'package:visibility_detector/visibility_detector.dart'; // ✅ এই প্যাকেজটি অবশ্যই ইমপোর্ট করতে হবে
+import 'package:visibility_detector/visibility_detector.dart';
 import '../models/worker_model.dart';
-import 'package:findus_app/services/post_service.dart'; // ✅ PostService ইমপোর্ট
+import 'package:findus_app/services/post_service.dart';
 
 class CustomMarkerWidget extends StatefulWidget {
   final Worker worker;
@@ -24,8 +24,6 @@ class CustomMarkerWidget extends StatefulWidget {
 class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-
-  // ✅ ইম্প্রেশন যাতে বারবার কাউন্ট না হয়, তার জন্য ফ্ল্যাগ
   bool _hasRecordedImpression = false;
 
   @override
@@ -44,13 +42,18 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
   }
 
   // ✅ ইম্প্রেশন ট্র্যাক করার মেথড
+
+// ✅ Fixed _trackImpression method
   void _trackImpression() {
     if (_hasRecordedImpression) return;
 
-    // পোস্ট আইডি থাকলে সার্ভারে পাঠানো
     if (widget.worker.postId != null && widget.worker.postId!.isNotEmpty) {
-      PostService.trackImpression(widget.worker.postId!); // ✅ আপনার সার্ভিসের ফাংশন
-      _hasRecordedImpression = true; // একবার কাউন্ট হয়ে গেলে ফ্ল্যাগ সেট
+      // ✅ Use trackCardClick instead (which includes impressions)
+      PostService.trackCardClick(
+        widget.worker.postId!,
+        widget.worker.uid,
+      );
+      _hasRecordedImpression = true;
     }
   }
 
@@ -97,26 +100,35 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
 
     final bool hasImg = widget.worker.image.trim().isNotEmpty;
 
-    // পোস্ট আইডি অথবা ইউজার আইডি দিয়ে ইউনিক কী তৈরি করা
     final String visibilityKey = "marker_vis_${widget.worker.postId ?? widget.worker.uid}";
 
     return VisibilityDetector(
       key: Key(visibilityKey),
       onVisibilityChanged: (info) {
-        // যদি মার্কারের ৫০% বা তার বেশি দেখা যায়, তখন ইম্প্রেশন কাউন্ট হবে
         if (info.visibleFraction > 0.5) {
           _trackImpression();
         }
       },
       child: GestureDetector(
-        PostService.trackProfileClick(widget.worker.uid);
-        onTap: widget.onTap,
+        // ✅ FIXED: Moved function call inside onTap
+        onTap: () {
+          // Track profile click when marker is tapped
+          try {
+            PostService.trackProfileClick(widget.worker.uid);
+          } catch (e) {
+            debugPrint("trackProfileClick not available: $e");
+          }
+
+          // Call the provided onTap callback
+          widget.onTap();
+        },
         child: SizedBox(
           width: 80,
           height: 110,
           child: Stack(
             alignment: Alignment.bottomCenter,
             children: [
+              // Pulsating circle animation
               Positioned(
                 bottom: 25,
                 child: AnimatedBuilder(
@@ -127,12 +139,14 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
                       height: 60 * _controller.value + 40,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: statusColor.withOpacity(1.0 - _controller.value),
+                        color: statusColor.withValues(alpha: 1.0 - _controller.value),
                       ),
                     );
                   },
                 ),
               ),
+
+              // Triangle pointer
               Positioned(
                 bottom: 15,
                 child: CustomPaint(
@@ -140,6 +154,8 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
                   size: const Size(15, 12),
                 ),
               ),
+
+              // Profile image
               Positioned(
                 bottom: 25,
                 child: Container(
@@ -160,6 +176,8 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
                   ),
                 ),
               ),
+
+              // Category icon badge
               Positioned(
                 bottom: 60,
                 right: 12,
@@ -177,11 +195,12 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
                   ),
                 ),
               ),
+
+              // Price label
               Positioned(
                 top: 5,
                 child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFC107),
                     borderRadius: BorderRadius.circular(20),
@@ -200,13 +219,15 @@ class _CustomMarkerWidgetState extends State<CustomMarkerWidget>
                   ),
                 ),
               ),
+
+              // KYC verified badge
               if (widget.worker.kycCompleted)
-                Positioned(
+                const Positioned(
                   bottom: 25,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                        color: Colors.white, shape: BoxShape.circle),
-                    child: const Icon(Icons.verified, size: 16, color: Colors.blue),
+                  child: CircleAvatar(
+                    radius: 8,
+                    backgroundColor: Colors.white,
+                    child: Icon(Icons.verified, size: 16, color: Colors.blue),
                   ),
                 ),
             ],

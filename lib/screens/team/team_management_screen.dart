@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/models/team_member.dart';
+import 'package:findus_app/models/team_invitation.dart';
+import 'package:findus_app/services/team_service.dart';
 import 'package:findus_app/screens/team/team_member_dashboard_screen.dart';
-import 'package:findus_app/widgets/floating_scaffold.dart'; // ✅ Added this import
+import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class TeamManagementScreen extends StatefulWidget {
-  final String userId; // Business Owner's UID
+  final String userId;
 
   const TeamManagementScreen({
     super.key,
@@ -17,28 +19,38 @@ class TeamManagementScreen extends StatefulWidget {
   State<TeamManagementScreen> createState() => _TeamManagementScreenState();
 }
 
-class _TeamManagementScreenState extends State<TeamManagementScreen> {
+class _TeamManagementScreenState extends State<TeamManagementScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _phoneController = TextEditingController();
+  late TabController _tabController;
 
   String _selectedRole = "staff";
   bool _isInviting = false;
 
-  // Firestore reference helper
   CollectionReference get _teamCollection => FirebaseFirestore.instance
       .collection('users')
       .doc(widget.userId)
       .collection('team_members');
 
   @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  // --- Actions ---
+  // ════════════════════════════════════════════════════════════════════════════
+  // 📨 SEND INVITATION (NEW - Request Based)
+  // ════════════════════════════════════════════════════════════════════════════
 
-  Future<void> _inviteMember() async {
+  Future<void> _sendInvitation() async {
     if (!_formKey.currentState!.validate()) return;
 
     FocusScope.of(context).unfocus();
@@ -47,47 +59,33 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     final phone = _phoneController.text.trim();
 
     try {
-      // 1. Check duplicate
-      final existingCheck = await _teamCollection.where('phone', isEqualTo: phone).get();
-      if (existingCheck.docs.isNotEmpty) {
-        throw "This member is already in your team.";
-      }
-
-      // 2. Check User Existence (Fetch Name)
-      String memberName = "Invited User";
-      final userQuery = await FirebaseFirestore.instance
-          .collection('users')
-          .where('phone', isEqualTo: phone)
-          .limit(1)
-          .get();
-
-      if (userQuery.docs.isNotEmpty) {
-        final userData = userQuery.docs.first.data();
-        memberName = userData['name'] ?? "Invited User";
-      }
-
-      // 3. Add to Firestore
-      final newMember = TeamMember(
-        id: '',
-        name: memberName,
-        phone: phone,
+      final result = await TeamService.sendInvitation(
+        toPhone: phone,
         role: _selectedRole,
-        isPending: true,
-        joinedAt: DateTime.now(),
       );
 
-      await _teamCollection.add(newMember.toMap());
-
       if (mounted) {
-        _phoneController.clear();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Invitation sent successfully!"), backgroundColor: Colors.green),
-        );
+        if (result['success'] == true) {
+          _phoneController.clear();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Invitation sent!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to send invitation'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}"), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -95,14 +93,50 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     }
   }
 
+  Future<void> _cancelInvitation(TeamInvitation invitation) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cancel Invitation?"),
+        content: Text("Cancel invitation to ${invitation.toUserName}?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("Cancel Invitation"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await TeamService.cancelInvitation(invitation.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? "Invitation cancelled" : "Failed to cancel"),
+            backgroundColor: success ? Colors.orange : Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmRemoveMember(TeamMember member) async {
-    final bool? confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Remove Member?"),
-        content: Text("Are you sure you want to remove ${member.name}?"),
+        content: Text("Remove ${member.name} from your team?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -114,94 +148,93 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
 
     if (confirm == true) {
       await _teamCollection.doc(member.id).delete();
-    }
-  }
 
-  // --- Calculations ---
-
-  Map<String, dynamic> _calculateStats(List<TeamMember> members) {
-    int totalCompleted = 0;
-    int totalInProgress = 0;
-    double totalEarnings = 0.0;
-    double totalRating = 0.0;
-    int ratedMembers = 0;
-    int pendingCount = 0;
-
-    for (var m in members) {
-      if (m.isPending) {
-        pendingCount++;
-      } else {
-        totalCompleted += m.jobsCompleted;
-        totalInProgress += m.jobsInProgress;
-        totalEarnings += m.totalEarnings;
-        if (m.rating > 0) {
-          totalRating += m.rating;
-          ratedMembers++;
-        }
+      // Also remove from member's my_teams
+      if (member.userId.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(member.userId)
+            .collection('my_teams')
+            .doc(widget.userId)
+            .delete();
       }
     }
-    double avgRating = ratedMembers > 0 ? totalRating / ratedMembers : 0.0;
-
-    return {
-      'completed': totalCompleted,
-      'inProgress': totalInProgress,
-      'earnings': totalEarnings.toStringAsFixed(2),
-      'avgRating': avgRating,
-      'pending': pendingCount,
-      'size': members.length,
-    };
-  }
-
-  // --- UI Builders ---
-
-  void _showTeamDashboard(List<TeamMember> members, bool isDark) {
-    final stats = _calculateStats(members);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? const Color(0xFF2C2C2C) : AppColors.bgBlue,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _DashboardBottomSheet(stats: stats, isDark: isDark),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Theme Constants
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
     final titleColor = isDark ? Colors.white : AppColors.brandDark;
     final subTextColor = isDark ? Colors.grey.shade400 : Colors.black54;
 
-    // ✅ Using FloatingScaffold exactly like AdCenter
     return FloatingScaffold(
       title: "TEAM MANAGEMENT",
       backgroundColor: bgColor,
       titleColor: titleColor,
       iconColor: titleColor,
       showBack: true,
-      // 'scrollable: false' রাখা হয়েছে যাতে আমরা বডির ভেতর ListView ব্যবহার করতে পারি (Invite Section ফিক্সড থাকবে না, স্ক্রল করবে লিস্টের সাথে)
       scrollable: false,
-      bodyPadding: EdgeInsets.zero, // আমরা কাস্টম প্যাডিং দেব
+      bodyPadding: EdgeInsets.zero,
       body: Column(
         children: [
           const SizedBox(height: 10),
+
           // Invite Section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _buildInviteSection(isDark, cardColor, titleColor, subTextColor),
           ),
 
+          const SizedBox(height: 16),
+
+          // Tab Bar
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicator: BoxDecoration(
+                color: AppColors.brandMain,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              labelColor: Colors.white,
+              unselectedLabelColor: subTextColor,
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              tabs: const [
+                Tab(text: "MEMBERS"),
+                Tab(text: "PENDING"),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 10),
 
-          // Member List (Expanded to take remaining space)
+          // Tab Views
           Expanded(
-            child: _buildTeamList(isDark, cardColor, titleColor, subTextColor),
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Tab 1: Team Members
+                _buildTeamMembersList(isDark, cardColor, titleColor, subTextColor),
+
+                // Tab 2: Pending Invitations
+                _buildPendingInvitations(isDark, cardColor, titleColor, subTextColor),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 📝 INVITE SECTION
+  // ════════════════════════════════════════════════════════════════════════════
 
   Widget _buildInviteSection(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
     return Container(
@@ -216,7 +249,6 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
             offset: const Offset(0, 10),
           )
         ],
-        border: Border.all(color: AppColors.brandMain.withOpacity(0.1)),
       ),
       child: Form(
         key: _formKey,
@@ -235,10 +267,15 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  "Invite Member",
+                  "Send Invitation",
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: titleColor),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "User will receive an invitation request. They must accept to join.",
+              style: TextStyle(fontSize: 12, color: subTextColor),
             ),
             const SizedBox(height: 16),
             Row(
@@ -300,17 +337,25 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton(
-                onPressed: _isInviting ? null : _inviteMember,
+              child: ElevatedButton.icon(
+                onPressed: _isInviting ? null : _sendInvitation,
+                icon: _isInviting
+                    ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  _isInviting ? "SENDING..." : "SEND INVITATION",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brandMain,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   elevation: 0,
                 ),
-                child: _isInviting
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text("SEND INVITATION", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               ),
             ),
           ],
@@ -319,15 +364,23 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     );
   }
 
-  Widget _buildTeamList(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _teamCollection.snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: TextStyle(color: titleColor)));
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+  // ════════════════════════════════════════════════════════════════════════════
+  // 👥 TEAM MEMBERS LIST
+  // ════════════════════════════════════════════════════════════════════════════
 
-        final data = snapshot.data?.docs ?? [];
-        final List<TeamMember> members = data
+  Widget _buildTeamMembersList(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _teamCollection.orderBy('joinedAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        final members = docs
             .map((doc) => TeamMember.fromMap(doc.id, doc.data() as Map<String, dynamic>))
             .toList();
 
@@ -338,52 +391,97 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
               children: [
                 Icon(Icons.groups_outlined, size: 60, color: subTextColor),
                 const SizedBox(height: 10),
-                Text("No team members yet.", style: TextStyle(color: subTextColor)),
+                Text("No team members yet", style: TextStyle(color: subTextColor)),
+                const SizedBox(height: 8),
+                Text(
+                  "Send invitations to add members",
+                  style: TextStyle(fontSize: 12, color: subTextColor),
+                ),
               ],
             ),
           );
         }
 
-        return Stack(
-          children: [
-            ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 100), // Bottom padding for FAB
-              itemCount: members.length,
-              separatorBuilder: (ctx, i) => const SizedBox(height: 12),
-              itemBuilder: (ctx, i) {
-                return _TeamMemberTile(
-                  member: members[i],
-                  isDark: isDark,
-                  cardColor: cardColor,
-                  titleColor: titleColor,
-                  subTextColor: subTextColor,
-                  onTapDashboard: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => TeamMemberDashboardScreen(member: members[i])),
-                  ),
-                  onTapRemove: () => _confirmRemoveMember(members[i]),
-                );
-              },
-            ),
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: FloatingActionButton.extended(
-                onPressed: () => _showTeamDashboard(members, isDark),
-                backgroundColor: AppColors.brandMain,
-                icon: const Icon(Icons.bar_chart_rounded, color: Colors.white),
-                label: const Text("TEAM STATS", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5)),
-                elevation: 4,
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          itemCount: members.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (ctx, i) {
+            return _TeamMemberTile(
+              member: members[i],
+              isDark: isDark,
+              cardColor: cardColor,
+              titleColor: titleColor,
+              subTextColor: subTextColor,
+              onTapDashboard: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TeamMemberDashboardScreen(member: members[i]),
+                ),
               ),
+              onTapRemove: () => _confirmRemoveMember(members[i]),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ⏳ PENDING INVITATIONS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPendingInvitations(bool isDark, Color cardColor, Color titleColor, Color subTextColor) {
+    return StreamBuilder<List<TeamInvitation>>(
+      stream: TeamService.getMySentInvitations(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final invitations = snapshot.data ?? [];
+        final pending = invitations.where((i) => i.isPending).toList();
+
+        if (pending.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.mail_outline, size: 60, color: subTextColor),
+                const SizedBox(height: 10),
+                Text("No pending invitations", style: TextStyle(color: subTextColor)),
+              ],
             ),
-          ],
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          itemCount: pending.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (ctx, i) {
+            final inv = pending[i];
+            return _PendingInvitationTile(
+              invitation: inv,
+              isDark: isDark,
+              cardColor: cardColor,
+              titleColor: titleColor,
+              subTextColor: subTextColor,
+              onCancel: () => _cancelInvitation(inv),
+            );
+          },
         );
       },
     );
   }
 }
 
-// --- Extracted Widgets ---
+// ════════════════════════════════════════════════════════════════════════════
+// 📦 WIDGETS
+// ════════════════════════════════════════════════════════════════════════════
 
 class _TeamMemberTile extends StatelessWidget {
   final TeamMember member;
@@ -406,8 +504,8 @@ class _TeamMemberTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isManager = member.role == "manager";
-    final Color roleColor = isManager ? Colors.orange : Colors.blue;
+    final isManager = member.role == "manager";
+    final roleColor = isManager ? Colors.orange : Colors.blue;
 
     return Container(
       decoration: BoxDecoration(
@@ -420,7 +518,6 @@ class _TeamMemberTile extends StatelessWidget {
             offset: const Offset(0, 4),
           )
         ],
-        border: Border.all(color: roleColor.withOpacity(0.1), width: 1),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -434,20 +531,22 @@ class _TeamMemberTile extends StatelessWidget {
         ),
         title: Text(
           member.name,
-          style: TextStyle(fontWeight: FontWeight.bold, color: titleColor, fontSize: 16),
+          style: TextStyle(fontWeight: FontWeight.bold, color: titleColor),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text(member.phone, style: TextStyle(color: subTextColor, fontSize: 13)),
+            Text(member.phone, style: TextStyle(color: subTextColor, fontSize: 12)),
             const SizedBox(height: 6),
             Row(
               children: [
                 _StatusBadge(text: member.role.toUpperCase(), color: roleColor),
                 const SizedBox(width: 8),
-                if (member.isPending)
-                  const _StatusBadge(text: "PENDING", color: Colors.amber),
+                _StatusBadge(
+                  text: "${member.jobsCompleted} JOBS",
+                  color: Colors.green,
+                ),
               ],
             ),
           ],
@@ -472,6 +571,66 @@ class _TeamMemberTile extends StatelessWidget {
   }
 }
 
+class _PendingInvitationTile extends StatelessWidget {
+  final TeamInvitation invitation;
+  final bool isDark;
+  final Color cardColor;
+  final Color titleColor;
+  final Color subTextColor;
+  final VoidCallback onCancel;
+
+  const _PendingInvitationTile({
+    required this.invitation,
+    required this.isDark,
+    required this.cardColor,
+    required this.titleColor,
+    required this.subTextColor,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: Colors.amber.withOpacity(0.1),
+          child: const Icon(Icons.hourglass_empty, color: Colors.amber),
+        ),
+        title: Text(
+          invitation.toUserName.isNotEmpty ? invitation.toUserName : invitation.toUserPhone,
+          style: TextStyle(fontWeight: FontWeight.bold, color: titleColor),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(invitation.toUserPhone, style: TextStyle(color: subTextColor, fontSize: 12)),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _StatusBadge(text: invitation.role.toUpperCase(), color: Colors.blue),
+                const SizedBox(width: 8),
+                const _StatusBadge(text: "PENDING", color: Colors.amber),
+              ],
+            ),
+          ],
+        ),
+        trailing: TextButton(
+          onPressed: onCancel,
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text("CANCEL"),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   final String text;
   final Color color;
@@ -488,176 +647,7 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color, letterSpacing: 0.5),
-      ),
-    );
-  }
-}
-
-class _DashboardBottomSheet extends StatelessWidget {
-  final Map<String, dynamic> stats;
-  final bool isDark;
-
-  const _DashboardBottomSheet({
-    required this.stats,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor = isDark ? Colors.white : AppColors.brandDark;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: isDark ? Colors.grey[700] : Colors.grey[300],
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            "Team Performance",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: textColor),
-          ),
-          const SizedBox(height: 25),
-          Row(
-            children: [
-              _StatChip(
-                label: "Completed",
-                value: stats['completed'].toString(),
-                icon: Icons.check_circle_rounded,
-                color: Colors.green,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _StatChip(
-                label: "Running",
-                value: stats['inProgress'].toString(),
-                icon: Icons.timelapse_rounded,
-                color: Colors.orange,
-                isDark: isDark,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _StatChip(
-                label: "Earnings",
-                value: "৳${stats['earnings']}",
-                icon: Icons.monetization_on_rounded,
-                color: AppColors.brandMain,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _StatChip(
-                label: "Avg Rating",
-                value: stats['avgRating'].toStringAsFixed(1),
-                icon: Icons.star_rounded,
-                color: Colors.amber,
-                isDark: isDark,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _StatChip(
-                label: "Pending",
-                value: stats['pending'].toString(),
-                icon: Icons.pending_rounded,
-                color: Colors.redAccent,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 12),
-              _StatChip(
-                label: "Total Staff",
-                value: stats['size'].toString(),
-                icon: Icons.people_alt_rounded,
-                color: textColor,
-                isDark: isDark,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-  final bool isDark;
-
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF383838) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 20, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                      color: isDark ? Colors.white : AppColors.brandDark,
-                    ),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
       ),
     );
   }

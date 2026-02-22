@@ -98,7 +98,7 @@ class AchievementService {
     }
   }
 
-  // ✅ NEW METHOD: Sync Profile Chain Logic
+  // ✅ Sync Profile Chain Logic
   static Future<void> syncProfileChainFromUserDoc({String? uid}) async {
     final userId = uid ?? FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
@@ -114,18 +114,18 @@ class AchievementService {
       final image = (data['image'] ?? data['imageUrl'] ?? '').toString().trim();
       final about = (data['about'] ?? '').toString().trim();
 
-      // Logic conditions
       final bool stage1 = name.isNotEmpty && location.isNotEmpty;
       final bool stage2 = stage1 && image.isNotEmpty && about.isNotEmpty;
 
       final String cvUrl = (data['cvUrl'] ?? '').toString().trim();
-      final List<dynamic> portfolioUrls = (data['portfolioUrls'] is List) ? (data['portfolioUrls'] as List) : const [];
+      final List<dynamic> portfolioUrls = (data['portfolioUrls'] is List)
+          ? (data['portfolioUrls'] as List)
+          : const [];
       final bool stage3 = stage2 && (cvUrl.isNotEmpty || portfolioUrls.isNotEmpty);
 
       if (stage1) await incrementProgress('lt_profile_s1', amount: 1);
       if (stage2) await incrementProgress('lt_profile_s2', amount: 1);
       if (stage3) await incrementProgress('lt_profile_s3', amount: 1);
-
     } catch (e) {
       debugPrint("syncProfileChainFromUserDoc error: $e");
     }
@@ -192,8 +192,8 @@ class AchievementService {
     _stateById[id] = updatedState;
     await _saveAll();
 
-    // লোকাল XP / ব্যাজ পয়েন্ট আপডেট
-    await BadgeService.addPoints(state.def.xpReward);
+    // ✅ লোকাল XP / ব্যাজ পয়েন্ট আপডেট (FIXED)
+    await BadgeService.addXP(state.def.xpReward);
 
     // ✅ শুধু daily quest হলে weekly counter আপডেট হবে
     if (state.def.resetPeriod == ResetPeriod.daily) {
@@ -250,7 +250,6 @@ class AchievementService {
     }
   }
 
-
   static Future<void> incrementProgress(String achievementId, {int amount = 1}) async {
     final def = AchievementsConfig.byId(achievementId);
     if (def == null) return;
@@ -300,14 +299,11 @@ class AchievementService {
     return st;
   }
 
-  // Legacy Method
+  // ✅ FIXED: Legacy Method (uses star-based system now)
   static BadgeLevel getBadgeLevelByPoints(int totalPoints) {
-    if (totalPoints >= BadgeService.diamondThreshold) return BadgeLevel.diamond;
-    if (totalPoints >= BadgeService.platinumThreshold) return BadgeLevel.platinum;
-    if (totalPoints >= BadgeService.goldThreshold) return BadgeLevel.gold;
-    if (totalPoints >= BadgeService.silverThreshold) return BadgeLevel.silver;
-    if (totalPoints >= BadgeService.bronzeThreshold) return BadgeLevel.bronze;
-    return BadgeLevel.newbie;
+    // Convert old XP points to approximate stars (1000 XP = 1 star as example)
+    final approximateStars = totalPoints / 1000.0;
+    return BadgeService.getBadgeByStars(approximateStars);
   }
 
   // ✅ HELPER: Get Rating safely

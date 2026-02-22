@@ -11,7 +11,6 @@ class BadgeIcon extends StatelessWidget {
     return ValueListenableBuilder<BadgeProgress>(
       valueListenable: BadgeService.badgeNotifier,
       builder: (context, stats, _) {
-
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -19,8 +18,9 @@ class BadgeIcon extends StatelessWidget {
             Stack(
               alignment: Alignment.center,
               children: [
-                // গ্লো (যদি গোল্ড বা ডায়মন্ড হয়)
-                if (stats.badgeLevel == BadgeLevel.gold || stats.badgeLevel == BadgeLevel.diamond)
+                // গ্লো (যদি গোল্ড বা ডায়মন্ড হয়)
+                if (stats.badgeLevel == BadgeLevel.gold ||
+                    stats.badgeLevel == BadgeLevel.diamond)
                   Container(
                     width: size,
                     height: size,
@@ -28,7 +28,7 @@ class BadgeIcon extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: stats.badgeColor.withOpacity(0.6),
+                          color: stats.badgeColor.withValues(alpha: 0.6), // ✅ Fixed
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
@@ -36,11 +36,11 @@ class BadgeIcon extends StatelessWidget {
                     ),
                   ),
 
-                // মেইন আইকন
+                // ✅ মেইন আইকন (FIXED: removed extra colon)
                 Icon(
                   stats.badgeLevel == BadgeLevel.diamond
-                      ? Icons.workspace_premium,
-                      : Icons.workspace_premium,
+                      ? Icons.workspace_premium
+                      : Icons.workspace_premium, // ✅ Fixed: removed extra ':'
                   size: size,
                   color: stats.badgeColor,
                 ),
@@ -53,7 +53,7 @@ class BadgeIcon extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.2),
+                color: Colors.grey.withValues(alpha: 0.2), // ✅ Fixed
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -92,7 +92,7 @@ class BadgeIcon extends StatelessWidget {
                   children: [
                     LinearProgressIndicator(
                       value: stats.badgeProgressPercent,
-                      backgroundColor: Colors.grey.withOpacity(0.3),
+                      backgroundColor: Colors.grey.withValues(alpha: 0.3), // ✅ Fixed
                       valueColor: AlwaysStoppedAnimation(stats.badgeColor),
                       minHeight: 3,
                       borderRadius: BorderRadius.circular(2),
@@ -113,12 +113,18 @@ class BadgeIcon extends StatelessWidget {
 
   int _getNextLimit(BadgeLevel level) {
     switch (level) {
-      case BadgeLevel.newbie: return 100;
-      case BadgeLevel.bronze: return 500;
-      case BadgeLevel.silver: return 2000;
-      case BadgeLevel.gold: return 5000;
-      case BadgeLevel.platinum: return 10000;
-      default: return 10000;
+      case BadgeLevel.newbie:
+        return 100;
+      case BadgeLevel.bronze:
+        return 500;
+      case BadgeLevel.silver:
+        return 2000;
+      case BadgeLevel.gold:
+        return 5000;
+      case BadgeLevel.platinum:
+        return 10000;
+      case BadgeLevel.diamond:
+        return 10000;
     }
   }
 }

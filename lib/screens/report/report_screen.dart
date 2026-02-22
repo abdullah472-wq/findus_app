@@ -1,9 +1,20 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
 
 class ReportScreen extends StatefulWidget {
-  const ReportScreen({super.key});
+  final String? reportedUserId;
+  final String? reportedJobId;
+  final String? reportedUserName;
+
+  const ReportScreen({
+    super.key,
+    this.reportedUserId,
+    this.reportedJobId,
+    this.reportedUserName,
+  });
 
   @override
   State<ReportScreen> createState() => _ReportScreenState();
@@ -27,23 +38,50 @@ class _ReportScreenState extends State<ReportScreen> {
     super.dispose();
   }
 
-  void _submitReport() {
+  void _submitReport() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // TODO: Backend integration (API call)
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Report submitted successfully."),
-        backgroundColor: Colors.green,
-      ),
-    );
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please login first"), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
-    Navigator.pop(context);
+    try {
+      await FirebaseFirestore.instance.collection('reports').add({
+        'reporterId': currentUser.uid,
+        'reporterEmail': currentUser.email,
+        'reportType': _reportType,
+        'relatedInfo': _relatedInfoController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'includeContact': _includeContact,
+        'contactDetails': _includeContact ? _contactController.text.trim() : null,
+        'reportedUserId': widget.reportedUserId,  // ← widget. যোগ করো
+        'reportedJobId': widget.reportedJobId,
+        'reportedUserName': widget.reportedUserName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Report submitted successfully."),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to submit: $e"), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ ডার্ক মোড চেক
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
     final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
@@ -63,7 +101,6 @@ class _ReportScreenState extends State<ReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ইনফো টেক্সট
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -152,7 +189,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
             const SizedBox(height: 25),
 
-            // কন্টাক্ট টগল
             Container(
               decoration: BoxDecoration(
                 color: cardColor,
@@ -189,7 +225,6 @@ class _ReportScreenState extends State<ReportScreen> {
 
             const SizedBox(height: 30),
 
-            // সাবমিট বাটন
             SizedBox(
               width: double.infinity,
               height: 50,

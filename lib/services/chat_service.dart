@@ -13,8 +13,7 @@ class ChatService {
         .collection('messages');
   }
 
-  /// দুই user এর মধ্যে conversation ID বের করে (না থাকলে তৈরি করে)
-  /// deterministic ID: uid ছোটটা আগে, তারপর uid বড়টা → uid1_uid2
+  /// Get or create conversation between two users
   static Future<String> getOrCreateConversation({
     required String otherUserId,
     String? otherName,
@@ -28,12 +27,7 @@ class ChatService {
 
     final currentUid = user.uid;
 
-    // নিজের সাথে চ্যাট করতে দিতে না চাইলে:
-    // if (currentUid == otherUserId) {
-    //   throw Exception('Cannot chat with yourself');
-    // }
-
-    // deterministic convId
+    // Deterministic conversation ID
     final ids = [currentUid, otherUserId]..sort();
     final convId = ids.join('_');
 
@@ -45,15 +39,13 @@ class ChatService {
 
       await ref.set({
         'id': convId,
-        'participants': ids,        // rules + filter এর জন্য
+        'participants': ids,
         'createdAt': now,
         'updatedAt': now,
         'lastMsg': '',
         'unread': 0,
         'postId': postId,
         'postTitle': postTitle,
-
-        // UI এর জন্য (current user এর perspective থেকে অন্য পাশের info)
         'userId': otherUserId,
         'name': otherName,
         'role': otherRole,
@@ -64,7 +56,7 @@ class ChatService {
     return convId;
   }
 
-  /// current user এর সব conversation (ConversationTab এর জন্য)
+  /// Stream all conversations for current user
   static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   streamConversations() {
     final uid = _auth.currentUser!.uid;
@@ -77,7 +69,7 @@ class ChatService {
     return query.snapshots().map((snap) => snap.docs);
   }
 
-  /// নির্দিষ্ট conversation এর messages stream (ChatScreen এর জন্য)
+  /// Stream messages in a conversation
   static Stream<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
   streamMessages(String conversationId) {
     final query = _firestore
@@ -89,7 +81,7 @@ class ChatService {
     return query.snapshots().map((snap) => snap.docs);
   }
 
-  /// simple text message পাঠানো (ChatScreen-এর জন্য)
+  /// Send text message
   static Future<void> sendTextMessage({
     required String conversationId,
     required String text,
@@ -115,64 +107,115 @@ class ChatService {
       {
         'lastMsg': trimmed,
         'updatedAt': now,
-        // basic unread increment; চাইলে per-user unread logic implement করতে পারো
         'unread': FieldValue.increment(1),
       },
       SetOptions(merge: true),
     );
   }
 
-  /// transaction সহ message পাঠানো (যদি একসাথে read-modify-write দরকার হয়)
-  static Future<void> sendMessageTx({
+  /// Send image message
+  static Future<void> sendImageMessage({
     required String conversationId,
-    required String text,
+    required String imageUrl,
+    String? caption,
   }) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
-
     final now = FieldValue.serverTimestamp();
     final uid = user.uid;
 
-    final convRef =
-    _firestore.collection('conversations').doc(conversationId);
-    final msgRef = convRef.collection('messages').doc();
-
-    await _firestore.runTransaction((txn) async {
-      txn.set(msgRef, {
-        'senderId': uid,
-        'text': trimmed,
-        'createdAt': now,
-        'type': 'text',
-        'seenBy': [uid],
-      });
-
-      final convSnap = await txn.get(convRef);
-      final data = convSnap.data() as Map<String, dynamic>? ?? {};
-      final currentUnread = (data['unread'] ?? 0) as int;
-
-      txn.set(
-        convRef,
-        {
-          'lastMsg': trimmed,
-          'updatedAt': now,
-          'unread': currentUnread + 1,
-        },
-        SetOptions(merge: true),
-      );
+    await _messagesCol(conversationId).add({
+      'type': 'image',
+      'imageUrl': imageUrl,
+      'text': caption ?? '',
+      'senderId': uid,
+      'createdAt': now,
+      'seenBy': [uid],
     });
+
+    final previewText = caption?.isNotEmpty == true
+        ? caption!
+        : '📷 Sent an image';
+
+    await _firestore.collection('conversations').doc(conversationId).set(
+      {
+        'lastMsg': previewText,
+        'updatedAt': now,
+        'unread': FieldValue.increment(1),
+      },
+      SetOptions(merge: true),
+    );
   }
 
-  /// চ্যাট ওপেন করলে unread reset করার জন্য
+  /// Reset unread counter
   static Future<void> resetUnread(String conversationId) async {
-    final convRef =
-    _firestore.collection('conversations').doc(conversationId);
+    final convRef = _firestore.collection('conversations').doc(conversationId);
 
     await convRef.set(
       {'unread': 0},
       SetOptions(merge: true),
     );
+  }
+
+  /// Mark all messages as seen
+  static Future<void> markAllAsSeen(String conversationId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    final unreadMessages = await _messagesCol(conversationId)
+        .where('senderId', isNotEqualTo: uid)
+        .get();
+
+    final batch = _firestore.batch();
+
+    for (var doc in unreadMessages.docs) {
+      final data = doc.data();
+      final seenBy = List<String>.from(data['seenBy'] ?? []);
+
+      if (!seenBy.contains(uid)) {
+        batch.update(doc.reference, {
+          'seenBy': FieldValue.arrayUnion([uid]),
+          'seenAt_$uid': FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    await batch.commit();
+    await resetUnread(conversationId);
+  }
+
+  /// Delete conversation for current user
+  static Future<void> deleteConversation(String conversationId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .update({
+      'deletedBy': FieldValue.arrayUnion([uid]),
+    });
+  }
+
+  /// Block user
+  static Future<void> blockUser(String otherUserId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    await _firestore.collection('users').doc(uid).update({
+      'blockedUsers': FieldValue.arrayUnion([otherUserId]),
+    });
+  }
+
+  /// Check if user is blocked
+  static Future<bool> isUserBlocked(String otherUserId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return false;
+
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final blockedUsers = List<String>.from(doc.data()?['blockedUsers'] ?? []);
+
+    return blockedUsers.contains(otherUserId);
   }
 }

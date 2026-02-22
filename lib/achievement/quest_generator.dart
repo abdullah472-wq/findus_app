@@ -10,7 +10,7 @@ class QuestGenerator {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // ✅ Personalized quests generate করা
+  /// Generate personalized quests based on user stats
   static Future<List<AchievementDef>> generatePersonalizedQuests({
     required bool isWorker,
     required int userPoints,
@@ -22,13 +22,13 @@ class QuestGenerator {
     if (userId == null) return personalizedQuests;
 
     try {
-      // User stats fetch করা
+      // Fetch user stats
       final userDoc = await _firestore.collection('users').doc(userId).get();
       final userStats = userDoc.data() ?? {};
 
       final jobsCompleted = (userStats['jobsCompleted'] ?? 0) as int;
       final loginStreak = (userStats['loginStreak'] ?? 0) as int;
-      final averageRating = (userStats['averageRating'] ?? 0.0).toDouble();
+      final averageRating = ((userStats['averageRating'] ?? 0.0) as num).toDouble();
       final referralCount = (userStats['referralCount'] ?? 0) as int;
 
       // 1. First Job Encouragement
@@ -54,7 +54,7 @@ class QuestGenerator {
             title: 'Keep the Streak!',
             description: 'Maintain login streak for ${loginStreak + 1} days',
             target: loginStreak + 1,
-            xpReward: (200 * (loginStreak + 1)).toInt(), // ✅ .toInt()
+            xpReward: (200 * (loginStreak + 1)).toInt(),
             minPoints: 0,
           ),
         );
@@ -97,7 +97,7 @@ class QuestGenerator {
             title: 'Next Milestone: ${jobsCompleted + 5} Jobs',
             description: 'Complete ${jobsCompleted + 5} jobs to earn bonus XP',
             target: jobsCompleted + 5,
-            xpReward: (1000 + (jobsCompleted * 100)).toInt(), // ✅ .toInt()
+            xpReward: (1000 + (jobsCompleted * 100)).toInt(),
             workerOnly: true,
             minPoints: userPoints,
           ),
@@ -143,13 +143,17 @@ class QuestGenerator {
     }
   }
 
-  // ✅ Get all quests including personalized ones
+  /// Get all quests including personalized ones
   static Future<List<AchievementDef>> getAllQuestsForUser({
     required bool isWorker,
     required int userPoints,
   }) async {
-    // Get standard quests
-    final standardQuests = AchievementsConfig.getByRole(isWorker);
+    // ✅ FIXED: Get standard quests by filtering from all achievements
+    final standardQuests = AchievementsConfig.all.where((quest) {
+      if (quest.workerOnly && !isWorker) return false;
+      if (quest.supporterOnly && isWorker) return false;
+      return true;
+    }).toList();
 
     // Get completed quest IDs
     final completedIds = await _getCompletedQuestIds();
@@ -168,15 +172,12 @@ class QuestGenerator {
       // Filter by user points
       if (userPoints < quest.minPoints) return false;
 
-      // Filter by role
-      if (quest.workerOnly && !isWorker) return false;
-      if (quest.supporterOnly && isWorker) return false;
-
+      // Already filtered by role above
       return true;
     }).toList();
   }
 
-  // ✅ Get completed quest IDs from Firestore
+  /// Get completed quest IDs from Firestore
   static Future<List<String>> _getCompletedQuestIds() async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return [];
@@ -190,12 +191,12 @@ class QuestGenerator {
 
       return snapshot.docs.map((doc) => doc.id).toList();
     } catch (e) {
-      print('Error getting completed quests: $e'); // ✅ print ব্যবহার করুন
+      debugPrint('Error getting completed quests: $e');
       return [];
     }
   }
 
-  // ✅ Mark quest as completed
+  /// Mark quest as completed
   static Future<void> markQuestCompleted(String questId) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
@@ -210,8 +211,74 @@ class QuestGenerator {
         'completedAt': FieldValue.serverTimestamp(),
         'questId': questId,
       });
+
+      debugPrint('✅ Quest $questId marked as completed');
     } catch (e) {
-      print('Error marking quest completed: $e'); // ✅ print ব্যবহার করুন
+      debugPrint('❌ Error marking quest completed: $e');
+    }
+  }
+
+  /// Get quest progress for a specific quest
+  static Future<int> getQuestProgress(String questId) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return 0;
+
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('quest_progress')
+          .doc(questId)
+          .get();
+
+      return (doc.data()?['progress'] ?? 0) as int;
+    } catch (e) {
+      debugPrint('Error getting quest progress: $e');
+      return 0;
+    }
+  }
+
+  /// Update quest progress
+  static Future<void> updateQuestProgress(String questId, int progress) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('quest_progress')
+          .doc(questId)
+          .set({
+        'progress': progress,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      debugPrint('✅ Quest $questId progress updated to $progress');
+    } catch (e) {
+      debugPrint('❌ Error updating quest progress: $e');
+    }
+  }
+
+  /// Increment quest progress
+  static Future<void> incrementQuestProgress(String questId, {int amount = 1}) async {
+    final userId = _auth.currentUser?.uid;
+    if (userId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('quest_progress')
+          .doc(questId)
+          .set({
+        'progress': FieldValue.increment(amount),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      debugPrint('✅ Quest $questId progress incremented by $amount');
+    } catch (e) {
+      debugPrint('❌ Error incrementing quest progress: $e');
     }
   }
 }

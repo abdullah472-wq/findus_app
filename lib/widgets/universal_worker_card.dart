@@ -10,7 +10,6 @@ import 'package:findus_app/constants/app_colors.dart';
 import 'package:findus_app/badge/badge_model.dart';
 import 'package:findus_app/badge/badge_theme.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
-import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/services/chat_service.dart';
 
 class UniversalWorkerCard extends StatefulWidget {
@@ -28,7 +27,6 @@ class UniversalWorkerCard extends StatefulWidget {
   final EdgeInsetsGeometry margin;
   final int? followersCount;
 
-  // Optional Social Links
   final String? facebookUrl;
   final String? emailAddress;
   final String? whatsappNumber;
@@ -36,15 +34,12 @@ class UniversalWorkerCard extends StatefulWidget {
 
   final int? colorIndex;
 
-  // Status Flags
   final bool isVerifiedWorker;
   final bool isTopRated;
   final bool isTrusted;
-
   final bool isEditable;
   final bool isOnline;
 
-  // Callbacks
   final VoidCallback? onChatTap;
   final VoidCallback? onTap;
   final VoidCallback? onViewProfileTap;
@@ -65,7 +60,6 @@ class UniversalWorkerCard extends StatefulWidget {
   final String primaryButtonText;
   final String jobLabel;
 
-  // ✅ Optional Tag/Chip
   final String? tagText;
   final Color? tagColor;
   final IconData? tagIcon;
@@ -123,13 +117,14 @@ class UniversalWorkerCard extends StatefulWidget {
 
 class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
   late bool _isSavedLocal;
+  bool _isChatLoading = false;
+  bool _isSaveLoading = false;
 
-  // 🎨 Theme Gradients
-  final List<List<Color>> _themeGradients = const [
-    [Color(0xFFE0F7FA), Color(0xFFFFFFFF)], // Teal
-    [Color(0xFFFFF3E0), Color(0xFFFFFFFF)], // Orange
-    [Color(0xFFE8EAF6), Color(0xFFFFFFFF)], // Indigo
-    [Color(0xFFFCE4EC), Color(0xFFFFFFFF)], // Pink
+  static const List<List<Color>> _themeGradients = [
+    [Color(0xFFE0F7FA), Color(0xFFFFFFFF)],
+    [Color(0xFFFFF3E0), Color(0xFFFFFFFF)],
+    [Color(0xFFE8EAF6), Color(0xFFFFFFFF)],
+    [Color(0xFFFCE4EC), Color(0xFFFFFFFF)],
   ];
 
   @override
@@ -138,7 +133,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     _isSavedLocal = widget.isSaved;
   }
 
-  // ✅ যখন parent থেকে isSaved change হবে তখন update হবে
   @override
   void didUpdateWidget(covariant UniversalWorkerCard oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -148,247 +142,62 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // SAVE TOGGLE
+  // IMAGE URL VALIDATION
   // ═══════════════════════════════════════════════════════════════
 
-  Future<void> _toggleSave() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || widget.id == null) return;
+  bool _isValidImageUrl(String url) {
+    if (url.isEmpty) return false;
+    if (url.toLowerCase() == 'null') return false;
+    if (url.toLowerCase() == 'undefined') return false;
+    if (url.length < 10) return false; // Too short to be valid URL
 
-    setState(() => _isSavedLocal = !_isSavedLocal);
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
 
-    try {
-      final ref = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('saved_profiles')
-          .doc(widget.id);
-
-      if (_isSavedLocal) {
-        await ref.set({
-          'savedAt': FieldValue.serverTimestamp(),
-          'workerId': widget.id,
-          'name': widget.name,
-          'image': widget.imageUrl,
-          'role': widget.role,
-        });
-      } else {
-        await ref.delete();
-      }
-
-      widget.onSaveTap?.call();
-    } catch (e) {
-      // Revert on error
-      if (mounted) setState(() => _isSavedLocal = !_isSavedLocal);
-      debugPrint("Save toggle failed: $e");
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return false;
     }
+
+    return uri.host.isNotEmpty;
+  }
+
+  String _getValidImageUrl() {
+    String url = widget.imageUrl.trim();
+
+    if (_isValidImageUrl(url)) {
+      return url;
+    }
+
+    // ✅ Generate avatar from name if no valid image
+    final encodedName = Uri.encodeComponent(widget.name.isNotEmpty ? widget.name : 'User');
+    return 'https://ui-avatars.com/api/?name=$encodedName&size=150&background=38B6FF&color=fff&bold=true';
+  }
+
+  String _getInitials(String name) {
+    if (name.isEmpty) return '?';
+
+    final cleanName = name.trim();
+    final parts = cleanName.split(RegExp(r'\s+'));
+
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+
+    if (cleanName.isNotEmpty) {
+      return cleanName[0].toUpperCase();
+    }
+
+    return '?';
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // SHARE PROFILE
-  // ═══════════════════════════════════════════════════════════════
-
-  void _shareProfile() {
-    if (widget.onShareTap != null) {
-      widget.onShareTap!();
-      return;
-    }
-    if (widget.id == null) return;
-
-    final String link = "https://findus.app/profile/${widget.id}";
-    final String text = "Check out ${widget.name} on FindUs!\n"
-        "Role: ${widget.role}\n"
-        "Rating: ${widget.rating} ⭐\n"
-        "$link";
-    Share.share(text);
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // OPEN CHAT
-  // ═══════════════════════════════════════════════════════════════
-
-  Future<void> _openChat() async {
-    if (widget.id == null) return;
-
-    final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    // নিজের সাথে চ্যাট করতে না দিলে এই চেক থাকুক
-    if (currentUid == null || currentUid == widget.id) return;
-
-    // Loading dialog দেখাও
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      final otherUid = widget.id!.trim();
-      if (otherUid.isEmpty) {
-        if (mounted) Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid user for chat'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        return;
-      }
-
-      final cid = await ChatService.getOrCreateConversation(
-        otherUserId: otherUid,
-        otherName: widget.name,
-        otherRole: widget.role,
-        otherImage: widget.imageUrl,
-        // চাইলে postId/postTitle এখানে পাঠাতে পারো
-      );
-
-      if (!mounted) return;
-      Navigator.pop(context); // Dialog বন্ধ করো
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(
-            conversationId: cid,
-            userName: widget.name,
-            userRole: widget.role,
-            userImage: widget.imageUrl,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context); // Dialog বন্ধ করো
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Chat খুলতে সমস্যা হয়েছে: $e"),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // BUILD
-  // ═══════════════════════════════════════════════════════════════
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // ✅ Dynamic Theme Logic
-    List<Color> bgColors;
-    if (widget.colorIndex != null) {
-      final index = widget.colorIndex!.clamp(0, _themeGradients.length - 1);
-      final theme = _themeGradients[index];
-      bgColors = isDark
-          ? [theme[0].withOpacity(0.8), const Color(0xFF1E1E1E)]
-          : theme;
-    } else {
-      bgColors = isDark
-          ? [const Color(0xFF2C2C2C), const Color(0xFF2C2C2C)]
-          : [Colors.white, Colors.white];
-    }
-
-    final borderColor = isDark ? Colors.white10 : Colors.grey.shade300;
-
-    // ✅ Dynamic Badge Logic
-    final activeBadge = widget.badgeLevel ?? BadgeLevel.newbie;
-    final badgeColor = AppBadgeTheme.colorForLevel(activeBadge);
-    final badgeName = activeBadge.name.toUpperCase();
-
-    final bool isNegotiableText = widget.price.toLowerCase().contains('negotiable');
-
-    final String followersDisplay = (widget.followersCount ?? 0).toString();
-
-    return Container(
-      margin: widget.margin,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: bgColors,
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: widget.borderRadius ?? BorderRadius.circular(20),
-        border: Border.all(color: borderColor, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: widget.borderRadius ?? BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              // 🎨 Background Watermark
-              Positioned(
-                right: -15,
-                top: -15,
-                child: Opacity(
-                  opacity: 0.05,
-                  child: Icon(
-                    Icons.workspace_premium,
-                    size: 120,
-                    color: isDark ? Colors.white : Colors.black,
-                  ),
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // Top Section
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildProfileImage(isDark),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: _buildUserInfo(isDark, isNegotiableText),
-                        ),
-
-                        // Badge + Tag
-                        _buildBadgeColumn(badgeColor, badgeName, isDark),
-                      ],
-                    ),
-
-                    // Stats Section
-                    if (widget.showStats) ...[
-                      const SizedBox(height: 16),
-                      _buildStatsRow(isDark, followersDisplay),
-                    ],
-
-                    // Action Buttons
-                    if (widget.showActionButtons) ...[
-                      const SizedBox(height: 16),
-                      _buildActionButtons(isDark),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // PROFILE IMAGE
+  // PROFILE IMAGE - ALWAYS SHOW
   // ═══════════════════════════════════════════════════════════════
 
   Widget _buildProfileImage(bool isDark) {
     const double size = 75;
-    final String url = widget.imageUrl.trim();
-    final bool hasImage = url.isNotEmpty && url.toLowerCase() != 'null';
+    final String imageUrl = _getValidImageUrl();
+    final bool hasValidImage = _isValidImageUrl(widget.imageUrl.trim());
 
     return Stack(
       children: [
@@ -401,20 +210,19 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
               color: isDark ? Colors.white24 : Colors.grey.shade300,
               width: 2,
             ),
-            color: Colors.grey[200],
+            color: isDark ? Colors.grey[800] : Colors.grey[200],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: hasImage
-                ? CachedNetworkImage(
-              imageUrl: url,
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
               fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => const Center(
-                child: Icon(Icons.person, color: Colors.grey),
-              ),
-            )
-                : const Center(
-              child: Icon(Icons.person, size: 35, color: Colors.grey),
+              width: size,
+              height: size,
+              memCacheWidth: 200,
+              memCacheHeight: 200,
+              placeholder: (context, url) => _buildLoadingPlaceholder(isDark),
+              errorWidget: (context, url, error) => _buildErrorFallback(isDark),
             ),
           ),
         ),
@@ -430,7 +238,10 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
               decoration: BoxDecoration(
                 color: Colors.green,
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF2C2C2C) : Colors.white,
+                  width: 2,
+                ),
               ),
             ),
           ),
@@ -438,15 +249,323 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     );
   }
 
+  Widget _buildLoadingPlaceholder(bool isDark) {
+    return Container(
+      color: isDark ? Colors.grey[800] : Colors.grey[200],
+      child: Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDark ? Colors.white38 : Colors.grey.shade400,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorFallback(bool isDark) {
+    final initials = _getInitials(widget.name);
+
+    return Container(
+      color: AppColors.brandMain.withOpacity(0.15),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+            color: AppColors.brandMain,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ═══════════════════════════════════════════════════════════════
-  // USER INFO
+  // SAVE & CHAT HANDLERS
   // ═══════════════════════════════════════════════════════════════
+
+  Future<void> _toggleSave() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final workerId = widget.id;
+
+    if (uid == null || workerId == null || workerId.isEmpty) {
+      _showSnackBar("Cannot save: Invalid user or profile");
+      return;
+    }
+
+    if (uid == workerId) {
+      _showSnackBar("You cannot save your own profile");
+      return;
+    }
+
+    if (_isSaveLoading) return;
+
+    setState(() {
+      _isSaveLoading = true;
+      _isSavedLocal = !_isSavedLocal;
+    });
+
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('saved_profiles')
+          .doc(workerId);
+
+      if (_isSavedLocal) {
+        await ref.set({
+          'savedAt': FieldValue.serverTimestamp(),
+          'workerId': workerId,
+          'name': widget.name,
+          'image': widget.imageUrl,
+          'role': widget.role,
+          'rating': widget.rating,
+        });
+      } else {
+        await ref.delete();
+      }
+
+      widget.onSaveTap?.call();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSavedLocal = !_isSavedLocal);
+        _showSnackBar("Save failed: ${e.toString()}");
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaveLoading = false);
+      }
+    }
+  }
+
+  void _shareProfile() {
+    if (widget.onShareTap != null) {
+      widget.onShareTap!();
+      return;
+    }
+
+    final workerId = widget.id;
+    if (workerId == null || workerId.isEmpty) {
+      _showSnackBar("Cannot share: Invalid profile");
+      return;
+    }
+
+    final String link = "https://findus.app/profile/$workerId";
+    final String text = "Check out ${widget.name} on FindUs!\n"
+        "Role: ${widget.role}\n"
+        "Rating: ${widget.rating} ⭐\n"
+        "$link";
+
+    Share.share(text);
+  }
+
+  Future<void> _openChat() async {
+    if (widget.onChatTap != null) {
+      widget.onChatTap!();
+      return;
+    }
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final otherUid = widget.id?.trim();
+
+    if (currentUid == null) {
+      _showSnackBar("Please login to chat");
+      return;
+    }
+
+    if (otherUid == null || otherUid.isEmpty) {
+      _showSnackBar("Invalid user for chat");
+      return;
+    }
+
+    if (currentUid == otherUid) {
+      _showSnackBar("You cannot chat with yourself");
+      return;
+    }
+
+    if (_isChatLoading) return;
+
+    setState(() => _isChatLoading = true);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.brandMain),
+      ),
+    );
+
+    try {
+      final cid = await ChatService.getOrCreateConversation(
+        otherUserId: otherUid,
+        otherName: widget.name,
+        otherRole: widget.role,
+        otherImage: widget.imageUrl,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: cid,
+            userName: widget.name,
+            userRole: widget.role,
+            userImage: widget.imageUrl,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showSnackBar("Chat failed: ${e.toString()}");
+    } finally {
+      if (mounted) {
+        setState(() => _isChatLoading = false);
+      }
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════════
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    List<Color> bgColors;
+    if (widget.colorIndex != null) {
+      final index = widget.colorIndex!.clamp(0, _themeGradients.length - 1);
+      final theme = _themeGradients[index];
+      bgColors = isDark
+          ? [theme[0].withOpacity(0.8), const Color(0xFF1E1E1E)]
+          : theme;
+    } else {
+      bgColors = isDark
+          ? [const Color(0xFF2C2C2C), const Color(0xFF2C2C2C)]
+          : [Colors.white, Colors.white];
+    }
+
+    final borderColor = isDark ? Colors.white10 : Colors.grey.shade300;
+
+    final activeBadge = widget.badgeLevel ?? _calculateBadgeFromRating();
+    final badgeColor = AppBadgeTheme.colorForLevel(activeBadge);
+    final badgeName = activeBadge.name.toUpperCase();
+
+    final bool isNegotiableText = widget.price.toLowerCase().contains('negotiable');
+    final String followersDisplay = _formatNumber(widget.followersCount ?? 0);
+
+    return Container(
+      margin: widget.margin,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: bgColors,
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: widget.borderRadius ?? BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            blurRadius: widget.elevation ?? 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: widget.borderRadius ?? BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -15,
+                top: -15,
+                child: Opacity(
+                  opacity: 0.05,
+                  child: Icon(
+                    Icons.workspace_premium,
+                    size: 120,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildProfileImage(isDark),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: _buildUserInfo(isDark, isNegotiableText),
+                        ),
+                        _buildBadgeColumn(badgeColor, badgeName, isDark),
+                      ],
+                    ),
+                    if (widget.showStats) ...[
+                      const SizedBox(height: 16),
+                      _buildStatsRow(isDark, followersDisplay),
+                    ],
+                    if (widget.showActionButtons) ...[
+                      const SizedBox(height: 16),
+                      _buildActionButtons(isDark),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  BadgeLevel _calculateBadgeFromRating() {
+    final rating = double.tryParse(widget.rating) ?? 0.0;
+    final completed = int.tryParse(widget.completed) ?? 0;
+
+    if (completed >= 100 && rating >= 4.8) return BadgeLevel.diamond;
+    if (completed >= 50 && rating >= 4.5) return BadgeLevel.platinum;
+    if (completed >= 30 && rating >= 4.2) return BadgeLevel.gold;
+    if (completed >= 15 && rating >= 4.0) return BadgeLevel.silver;
+    if (completed >= 5 && rating >= 3.5) return BadgeLevel.bronze;
+    return BadgeLevel.newbie;
+  }
+
+  String _formatNumber(int n) {
+    if (n >= 1000000) return "${(n / 1000000).toStringAsFixed(1)}M";
+    if (n >= 1000) return "${(n / 1000).toStringAsFixed(1)}K";
+    return n.toString();
+  }
 
   Widget _buildUserInfo(bool isDark, bool isNegotiableText) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Name & Status Icons
         Row(
           children: [
             Flexible(
@@ -469,8 +588,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           ],
         ),
         const SizedBox(height: 2),
-
-        // Role
         Text(
           widget.role.toUpperCase(),
           style: const TextStyle(
@@ -481,8 +598,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           ),
         ),
         const SizedBox(height: 4),
-
-        // Location
         Row(
           children: [
             Icon(
@@ -493,7 +608,7 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                widget.address,
+                widget.address.isNotEmpty ? widget.address : "Location not set",
                 style: TextStyle(
                   fontSize: 11,
                   color: isDark ? Colors.white60 : Colors.grey[600],
@@ -505,8 +620,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           ],
         ),
         const SizedBox(height: 6),
-
-        // Price Tag
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
@@ -528,12 +641,16 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
                     ),
                   ),
                 ),
-              Text(
-                widget.price,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.brandMain,
+              Flexible(
+                child: Text(
+                  widget.price,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.brandMain,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -543,15 +660,10 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BADGE COLUMN
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildBadgeColumn(Color badgeColor, String badgeName, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Optional Tag
         if (widget.tagText != null && widget.tagText!.trim().isNotEmpty) ...[
           _buildTagChip(
             text: widget.tagText!.trim(),
@@ -561,9 +673,15 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           ),
           const SizedBox(height: 6),
         ],
-
-        // Badge Icon
-        Icon(Icons.workspace_premium, size: 28, color: badgeColor),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: badgeColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.workspace_premium, size: 24, color: badgeColor),
+        ),
+        const SizedBox(height: 4),
         Text(
           badgeName,
           style: TextStyle(
@@ -576,10 +694,6 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
       ],
     );
   }
-
-  // ═══════════════════════════════════════════════════════════════
-  // STATS ROW (Updated)
-  // ═══════════════════════════════════════════════════════════════
 
   Widget _buildStatsRow(bool isDark, String followersValue) {
     return Container(
@@ -598,21 +712,15 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           _verticalDivider(isDark),
           _buildStat(widget.rating, "RATING", isDark),
           _verticalDivider(isDark),
-          // ✅ এখানে সবসময় FOLLOWERS লেবেল থাকবে
           _buildStat(followersValue, "FOLLOWERS", isDark),
         ],
       ),
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // ACTION BUTTONS
-  // ═══════════════════════════════════════════════════════════════
-
   Widget _buildActionButtons(bool isDark) {
     return Row(
       children: [
-        // Primary Button
         Expanded(
           child: SizedBox(
             height: 38,
@@ -634,32 +742,26 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
           ),
         ),
         const SizedBox(width: 8),
-
-        // Chat Button
         _buildIconButton(
-          Icons.chat_bubble_outline,
-          widget.onChatTap ?? _openChat,
+          _isChatLoading ? Icons.hourglass_empty : Icons.chat_bubble_outline,
+          _isChatLoading ? null : _openChat,
           AppColors.brandMain,
           isDark,
         ),
-
-        // Save Button
         if (widget.showSaveButton) ...[
           const SizedBox(width: 8),
           _buildIconButton(
             _isSavedLocal ? Icons.favorite : Icons.favorite_border,
-            _toggleSave,
+            _isSaveLoading ? null : _toggleSave,
             _isSavedLocal ? Colors.red : (isDark ? Colors.white70 : Colors.grey.shade600),
             isDark,
           ),
         ],
-
-        // Share Button
         if (widget.showShareButton) ...[
           const SizedBox(width: 8),
           _buildIconButton(
             Icons.share_outlined,
-            widget.onShareTap ?? _shareProfile,
+            _shareProfile,
             isDark ? Colors.white70 : Colors.grey.shade600,
             isDark,
           ),
@@ -668,11 +770,8 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // HELPER WIDGETS
-  // ═══════════════════════════════════════════════════════════════
-
-  Widget _buildIconButton(IconData icon, VoidCallback onTap, Color color, bool isDark) {
+  Widget _buildIconButton(IconData icon, VoidCallback? onTap, Color color, bool isDark) {
+    final isDisabled = onTap == null;
     return Container(
       width: 38,
       height: 38,
@@ -683,7 +782,7 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
       child: IconButton(
         onPressed: onTap,
         padding: EdgeInsets.zero,
-        icon: Icon(icon, color: color, size: 18),
+        icon: Icon(icon, color: isDisabled ? Colors.grey : color, size: 18),
       ),
     );
   }
@@ -698,9 +797,23 @@ class _UniversalWorkerCardState extends State<UniversalWorkerCard> {
   Widget _buildStat(String value, String label, bool isDark) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isDark ? Colors.white54 : Colors.grey.shade500)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white54 : Colors.grey.shade500,
+          ),
+        ),
       ],
     );
   }

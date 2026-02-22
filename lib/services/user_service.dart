@@ -1,4 +1,4 @@
-import 'dart:async'; // Stream এর জন্য
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -8,62 +8,79 @@ class UserService {
 
   // --- বেসিক মেথড (ফিক্সড) ---
 
-  /// রিয়েল-টাইম ইউজার ডাটা স্ট্রিম (rxdart ছাড়া)
+  /// রিয়েল-টাইম ইউজার ডাটা স্ট্রিম (rxdart ছাড়া)
   static Stream<DocumentSnapshot<Map<String, dynamic>>> get currentUserStream {
     return _auth.authStateChanges().asyncExpand((user) {
-      // asyncExpand ব্যবহার করলে স্ট্রিম ফ্ল্যাটেন (flatten) হয়ে যায়
       if (user == null) {
-        // ইউজার না থাকলে একটি এম্পটি বা ডামি স্ট্রিম রিটার্ন করা যায়
-        // অথবা এমন একটি স্ট্রিম যা কখনো কিছু এমিট করে না
         return const Stream.empty();
       }
-      // ইউজার থাকলে তার ডকুমেন্ট স্ট্রিম রিটার্ন করা
       return _db.collection('users').doc(user.uid).snapshots();
     });
   }
 
-  // বাকি মেথডগুলো আগের মতোই থাকবে...
-
+  /// ইউজার ডাটা একবার নিয়ে আসা (অফলাইন সাপোর্ট সহ)
   static Future<Map<String, dynamic>?> getUserData(String uid) async {
     try {
-      final doc = await _db.collection('users').doc(uid).get();
+      final doc = await _db
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.serverAndCache)); // ✅ অফলাইন সাপোর্ট
       return doc.data();
     } catch (e) {
+      print('Error getting user data: $e'); // ✅ লগিং
       return null;
     }
   }
 
+  /// ইউজার স্ট্যাটাস আপডেট (অনলাইন/অফলাইন)
   static Future<void> updateUserStatus(bool isOnline) async {
     final uid = _auth.currentUser?.uid;
     if (uid != null) {
-      await _db.collection('users').doc(uid).update({
-        'isOnline': isOnline,
-        'lastActive': FieldValue.serverTimestamp(),
-      });
+      try {
+        await _db.collection('users').doc(uid).update({
+          'isOnline': isOnline,
+          'lastActive': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        print('Status update failed: $e'); // ✅ Error Handling
+      }
     }
   }
 
   // --- সেটিংস স্ক্রিনের জন্য মেথড ---
 
+  /// বর্তমান ইউজারের ID
   static Future<String> getCurrentUserId() async {
     return _auth.currentUser?.uid ?? '';
   }
 
+  /// সাবস্ক্রিপশন টাইপ নিয়ে আসা
   static Future<String> getSubscriptionType() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return 'free';
 
     try {
-      final doc = await _db.collection('users').doc(uid).get(const GetOptions(source: Source.serverAndCache));
+      final doc = await _db
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.serverAndCache)); // ✅ অফলাইন সাপোর্ট
       final data = doc.data();
       return (data?['subscription_type'] ?? 'free').toString().toLowerCase();
     } catch (e) {
+      print('Error getting subscription: $e'); // ✅ লগিং
       return 'free';
     }
   }
 
+  /// প্রিমিয়াম ইউজার কিনা চেক করা
   static Future<bool> isPremiumUser() async {
     final sub = await getSubscriptionType();
     return sub == 'pro' || sub == 'business' || sub == 'premium';
+  }
+
+  /// লগআউট করার সময় স্ট্যাটাস আপডেট
+  static Future<void> logout() async {
+    await updateUserStatus(false); // ✅ অফলাইন করা
+    await _auth.signOut();
   }
 }

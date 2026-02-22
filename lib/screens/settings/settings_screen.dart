@@ -11,6 +11,7 @@ import 'package:findus_app/services/user_service.dart';
 import 'package:findus_app/services/blocked_user_service.dart';
 
 // Screens
+import 'block_list_screen.dart';
 import 'delete_account_screen.dart';
 import 'subscription_screen.dart';
 import 'language_settings_screen.dart';
@@ -90,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionHeader("ACCOUNT & SECURITY"),
           _buildSettingsGroup([
             _buildSettingsTile(Icons.verified_user_rounded, "Verification", "Identity & badges", () => _push(const VerificationScreen()), Colors.blueAccent),
-            _buildSettingsTile(Icons.block_flipped, "Block List", "Manage blocked users", () => _push(const _BlockListScreen()), Colors.redAccent),
+            _buildSettingsTile(Icons.block_flipped, "Block List", "Manage blocked users", () => _push(BlockListScreen()), Colors.redAccent),
           ], isDark),
 
           _buildSectionHeader("GROW & PROMOTE"),
@@ -202,61 +203,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 }
-
-class _BlockListScreen extends StatefulWidget { // StatefulWidget এ কনভার্ট করা হলো রিফ্রেশ এর জন্য
-  const _BlockListScreen();
-
-  @override
-  State<_BlockListScreen> createState() => _BlockListScreenState();
-}
-
-class _BlockListScreenState extends State<_BlockListScreen> {
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.bgBlue;
-    final titleColor = isDark ? Colors.white : AppColors.brandDark;
-
-    return FloatingScaffold(
-      title: "BLOCKED USERS",
-      backgroundColor: bgColor,
-      titleColor: titleColor,
-      iconColor: titleColor,
-      showBack: true,
-      body: FutureBuilder<List<Map<String, String>>>(
-        future: BlockedUserService().getBlockedUsers(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final users = snapshot.data ?? [];
-
-          if (users.isEmpty) {
-            return Center(child: Text("No blocked users.", style: TextStyle(color: isDark ? Colors.grey : Colors.black54)));
-          }
-
-          return ListView.builder(
-            itemCount: users.length,
-            itemBuilder: (ctx, i) {
-              final user = users[i];
-              return ListTile(
-                title: Text(user['name'] ?? 'User', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-                trailing: TextButton(
-                  onPressed: () async {
-                    await BlockedUserService().unblockUser(user['id']!);
-                    setState(() {}); // UI আপডেট করার জন্য
-                    if(mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("User Unblocked")));
-                    }
-                  },
-                  child: const Text("UNBLOCK", style: TextStyle(color: Colors.redAccent)),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-

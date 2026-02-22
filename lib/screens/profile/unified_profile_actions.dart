@@ -1,11 +1,16 @@
+// lib/screens/profile/unified_profile_actions.dart
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/screens/report/report_screen.dart';
-
+import 'package:findus_app/achievement/achievement_service.dart';
 import 'unified_profile_utils.dart';
 
 mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
@@ -21,13 +26,13 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('লিংক খোলা যায়নি')),
+          const SnackBar(content: Text('Unable to open link')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('লিংক খোলা যায়নি: $e')),
+          SnackBar(content: Text('Link error: $e')),
         );
       }
     }
@@ -39,6 +44,9 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
     );
     if (!mounted) return;
 
+    // Track chat initiation
+    await AchievementService.incrementProgress('lt_chat_s1', amount: 1);
+
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -47,6 +55,7 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
           userName: UnifiedProfileUtils.safeString(userData['name']),
           userRole: roleLabel,
           userImage: UnifiedProfileUtils.safeString(userData['image'], defaultValue: ''),
+          otherUserId: profileUid,
         ),
       ),
     );
@@ -59,6 +68,7 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+      await AchievementService.incrementProgress('daily_contact', amount: 1);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Phone call not supported')),
@@ -73,6 +83,7 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
     final uri = Uri.parse('mailto:$email');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
+      await AchievementService.incrementProgress('daily_contact', amount: 1);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Email not supported')),
@@ -82,7 +93,21 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
 
   Future<void> reportUser() async {
     if (!mounted) return;
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportScreen()));
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ReportScreen()),
+    );
+
+    if (result == true) {
+      await AchievementService.incrementProgress('lt_community_s1', amount: 1);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Report submitted. Thank you!')),
+        );
+      }
+    }
   }
 
   Future<void> shareProfile() async {
@@ -92,7 +117,6 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
         defaultValue: 'FindUs User',
       );
 
-      // TODO: তোমার real deep link/domain বসাও
       final profileLink = 'https://yourapp.com/profile/$profileUid';
       final message = 'FindUs Profile: $userName\n$profileLink';
 
@@ -101,20 +125,37 @@ mixin UnifiedProfileActions<T extends StatefulWidget> on State<T> {
 
       await Share.share(message, sharePositionOrigin: origin);
 
-      // ✅ Update daily share quest progress (target=1 daily)
       await AchievementService.incrementProgress('daily_share', amount: 1);
-
-      // ✅ optional: refresh weekly chest progress UI (doesn't increment weekly count; claim does)
       await AchievementService.syncWeeklyChestFromServer();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Shared! Daily quest updated. Claim it in Quests.')),
+        const SnackBar(content: Text('Profile shared! Quest updated.')),
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('শেয়ার করতে সমস্যা হয়েছে: $e')),
+          SnackBar(content: Text('Share failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> copyProfileLink() async {
+    try {
+      final profileLink = 'https://yourapp.com/profile/$profileUid';
+      await Clipboard.setData(ClipboardData(text: profileLink));
+      await AchievementService.incrementProgress('daily_share', amount: 1);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile link copied!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Copy failed: $e')),
         );
       }
     }

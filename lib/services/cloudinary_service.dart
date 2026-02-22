@@ -1,16 +1,13 @@
+// lib/services/cloudinary_service.dart
+
 import 'dart:convert';
 import 'dart:typed_data';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 class CloudinaryService {
-  /// 🔹 আপনার Cloudinary তথ্য
   static const String cloudName = 'dlwkqyh1a';
-
-  /// ⚠️ নিশ্চিত করুন আপনার Cloudinary Dashboard > Settings > Upload > Upload presets
-  /// এখানে একটি 'Unsigned' প্রিসেট তৈরি করা আছে এবং সেটির নাম নিচে দিন।
   static const String uploadPreset = 'findus_unsigned';
 
   static Uri _uploadUri(String resourceType) {
@@ -20,9 +17,8 @@ class CloudinaryService {
   }
 
   static void _ensureConfigured() {
-    // 🛑 ফিক্স: আগের কোডে নিজের নাম থাকলেই এরর দিচ্ছিল, সেটা বাদ দেওয়া হয়েছে।
     if (cloudName.isEmpty || uploadPreset.isEmpty) {
-      throw Exception('Cloudinary cloudName অথবা uploadPreset সেট করা নেই!');
+      throw Exception('Cloudinary cloudName or uploadPreset not configured!');
     }
   }
 
@@ -33,7 +29,11 @@ class CloudinaryService {
     return last.isNotEmpty ? last : 'upload.bin';
   }
 
-  /// ✅ Web-safe bytes upload
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ UPLOAD WITH PROGRESS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /// Upload bytes with progress tracking
   static Future<Map<String, dynamic>> uploadBytes(
       Uint8List bytes, {
         required String fileName,
@@ -41,6 +41,7 @@ class CloudinaryService {
         String resourceType = 'image',
         String publicId = '',
         List<String> tags = const [],
+        Function(int sent, int total)? onProgress,
       }) async {
     _ensureConfigured();
 
@@ -56,6 +57,20 @@ class CloudinaryService {
     );
 
     final resp = await req.send();
+
+    // ✅ Track upload progress (if callback provided)
+    if (onProgress != null) {
+      int bytesSent = 0;
+      final total = req.contentLength;
+
+      resp.stream.listen(
+            (chunk) {
+          bytesSent += chunk.length;
+          onProgress(bytesSent, total);
+        },
+      );
+    }
+
     final body = await resp.stream.bytesToString();
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -65,13 +80,14 @@ class CloudinaryService {
     return (jsonDecode(body) as Map<String, dynamic>);
   }
 
-  /// ✅ XFile আপলোড (web+mobile)
+  /// Upload XFile with progress
   static Future<Map<String, dynamic>> uploadXFile(
       XFile file, {
         String folder = '',
         String resourceType = 'image',
         String publicId = '',
         List<String> tags = const [],
+        Function(int sent, int total)? onProgress,
       }) async {
     return uploadFile(
       file,
@@ -79,10 +95,11 @@ class CloudinaryService {
       resourceType: resourceType,
       publicId: publicId,
       tags: tags,
+      onProgress: onProgress,
     );
   }
 
-  /// ✅ ফাইল আপলোড হ্যান্ডলার (File, XFile, বা Path অবজেক্ট)
+  /// Generic file upload with progress
   static Future<Map<String, dynamic>> uploadFile(
       Object file, {
         String folder = '',
@@ -90,10 +107,11 @@ class CloudinaryService {
         String publicId = '',
         List<String> tags = const [],
         String? fileName,
+        Function(int sent, int total)? onProgress,
       }) async {
     _ensureConfigured();
 
-    // ---------- যদি XFile হয় ----------
+    // Handle XFile
     if (file is XFile) {
       if (kIsWeb) {
         final bytes = await file.readAsBytes();
@@ -104,10 +122,11 @@ class CloudinaryService {
           resourceType: resourceType,
           publicId: publicId,
           tags: tags,
+          onProgress: onProgress,
         );
       }
 
-      // Mobile: path দিয়ে multipart
+      // Mobile: path-based upload
       final req = http.MultipartRequest('POST', _uploadUri(resourceType))
         ..fields['upload_preset'] = uploadPreset;
 
@@ -120,23 +139,38 @@ class CloudinaryService {
       );
 
       final resp = await req.send();
+
+      // Track progress
+      if (onProgress != null) {
+        int bytesSent = 0;
+        final total = req.contentLength;
+
+        resp.stream.listen((chunk) {
+          bytesSent += chunk.length;
+          onProgress(bytesSent, total);
+        });
+      }
+
       final body = await resp.stream.bytesToString();
 
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception('Cloudinary upload failed (${resp.statusCode}): $body');
       }
+
       return (jsonDecode(body) as Map<String, dynamic>);
     }
 
-    // ---------- ওয়েবে path-based upload চলবে না ----------
+    // Handle web bytes
     if (kIsWeb) {
       try {
         final Uint8List bytes = await (file as dynamic).readAsBytes() as Uint8List;
-
         String inferredName = fileName ?? 'upload.bin';
+
         try {
           final n = (file as dynamic).name;
-          if (n != null && n.toString().trim().isNotEmpty) inferredName = n.toString();
+          if (n != null && n.toString().trim().isNotEmpty) {
+            inferredName = n.toString();
+          }
         } catch (_) {}
 
         return uploadBytes(
@@ -146,13 +180,14 @@ class CloudinaryService {
           resourceType: resourceType,
           publicId: publicId,
           tags: tags,
+          onProgress: onProgress,
         );
       } catch (_) {
-        throw Exception('ওয়েবে uploadFile() এর জন্য XFile/bytes দরকার');
+        throw Exception('Web upload requires XFile or bytes');
       }
     }
 
-    // ---------- Mobile: File বা path-ওয়ালা অবজেক্ট ----------
+    // Mobile: File or path object
     String? path;
     try {
       path = (file as dynamic).path?.toString();
@@ -161,10 +196,9 @@ class CloudinaryService {
     }
 
     if (path == null || path.isEmpty) {
-      // path না থাকলে bytes দিয়ে ট্রাই
       final Uint8List bytes = await (file as dynamic).readAsBytes() as Uint8List;
-
       final inferredName = fileName ?? 'upload.bin';
+
       return uploadBytes(
         bytes,
         fileName: inferredName,
@@ -172,6 +206,7 @@ class CloudinaryService {
         resourceType: resourceType,
         publicId: publicId,
         tags: tags,
+        onProgress: onProgress,
       );
     }
 
@@ -189,6 +224,18 @@ class CloudinaryService {
     );
 
     final resp = await req.send();
+
+    // Track progress
+    if (onProgress != null) {
+      int bytesSent = 0;
+      final total = req.contentLength;
+
+      resp.stream.listen((chunk) {
+        bytesSent += chunk.length;
+        onProgress(bytesSent, total);
+      });
+    }
+
     final body = await resp.stream.bytesToString();
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -196,5 +243,71 @@ class CloudinaryService {
     }
 
     return (jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ HELPER METHODS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  /// Generate optimized URL
+  static String getOptimizedUrl(
+      String publicId, {
+        int? width,
+        int? height,
+        String quality = 'auto',
+        String format = 'auto',
+      }) {
+    String transformation = 'q_$quality,f_$format';
+    if (width != null) transformation += ',w_$width';
+    if (height != null) transformation += ',h_$height';
+
+    return 'https://res.cloudinary.com/$cloudName/image/upload/$transformation/$publicId';
+  }
+
+  /// Generate thumbnail URL
+  static String getThumbnailUrl(String publicId, {int size = 200}) {
+    return 'https://res.cloudinary.com/$cloudName/image/upload/w_$size,h_$size,c_fill,q_auto,f_auto/$publicId';
+  }
+
+  /// Delete resource
+  static Future<void> deleteResource(
+      String publicId, {
+        String resourceType = 'image',
+      }) async {
+    // Note: Deletion requires authenticated API (not unsigned)
+    // You'll need to implement server-side deletion with API secret
+    throw UnimplementedError(
+      'Deletion requires server-side implementation with API secret',
+    );
+  }
+
+  /// Upload multiple files
+  static Future<List<Map<String, dynamic>>> uploadMultiple(
+      List<XFile> files, {
+        String folder = '',
+        String resourceType = 'image',
+        Function(int current, int total)? onProgress,
+      }) async {
+    final results = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < files.length; i++) {
+      try {
+        final result = await uploadXFile(
+          files[i],
+          folder: folder,
+          resourceType: resourceType,
+        );
+        results.add(result);
+
+        if (onProgress != null) {
+          onProgress(i + 1, files.length);
+        }
+      } catch (e) {
+        debugPrint('❌ Error uploading file ${i + 1}: $e');
+        rethrow;
+      }
+    }
+
+    return results;
   }
 }

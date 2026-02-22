@@ -10,8 +10,9 @@ class BadgeService {
   );
 
   static const String _xpKey = 'user_xp_points';
-  static const String _starsKey = 'accumulated_stars'; // ✅ Simple & consistent
-  // ✅ Legacy Thresholds (এরর ফিক্স করার জন্য রাখা হলো)
+  static const String _starsKey = 'accumulated_stars';
+
+  // ✅ Legacy Thresholds
   static const int diamondThreshold = 1000000;
   static const int platinumThreshold = 100000;
   static const int goldThreshold = 50000;
@@ -65,7 +66,7 @@ class BadgeService {
     }
   }
 
-  // ✅ পাবলিক হেল্পার: স্টার দিয়ে ব্যাজ নির্ণয়
+  // ✅ পাবলিক হেল্পার: স্টার দিয়ে ব্যাজ নির্ণয়
   static BadgeLevel getBadgeByStars(double stars) {
     if (stars >= 10000) return BadgeLevel.diamond;
     if (stars >= 5000) return BadgeLevel.platinum;
@@ -75,7 +76,43 @@ class BadgeService {
     return BadgeLevel.newbie;
   }
 
-  // ✅ XP দিয়ে নিউমেরিক লেভেল (১-১০০)
+  // ═══════════════════════════════════════════════════════════
+  // ✅ NEW: Rating + Completed Count থেকে Badge Calculate
+  // ═══════════════════════════════════════════════════════════
+  static BadgeLevel calculateBadgeFromStats({
+    required double rating,
+    required int completed,
+  }) {
+    // 👑 Diamond: 100+ completed, 4.8+ rating
+    if (completed >= 100 && rating >= 4.8) {
+      return BadgeLevel.diamond;
+    }
+
+    // 💎 Platinum: 50+ completed, 4.5+ rating
+    if (completed >= 50 && rating >= 4.5) {
+      return BadgeLevel.platinum;
+    }
+
+    // 🥇 Gold: 20+ completed, 4.0+ rating
+    if (completed >= 20 && rating >= 4.0) {
+      return BadgeLevel.gold;
+    }
+
+    // 🥈 Silver: 5+ completed, 3.5+ rating
+    if (completed >= 5 && rating >= 3.5) {
+      return BadgeLevel.silver;
+    }
+
+    // 🥉 Bronze: 1+ completed
+    if (completed >= 1) {
+      return BadgeLevel.bronze;
+    }
+
+    // 🆕 Newbie: Default
+    return BadgeLevel.newbie;
+  }
+
+  // ✅ XP দিয়ে নিউমেরিক লেভেল (১-১০০)
   static int getNumericLevel(int xp) {
     if (xp <= 0) return 1;
     final lvl = (1 + math.sqrt(xp / 44)).floor();
@@ -88,7 +125,7 @@ class BadgeService {
     return (44 * (level - 1) * (level - 1)).toInt();
   }
 
-  // ✅ Legacy Helper: Formatted Name (ProfileSidebar এরর ফিক্স)
+  // ✅ Legacy Helper: Formatted Name
   static String getFormattedLevelName(BadgeLevel level) {
     return level.toString().split('.').last.toUpperCase();
   }

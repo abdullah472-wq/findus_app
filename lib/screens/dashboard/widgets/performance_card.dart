@@ -1,7 +1,10 @@
+// lib/screens/dashboard/widgets/performance_card.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:rxdart/rxdart.dart'; // ✅ Add this package
 
 class PerformanceCard extends StatelessWidget {
   final String userId;
@@ -24,7 +27,7 @@ class PerformanceCard extends StatelessWidget {
       return _buildEmptyCard(cardColor, textColor, isDark);
     }
 
-    // ✅ Combined streams from both collections
+    // ✅ Combined streams using RxDart
     return StreamBuilder<_CombinedData>(
       stream: _getCombinedStream(),
       builder: (context, snapshot) {
@@ -38,90 +41,122 @@ class PerformanceCard extends StatelessWidget {
         }
 
         final combinedData = snapshot.data ?? _CombinedData({}, {});
-        final userData = combinedData.userData;
-        final statsData = combinedData.statsData;
-
-        // ✅ Role check
-        final bool isFinder = userRole.toLowerCase() == 'finder' ||
-            userRole.toLowerCase() == 'worker';
-
-        // ✅ Impressions (from users or user_stats)
-        final impressions = _toInt(userData['totalImpressions']) +
-            _toInt(statsData['totalImpressions']);
-
-        // ✅ Profile Views
-        final views = _toInt(userData['profileViews']) +
-            _toInt(statsData['profileViews']);
-
-        // ✅ Role-based third metric
-        String thirdLabel;
-        int thirdValue;
-        IconData thirdIcon;
-        Color thirdColor;
-
-        if (isFinder) {
-          // Finder: Jobs Completed
-          thirdLabel = "Jobs Done";
-          thirdValue = _toInt(statsData['jobsCompleted']) > 0
-              ? _toInt(statsData['jobsCompleted'])
-              : _toInt(userData['jobsCompleted']);
-          thirdIcon = Icons.work_outline;
-          thirdColor = Colors.blue;
-        } else {
-          // Supporter: Hires Completed
-          thirdLabel = "Hires Done";
-          thirdValue = _toInt(statsData['hiresCompleted']) > 0
-              ? _toInt(statsData['hiresCompleted'])
-              : _toInt(userData['hiresCompleted']);
-          thirdIcon = Icons.handshake_outlined;
-          thirdColor = Colors.orange;
-        }
-
-        return _buildCard(
+        return _buildMainCard(
           context,
+          combinedData: combinedData,
           isDark: isDark,
           cardColor: cardColor,
           textColor: textColor,
           subTextColor: subTextColor,
-          impressions: impressions,
-          views: views,
-          thirdLabel: thirdLabel,
-          thirdValue: thirdValue,
-          thirdIcon: thirdIcon,
-          thirdColor: thirdColor,
         );
       },
     );
   }
 
-  // ✅ Combined Stream from users + user_stats
+  // ✅ Properly combined stream using RxDart
   Stream<_CombinedData> _getCombinedStream() {
     final usersStream = FirebaseFirestore.instance
         .collection('users')
         .doc(userId)
-        .snapshots();
+        .snapshots()
+        .map((doc) => doc.exists ? doc.data() ?? {} : <String, dynamic>{});
 
     final statsStream = FirebaseFirestore.instance
         .collection('user_stats')
         .doc(userId)
-        .snapshots();
+        .snapshots()
+        .map((doc) => doc.exists ? doc.data() ?? {} : <String, dynamic>{});
 
-    return usersStream.asyncMap((userDoc) async {
-      final statsDoc = await FirebaseFirestore.instance
-          .collection('user_stats')
-          .doc(userId)
-          .get();
+    // ✅ CombineLatest - উভয় stream থেকে latest data নিবে
+    return Rx.combineLatest2<Map<String, dynamic>, Map<String, dynamic>, _CombinedData>(
+      usersStream,
+      statsStream,
+          (userData, statsData) => _CombinedData(userData, statsData),
+    );
+  }
 
-      final userData = userDoc.exists
-          ? userDoc.data() as Map<String, dynamic>
-          : <String, dynamic>{};
+  Widget _buildMainCard(
+      BuildContext context, {
+        required _CombinedData combinedData,
+        required bool isDark,
+        required Color cardColor,
+        required Color textColor,
+        required Color subTextColor,
+      }) {
+    final userData = combinedData.userData;
+    final statsData = combinedData.statsData;
 
-      final statsData = statsDoc.exists
-          ? statsDoc.data() as Map<String, dynamic>
-          : <String, dynamic>{};
+    // ✅ Role check
+    final bool isFinder = userRole.toLowerCase() == 'finder' ||
+        userRole.toLowerCase() == 'worker';
 
-      return _CombinedData(userData, statsData);
-    });
+    // ✅ Impressions (from posts + user_stats)
+    final impressions = _getMaxValue([
+      userData['totalImpressions'],
+      userData['impressions'],
+      statsData['totalImpressions'],
+      statsData['impressions'],
+    ]);
+
+    // ✅ Profile Views
+    final views = _getMaxValue([
+      userData['profileViews'],
+      statsData['profileViews'],
+    ]);
+
+    // ✅ Role-based third metric
+    String thirdLabel;
+    int thirdValue;
+    IconData thirdIcon;
+    Color thirdColor;
+
+    if (isFinder) {
+      // Finder: Jobs Completed
+      thirdLabel = "Jobs Done";
+      thirdValue = _getMaxValue([
+        statsData['jobsCompleted'],
+        userData['jobsCompleted'],
+        userData['completedCount'],
+      ]);
+      thirdIcon = Icons.work_outline;
+      thirdColor = Colors.blue;
+    } else {
+      // Supporter: Hires Completed
+      thirdLabel = "Hires Done";
+      thirdValue = _getMaxValue([
+        statsData['hiresCompleted'],
+        userData['hiresCompleted'],
+        userData['completedCount'],
+      ]);
+      thirdIcon = Icons.handshake_outlined;
+      thirdColor = Colors.orange;
+    }
+
+    return _buildCard(
+      context,
+      isDark: isDark,
+      cardColor: cardColor,
+      textColor: textColor,
+      subTextColor: subTextColor,
+      impressions: impressions,
+      views: views,
+      thirdLabel: thirdLabel,
+      thirdValue: thirdValue,
+      thirdIcon: thirdIcon,
+      thirdColor: thirdColor,
+    );
+  }
+
+  // ✅ Get maximum non-zero value from list
+  int _getMaxValue(List<dynamic> values) {
+    int maxVal = 0;
+    for (var val in values) {
+      final intVal = _toInt(val);
+      if (intVal > maxVal) {
+        maxVal = intVal;
+      }
+    }
+    return maxVal;
   }
 
   Widget _buildCard(
@@ -252,6 +287,37 @@ class PerformanceCard extends StatelessWidget {
               ),
             ],
           ),
+
+          // ✅ Optional: Show "No data yet" hint if all values are 0
+          if (impressions == 0 && views == 0 && thirdValue == 0) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 18,
+                    color: Colors.amber.shade600,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Complete jobs to see your performance stats!",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white70 : Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

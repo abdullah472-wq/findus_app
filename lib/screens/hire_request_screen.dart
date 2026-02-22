@@ -13,7 +13,7 @@ import 'package:findus_app/screens/tabs/chat_screen.dart';
 import 'package:findus_app/services/firestore_chat_service.dart';
 import 'package:findus_app/services/notification_service.dart';
 import 'package:findus_app/widgets/floating_scaffold.dart';
-import 'package:findus_app/achievement/achievement_service.dart'; // ✅ NEW
+import 'package:findus_app/achievement/achievement_service.dart';
 
 class HireRequestScreen extends StatefulWidget {
   final Worker worker;
@@ -28,13 +28,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
   String _selectedWorkType = 'Urgent';
   double _offerPrice = 100.0;
   final TextEditingController _detailsController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController(); // ✅ NEW
+  final TextEditingController _locationController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Set default price from worker
     _offerPrice = widget.worker.price?.toDouble() ?? 100.0;
   }
 
@@ -45,17 +44,31 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     super.dispose();
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ SEND REQUEST
+  // ════════════════════════════════════════════════════════════════════════════
   Future<void> _sendRequest() async {
     final details = _detailsController.text.trim();
     final location = _locationController.text.trim();
 
+    // ✅ Validation
     if (details.isEmpty) {
       _showSnackbar("Please describe your problem briefly", isError: true);
       return;
     }
 
+    if (details.length < 10) {
+      _showSnackbar("Please provide more details (minimum 10 characters)", isError: true);
+      return;
+    }
+
     if (location.isEmpty) {
       _showSnackbar("Please enter work location", isError: true);
+      return;
+    }
+
+    if (location.length < 5) {
+      _showSnackbar("Please provide a valid location", isError: true);
       return;
     }
 
@@ -79,8 +92,10 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Check for duplicate pending request
-      final existingRequest = await FirebaseFirestore.instance
+      final db = FirebaseFirestore.instance;
+
+      // ✅ Check for duplicate pending request (with offline support)
+      final existingRequest = await db
           .collection('hire_requests')
           .where('senderId', isEqualTo: supporter.uid)
           .where('receiverId', isEqualTo: finderId)
@@ -89,6 +104,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
           .get();
 
       if (existingRequest.docs.isNotEmpty) {
+        if (!mounted) return;
         setState(() => _isLoading = false);
         _showSnackbar(
           "You already have a pending request to ${widget.worker.name}!",
@@ -106,33 +122,11 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
         location: location,
       );
 
-      // ✅ Push Notification
-      try {
-        await NotificationService.sendNotificationToUser(
-          toUserId: finderId,
-          title: "New hire request",
-          body: "You have a new ${_selectedWorkType.toLowerCase()} hire request.",
-          type: "hire_request",
-          relatedPostId: result.requestId,
-          data: {
-            'requestId': result.requestId,
-            'workType': _selectedWorkType,
-            'offerPrice': _offerPrice.toInt(),
-            'status': "pending",
-          },
-        );
-      } catch (e) {
-        debugPrint("Push notification failed: $e");
-      }
+      // ✅ Push Notification (non-blocking)
+      _sendPushNotification(finderId, result.requestId);
 
-      // ✅ Achievement Update
-      try {
-        await AchievementService.incrementProgress('daily_send_request');
-        await AchievementService.incrementProgress('weekly_send_requests');
-        await AchievementService.syncWeeklyChestFromServer();
-      } catch (e) {
-        debugPrint("Achievement update failed: $e");
-      }
+      // ✅ Achievement Update (non-blocking)
+      _updateAchievements();
 
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -143,13 +137,16 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
         otp: result.otp,
       );
     } catch (e) {
-      debugPrint('Send request error: $e');
+      debugPrint('❌ Send request error: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
       _showSnackbar("Failed to send request.\n${e.toString()}", isError: true);
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ CREATE HIRE REQUEST
+  // ════════════════════════════════════════════════════════════════════════════
   Future<_RequestResult> _createHireRequestAndNotification({
     required String supporterId,
     required String finderId,
@@ -160,16 +157,27 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
   }) async {
     final db = FirebaseFirestore.instance;
 
-    // Fetch supporter profile
-    final userSnap = await db.collection('users').doc(supporterId).get();
+    // ✅ Fetch supporter profile (with offline support)
+    final userSnap = await db
+        .collection('users')
+        .doc(supporterId)
+        .get(const GetOptions(source: Source.serverAndCache));
+
     final u = userSnap.data() ?? <String, dynamic>{};
 
-    final supporterName = (u['name'] ?? u['fullName'] ?? 'User').toString();
-    final supporterImage = (u['imageUrl'] ?? u['image'] ?? '').toString();
-    final supporterRole = (u['userRole'] ?? 'supporter').toString();
-    final supporterRating = (u['rating'] is num)
-        ? (u['rating'] as num).toDouble()
-        : 0.0;
+    final supporterName = _toString(
+      u['name'] ?? u['fullName'] ?? u['displayName'],
+      'User',
+    );
+
+    // ✅ Profile image priority: profileImage > image > imageUrl
+    final supporterImage = _toString(
+      u['profileImage'] ?? u['image'] ?? u['imageUrl'] ?? u['photoUrl'],
+      '',
+    );
+
+    final supporterRole = _toString(u['userRole'], 'supporter');
+    final supporterRating = _toDouble(u['rating']);
 
     // ✅ Generate 4-digit OTP
     final String secretOtp = (1000 + Random().nextInt(9000)).toString();
@@ -195,6 +203,8 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
       // Job Details
       'jobTitle': '${widget.worker.userRole} Work Request',
+      'postTitle': widget.worker.userRole.toUpperCase(), // ✅ For card display
+      'roleLabel': widget.worker.userRole.toUpperCase(), // ✅ For card display
       'workType': workType,
       'details': details,
       'location': location,
@@ -219,7 +229,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
       'toUserId': finderId,
       'fromUserId': supporterId,
       'type': 'hire_request',
-      'title': 'New hire request',
+      'title': 'New Hire Request',
       'body': 'WorkType: $workType, Offer: ৳${offerPrice.toInt()}',
       'relatedPostId': reqRef.id,
       'isRead': false,
@@ -229,6 +239,60 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     return _RequestResult(requestId: reqRef.id, otp: secretOtp);
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ HELPER METHODS
+  // ════════════════════════════════════════════════════════════════════════════
+
+  String _toString(dynamic value, String defaultValue) {
+    if (value == null) return defaultValue;
+    final str = value.toString().trim();
+    if (str.isEmpty || str == 'null') return defaultValue;
+    return str;
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+
+  // ✅ Non-blocking push notification
+  Future<void> _sendPushNotification(String finderId, String requestId) async {
+    try {
+      await NotificationService.sendNotificationToUser(
+        toUserId: finderId,
+        title: "New Hire Request 🎉",
+        body: "You have a new ${_selectedWorkType.toLowerCase()} hire request.",
+        type: "hire_request",
+        relatedPostId: requestId,
+        data: {
+          'requestId': requestId,
+          'workType': _selectedWorkType,
+          'offerPrice': _offerPrice.toInt(),
+          'status': "pending",
+        },
+      );
+    } catch (e) {
+      debugPrint("⚠️ Push notification failed: $e");
+    }
+  }
+
+  // ✅ Non-blocking achievement update
+  Future<void> _updateAchievements() async {
+    try {
+      await Future.wait([
+        AchievementService.incrementProgress('daily_send_request'),
+        AchievementService.incrementProgress('weekly_send_requests'),
+        AchievementService.syncWeeklyChestFromServer(),
+      ]);
+    } catch (e) {
+      debugPrint("⚠️ Achievement update failed: $e");
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ SUCCESS BOTTOM SHEET
+  // ════════════════════════════════════════════════════════════════════════════
   void _showSuccessBottomSheet({
     required String requestId,
     required String otp,
@@ -236,6 +300,9 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     final rootNav = Navigator.of(context, rootNavigator: true);
     final worker = widget.worker;
     final otherUid = worker.uid.trim();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
 
     showModalBottomSheet(
       context: context,
@@ -245,9 +312,9 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
       enableDrag: false,
       builder: (sheetCtx) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -269,12 +336,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
             const SizedBox(height: 20),
 
             // Title
-            const Text(
+            Text(
               "Request Sent!",
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
+                color: textColor,
               ),
             ),
 
@@ -284,7 +351,10 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
             Text(
               "Your request has been sent to ${worker.name}.\nPlease wait for approval.",
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey, fontSize: 14),
+              style: TextStyle(
+                color: isDark ? Colors.grey.shade400 : Colors.grey,
+                fontSize: 14,
+              ),
             ),
 
             const SizedBox(height: 20),
@@ -310,12 +380,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                         size: 20,
                       ),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         "Your Verification Code",
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.brandDark,
+                          color: textColor,
                         ),
                       ),
                     ],
@@ -341,8 +411,9 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                           Clipboard.setData(ClipboardData(text: otp));
                           ScaffoldMessenger.of(sheetCtx).showSnackBar(
                             const SnackBar(
-                              content: Text('OTP copied to clipboard'),
+                              content: Text('OTP copied to clipboard ✓'),
                               duration: Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
                             ),
                           );
                         },
@@ -358,12 +429,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
 
                   const SizedBox(height: 8),
 
-                  const Text(
+                  Text(
                     "Share this code with the worker when they arrive",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.grey,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey,
                     ),
                   ),
                 ],
@@ -378,14 +449,16 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.pop(sheetCtx); // Close sheet
-                      if (rootNav.canPop()) rootNav.pop(); // Close Request Screen
+                      Navigator.pop(sheetCtx);
+                      if (rootNav.canPop()) rootNav.pop();
                     },
                     icon: const Icon(Icons.close, size: 18),
                     label: const Text('Close'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.grey,
-                      side: const BorderSide(color: Colors.grey),
+                      foregroundColor: isDark ? Colors.white70 : Colors.grey,
+                      side: BorderSide(
+                        color: isDark ? Colors.white24 : Colors.grey,
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -399,27 +472,31 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () async {
-                      Navigator.pop(sheetCtx); // Close sheet
+                      Navigator.pop(sheetCtx);
 
                       if (otherUid.isEmpty) return;
 
-                      final cid = await FirestoreChatService.getOrCreateConversation(
-                        otherUserId: otherUid,
-                      );
+                      try {
+                        final cid = await FirestoreChatService.getOrCreateConversation(
+                          otherUserId: otherUid,
+                        );
 
-                      if (rootNav.canPop()) rootNav.pop(); // Close Request Screen
+                        if (rootNav.canPop()) rootNav.pop();
 
-                      if (!rootNav.context.mounted) return;
-                      rootNav.push(
-                        MaterialPageRoute(
-                          builder: (_) => ChatScreen(
-                            conversationId: cid,
-                            userName: worker.name,
-                            userRole: worker.userRole,
-                            userImage: worker.image,
+                        if (!rootNav.context.mounted) return;
+                        rootNav.push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              conversationId: cid,
+                              userName: worker.name,
+                              userRole: worker.userRole,
+                              userImage: worker.image,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } catch (e) {
+                        debugPrint("❌ Chat error: $e");
+                      }
                     },
                     icon: const Icon(Icons.chat_bubble_outline, size: 18),
                     label: const Text('Chat Now'),
@@ -435,6 +512,8 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                 ),
               ],
             ),
+
+            const SizedBox(height: 10),
           ],
         ),
       ),
@@ -442,57 +521,86 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
   }
 
   void _showSnackbar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.redAccent : Colors.green,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // ✅ BUILD UI
+  // ════════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1A1A1A) : AppColors.brandLight;
+    final cardColor = isDark ? const Color(0xFF2C2C2C) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.brandDark;
+    final hintColor = isDark ? Colors.grey : Colors.grey.shade400;
+
     return FloatingScaffold(
       title: "Hire Details",
-      backgroundColor: AppColors.brandLight,
-      titleColor: AppColors.brandDark,
-      iconColor: AppColors.brandDark,
+      backgroundColor: bgColor,
+      titleColor: textColor,
+      iconColor: textColor,
       scrollable: false,
       bodyPadding: EdgeInsets.zero,
       body: Container(
-        color: AppColors.brandLight,
+        color: bgColor,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
+          physics: const BouncingScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Worker Info Card
-              _buildWorkerInfoCard(),
+              _buildWorkerInfoCard(isDark, cardColor, textColor),
 
               const SizedBox(height: 25),
 
               // ✅ Location Input
-              const Text(
+              Text(
                 "Work Location",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.brandDark,
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _locationController,
+                style: TextStyle(color: textColor),
                 decoration: InputDecoration(
                   hintText: "Ex: House 123, Road 5, Dhanmondi, Dhaka",
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                  hintStyle: TextStyle(color: hintColor),
                   filled: true,
-                  fillColor: Colors.white,
-                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  fillColor: cardColor,
+                  prefixIcon: Icon(
+                    Icons.location_on_outlined,
+                    color: isDark ? Colors.white54 : Colors.grey,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandMain,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -500,12 +608,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               const SizedBox(height: 25),
 
               // Problem Description
-              const Text(
+              Text(
                 "Describe the issue",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.brandDark,
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 10),
@@ -513,14 +621,31 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                 controller: _detailsController,
                 maxLines: 4,
                 maxLength: 500,
+                style: TextStyle(color: textColor),
                 decoration: InputDecoration(
                   hintText: "Ex: My kitchen tap is leaking, need urgent fix...",
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
+                  hintStyle: TextStyle(color: hintColor),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: cardColor,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
                     borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandMain,
+                      width: 2,
+                    ),
+                  ),
+                  counterStyle: TextStyle(
+                    color: isDark ? Colors.white38 : Colors.grey,
                   ),
                 ),
               ),
@@ -528,20 +653,20 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               const SizedBox(height: 25),
 
               // When needed
-              const Text(
+              Text(
                 "When do you need it?",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.brandDark,
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  _buildChip("Urgent (Now)", "Urgent"),
+                  _buildChip("Urgent (Now)", "Urgent", isDark, cardColor, textColor),
                   const SizedBox(width: 15),
-                  _buildChip("Schedule Later", "Scheduled"),
+                  _buildChip("Schedule Later", "Scheduled", isDark, cardColor, textColor),
                 ],
               ),
 
@@ -551,12 +676,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     "Your Offer Price",
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark,
+                      color: textColor,
                     ),
                   ),
                   Text(
@@ -573,7 +698,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   activeTrackColor: AppColors.brandMain,
-                  inactiveTrackColor: Colors.grey.shade300,
+                  inactiveTrackColor: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                   thumbColor: AppColors.brandDark,
                   overlayColor: AppColors.brandMain.withOpacity(0.2),
                   trackHeight: 6.0,
@@ -593,7 +718,10 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               Center(
                 child: Text(
                   "Base Charge starts from ${widget.worker.priceText}",
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: isDark ? Colors.grey.shade400 : Colors.grey,
+                    fontSize: 12,
+                  ),
                 ),
               ),
 
@@ -612,6 +740,7 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                       borderRadius: BorderRadius.circular(15),
                     ),
                     elevation: 5,
+                    disabledBackgroundColor: Colors.grey,
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -646,15 +775,18 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     );
   }
 
-  Widget _buildWorkerInfoCard() {
+  Widget _buildWorkerInfoCard(bool isDark, Color cardColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -670,11 +802,21 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
               width: 60,
               fit: BoxFit.cover,
               placeholder: (context, url) => Container(
-                color: Colors.grey[200],
+                color: isDark ? Colors.grey[800] : Colors.grey[200],
+                child: const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
               ),
               errorWidget: (context, url, error) => Container(
-                color: Colors.grey[200],
-                child: const Icon(Icons.person, color: Colors.grey),
+                color: isDark ? Colors.grey[800] : Colors.grey[200],
+                child: Icon(
+                  Icons.person,
+                  color: isDark ? Colors.white54 : Colors.grey,
+                ),
               ),
             ),
           ),
@@ -687,20 +829,22 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
                   "Hiring ${widget.worker.name}",
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
+                    color: textColor,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   widget.worker.userRole.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: AppColors.brandMain,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
@@ -711,7 +855,13 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
     );
   }
 
-  Widget _buildChip(String label, String value) {
+  Widget _buildChip(
+      String label,
+      String value,
+      bool isDark,
+      Color cardColor,
+      Color textColor,
+      ) {
     final isSelected = _selectedWorkType == value;
     return Expanded(
       child: GestureDetector(
@@ -720,10 +870,12 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.brandMain : Colors.white,
+            color: isSelected ? AppColors.brandMain : cardColor,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected ? AppColors.brandMain : Colors.grey.shade300,
+              color: isSelected
+                  ? AppColors.brandMain
+                  : (isDark ? Colors.white24 : Colors.grey.shade300),
               width: isSelected ? 0 : 1,
             ),
             boxShadow: isSelected
@@ -740,7 +892,9 @@ class _HireRequestScreenState extends State<HireRequestScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey[600],
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? Colors.white70 : Colors.grey[600]),
                 fontWeight: FontWeight.bold,
               ),
             ),

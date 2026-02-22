@@ -5,10 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:findus_app/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart'; // ✅ NEW
+import 'package:share_plus/share_plus.dart';
 
 import '../../profile/earn_post_screen.dart';
-import '../../dashboard/my_post_applications_screen.dart'; // ✅ NEW
+import '../../dashboard/my_post_applications_screen.dart';
 
 class PostedPinsList extends StatelessWidget {
   final String userId;
@@ -241,7 +241,6 @@ class PostedPinsList extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            // ✅ Navigate to applications screen
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -261,7 +260,7 @@ class PostedPinsList extends StatelessWidget {
                     // Category Icon
                     _buildPinIcon(data),
 
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
 
                     // Info Section
                     Expanded(
@@ -269,14 +268,13 @@ class PostedPinsList extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
                                 child: Text(
                                   data['title'] ?? 'No Title',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     color: textColor,
                                   ),
                                   maxLines: 1,
@@ -315,32 +313,35 @@ class PostedPinsList extends StatelessWidget {
 
                           const SizedBox(height: 6),
 
-                          // ✅ Analytics Row
+                          // Price Tag
                           Row(
                             children: [
-                              Icon(Icons.visibility, size: 12, color: subColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$viewCount views',
-                                style: TextStyle(fontSize: 11, color: subColor),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.brandMain.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  data['priceLabel'] ?? 'N/A',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brandMain,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-
-                              const SizedBox(width: 12),
-
-                              Icon(Icons.person, size: 12, color: subColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$applicationsCount applied',
-                                style: TextStyle(fontSize: 11, color: subColor),
-                              ),
-
-                              if (dateStr.isNotEmpty) ...[
-                                const SizedBox(width: 12),
-                                Icon(Icons.calendar_today, size: 11, color: subColor),
-                                const SizedBox(width: 4),
+                              if (data['priceType'] != null) ...[
+                                const SizedBox(width: 6),
                                 Text(
-                                  dateStr,
-                                  style: TextStyle(fontSize: 10, color: subColor),
+                                  data['priceType'].toString(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: subColor,
+                                  ),
                                 ),
                               ],
                             ],
@@ -349,58 +350,149 @@ class PostedPinsList extends StatelessWidget {
                       ),
                     ),
 
-                    const SizedBox(width: 8),
-
-                    // Price
-                    _buildPriceTag(data, textColor),
+                    // ✅ More Options Menu (Replaced action buttons)
+                    PopupMenuButton<String>(
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: isDark ? Colors.white54 : Colors.grey,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'map':
+                            _handlePinTap(context, data);
+                            break;
+                          case 'share':
+                            _sharePin(context, data);
+                            break;
+                          case 'edit':
+                            _editPin(context, doc.id, data);
+                            break;
+                          case 'toggle':
+                            _toggleStatus(context, doc.id, isActive);
+                            break;
+                          case 'delete':
+                            _deletePin(context, doc.id);
+                            break;
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem(
+                          value: 'map',
+                          child: Row(
+                            children: [
+                              Icon(Icons.map_outlined, color: Colors.blue, size: 20),
+                              SizedBox(width: 12),
+                              Text('View on Map'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'share',
+                          child: Row(
+                            children: [
+                              Icon(Icons.share, color: Colors.green, size: 20),
+                              SizedBox(width: 12),
+                              Text('Share'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, color: Colors.orange, size: 20),
+                              SizedBox(width: 12),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'toggle',
+                          child: Row(
+                            children: [
+                              Icon(
+                                isActive ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                                color: isActive ? Colors.amber : Colors.green,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(isActive ? 'Pause Post' : 'Activate Post'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                              SizedBox(width: 12),
+                              Text('Delete', style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                const Divider(height: 20),
 
-                // ✅ Action Buttons Row
+                // ✅ Stats Row (Fixed - No overflow)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    // View on Map
-                    _ActionButton(
-                      icon: Icons.map_outlined,
-                      label: 'Map',
+                    _StatItem(
+                      icon: Icons.visibility_outlined,
+                      value: viewCount.toString(),
+                      label: 'Views',
                       color: Colors.blue,
-                      onTap: () => _handlePinTap(context, data),
                     ),
-
-                    const SizedBox(width: 8),
-
-                    // Share
-                    _ActionButton(
-                      icon: Icons.share,
-                      label: 'Share',
+                    _StatItem(
+                      icon: Icons.people_outline,
+                      value: applicationsCount.toString(),
+                      label: 'Applied',
                       color: Colors.green,
-                      onTap: () => _sharePin(context, data),
                     ),
-
-                    const SizedBox(width: 8),
-
-                    // Edit
-                    _ActionButton(
-                      icon: Icons.edit_outlined,
-                      label: 'Edit',
-                      color: Colors.orange,
-                      onTap: () => _editPin(context, doc.id, data),
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    // Delete
-                    _ActionButton(
-                      icon: Icons.delete_outline,
-                      label: 'Delete',
-                      color: Colors.red,
-                      onTap: () => _deletePin(context, doc.id),
+                    _StatItem(
+                      icon: Icons.calendar_today_outlined,
+                      value: dateStr.isNotEmpty ? dateStr : '-',
+                      label: 'Posted',
+                      color: Colors.purple,
                     ),
                   ],
                 ),
+
+                // ✅ View Applications Button
+                if (applicationsCount > 0) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MyPostApplicationsScreen(postId: doc.id),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.people_alt_outlined, size: 18),
+                      label: Text('View $applicationsCount Applications'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.brandMain,
+                        side: BorderSide(color: AppColors.brandMain.withOpacity(0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -471,30 +563,6 @@ class PostedPinsList extends StatelessWidget {
     );
   }
 
-  Widget _buildPriceTag(Map<String, dynamic> data, Color textColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          data['priceLabel'] ?? 'N/A',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: AppColors.brandMain,
-            fontSize: 16,
-          ),
-        ),
-        if (data['priceType'] != null)
-          Text(
-            data['priceType'].toString(),
-            style: TextStyle(
-              fontSize: 9,
-              color: textColor.withOpacity(0.5),
-            ),
-          ),
-      ],
-    );
-  }
-
   // ✅ Open location in Google Maps
   Future<void> _handlePinTap(
       BuildContext context,
@@ -557,7 +625,6 @@ Apply now on FindUs App!
       String pinId,
       Map<String, dynamic> data,
       ) async {
-    // Option 1: Show coming soon message
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('📝 Edit feature coming soon!'),
@@ -565,14 +632,35 @@ Apply now on FindUs App!
         duration: Duration(seconds: 2),
       ),
     );
+  }
 
-    // Option 2: Open existing screen for viewing only
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => const EarnPostScreen(),
-    //   ),
-    // );
+  // ✅ Toggle post status
+  Future<void> _toggleStatus(
+      BuildContext context,
+      String pinId,
+      bool currentStatus,
+      ) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(pinId)
+          .update({'isActive': !currentStatus});
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              currentStatus ? '⏸️ Post paused' : '▶️ Post activated',
+            ),
+            backgroundColor: currentStatus ? Colors.orange : Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showError(context, "Failed to update: $e");
+      }
+    }
   }
 
   // ✅ Delete pin
@@ -606,10 +694,7 @@ Apply now on FindUs App!
 
     if (confirm == true) {
       try {
-        await FirebaseFirestore.instance
-            .collection('posts')
-            .doc(pinId)
-            .delete();
+        await FirebaseFirestore.instance.collection('posts').doc(pinId).delete();
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -637,48 +722,53 @@ Apply now on FindUs App!
   }
 }
 
-// ✅ Action Button Widget
-class _ActionButton extends StatelessWidget {
+// ════════════════════════════════════════════════════════════════════════════
+// ✅ Stat Item Widget
+// ════════════════════════════════════════════════════════════════════════════
+
+class _StatItem extends StatelessWidget {
   final IconData icon;
+  final String value;
   final String label;
   final Color color;
-  final VoidCallback onTap;
 
-  const _ActionButton({
+  const _StatItem({
     required this.icon,
+    required this.value,
     required this.label,
     required this.color,
-    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.2)),
-        ),
-        child: Row(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 14),
+            Icon(icon, size: 14, color: color),
             const SizedBox(width: 4),
             Text(
-              label,
+              value,
               style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: isDark ? Colors.white : Colors.black87,
               ),
             ),
           ],
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white54 : Colors.grey,
+          ),
+        ),
+      ],
     );
   }
 }

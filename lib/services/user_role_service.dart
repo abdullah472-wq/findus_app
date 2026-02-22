@@ -10,7 +10,7 @@ class UserRoleService {
   static Future<String> getCurrentUserRole({bool forceRefresh = false}) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // যদি রিফ্রেশ না চায় এবং ক্যাশে ডাটা থাকে, তবে ক্যাশ থেকে রিটার্ন করবে
+    // যদি রিফ্রেশ না চায় এবং ক্যাশে ডাটা থাকে, তবে ক্যাশ থেকে রিটার্ন করবে
     if (!forceRefresh) {
       String? cachedRole = prefs.getString(_roleKey);
       if (cachedRole != null) return cachedRole;
@@ -20,7 +20,11 @@ class UserRoleService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
       try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get(const GetOptions(source: Source.serverAndCache)); // ✅ অফলাইন সাপোর্ট
+
         if (doc.exists) {
           String? role = doc.data()?['userRole'] as String?;
           if (role != null) {
@@ -29,21 +33,24 @@ class UserRoleService {
           }
         }
       } catch (e) {
-        // এরর হলে বা অফলাইনে থাকলে ডিফল্ট রিটার্ন করবে
-        return 'finder';
+        print('Error getting role: $e'); // ✅ লগিং
+        // অফলাইন হলে ক্যাশ থেকে রিটার্ন করার চেষ্টা
+        String? cachedRole = prefs.getString(_roleKey);
+        if (cachedRole != null) return cachedRole;
       }
     }
 
     return 'finder'; // ডিফল্ট রোল
   }
 
-  /// রোল চেক করার হেল্পার
-  static bool isFinder(String role) {
+  /// রোল চেক করার হেল্পার (Null-Safe)
+  static bool isFinder(String? role) {
+    if (role == null) return true; // ✅ ডিফল্ট finder
     return role.toLowerCase() == 'worker' || role.toLowerCase() == 'finder';
   }
 
-
-  static bool isMaker(String role) {
+  static bool isMaker(String? role) {
+    if (role == null) return false; // ✅ Null চেক
     return role.toLowerCase() == 'maker';
   }
 
@@ -52,19 +59,32 @@ class UserRoleService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // সার্ভার আপডেট
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
-      'userRole': newRole,
-    });
+    try {
+      // সার্ভার আপডেট
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'userRole': newRole,
+      });
 
-    // লোকাল ক্যাশ আপডেট
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_roleKey, newRole);
+      // লোকাল ক্যাশ আপডেট
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_roleKey, newRole);
+    } catch (e) {
+      print('Error updating role: $e'); // ✅ Error Handling
+    }
   }
 
-  /// লগআউটের সময় ক্যাশ ক্লিয়ার করার জন্য
+  /// লগআউটের সময় ক্যাশ ক্লিয়ার করার জন্য
   static Future<void> clearRoleCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_roleKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_roleKey);
+    } catch (e) {
+      print('Error clearing role cache: $e'); // ✅ Error Handling
+    }
+  }
+
+  /// App শুরুতে রোল ক্যাশ করুন (অপশনাল কিন্তু রেকমেন্ডেড)
+  static Future<void> initializeRole() async {
+    await getCurrentUserRole(forceRefresh: true);
   }
 }
